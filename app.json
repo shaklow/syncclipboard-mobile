@@ -32,7 +32,6 @@
       "./plugins/build/withQuickSettingsTileManifest.js",
       "./plugins/build/withAndroidNativeCode.js",
       "./plugins/build/withShortcutModule.js",
-      "./plugins/build/withNativeUtilModule.js",
       "./plugins/build/withAbiSplits.js",
       [
         "expo-sharing",

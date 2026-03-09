@@ -14,7 +14,8 @@
       "@constants/*": ["src/constants/*"],
       "@navigation/*": ["src/navigation/*"],
       "@hooks/*": ["src/hooks/*"],
-      "@assets/*": ["src/assets/*"]
+      "@assets/*": ["src/assets/*"],
+      "native-util": ["modules/native-util/src"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx"],

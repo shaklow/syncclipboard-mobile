@@ -5,7 +5,7 @@
  */
 
 import { File } from 'expo-file-system';
-import { nativeCopyFile } from '@/nativeModules/NativeUtilModule';
+import { nativeCopyFile } from 'native-util';
 import { calculateFileProfileHash } from '@/utils/hash';
 import { prepareTempFilePath } from '@/utils/fileStorage';
 import { useHistoryStore } from '@/stores/historyStore';

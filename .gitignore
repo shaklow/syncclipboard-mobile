@@ -101,4 +101,8 @@ coverage/
 # VS Code
 syncclipboard-mobile.code-workspace
 tmpclaude-*-cwd
+
+# build output
 /android/
+modules/*/android/build/
+modules/*/build/

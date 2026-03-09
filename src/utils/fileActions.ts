@@ -4,7 +4,7 @@
  */
 
 import { NativeModules, Platform } from 'react-native';
-import { nativeCopyFile } from '@/nativeModules/NativeUtilModule';
+import { nativeCopyFile } from 'native-util';
 
 const APP_PACKAGE = 'com.jericx.syncclipboardmobile';
 

@@ -7,7 +7,7 @@ import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
 import { AuthService } from './AuthService';
 import { ProfileDto } from '../types/api';
 import type { ClipboardContent } from '../types/clipboard';
-import { nativeDownloadFile } from '../nativeModules/NativeUtilModule';
+import { nativeDownloadFile } from 'native-util';
 import {
   APIError,
   AuthenticationError,

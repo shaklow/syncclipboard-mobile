@@ -3,7 +3,7 @@
  * Implements SyncClipboard server API operations
  */
 
-import { nativeUploadFile } from '../nativeModules/NativeUtilModule';
+import { nativeUploadFile } from 'native-util';
 import { APIClient, APIClientConfig, PutContentOptions } from './APIClient';
 import { ProfileDto, ServerInfo } from '../types/api';
 import type { ClipboardContent } from '../types/clipboard';

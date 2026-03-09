@@ -20,6 +20,7 @@ module.exports = function (api) {
             '@navigation': './src/navigation',
             '@hooks': './src/hooks',
             '@assets': './src/assets',
+            'native-util': './modules/native-util/src',
           },
         },
       ],

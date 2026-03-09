@@ -15,6 +15,7 @@ export default [
       'dist/**',
       'build/**',
       'plugins/build/**',
+      'modules/*/build/**',
       '*.config.js',
       'babel.config.js',
     ],

@@ -3,7 +3,7 @@
  * Implements SyncClipboard API using WebDAV protocol
  */
 
-import { nativeUploadFile } from '../nativeModules/NativeUtilModule';
+import { nativeUploadFile } from 'native-util';
 import { APIClient } from './APIClient';
 import { ProfileDto, ServerInfo } from '../types/api';
 import { ISyncClipboardAPI } from './SyncClipboardAPI';

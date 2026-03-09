@@ -2,6 +2,9 @@
   "name": "syncclipboard-mobile",
   "version": "1.0.0",
   "main": "index.ts",
+  "workspaces": [
+    "modules/*"
+  ],
   "scripts": {
     "start": "expo start",
     "prebuild": "expo prebuild --clean",

@@ -6,10 +6,7 @@
 import * as Crypto from 'expo-crypto';
 import { sha256 } from 'js-sha256';
 import type { ClipboardContent } from '@/types';
-import {
-  isNativeHashModuleAvailable,
-  nativeCalculateFileHash,
-} from '@/nativeModules/NativeUtilModule';
+import { isNativeHashModuleAvailable, nativeCalculateFileHash } from 'native-util';
 
 function createAbortError(): Error {
   const error = new Error('Operation was aborted');
