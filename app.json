@@ -29,6 +29,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "./plugins/build/withNetworkSecurityConfig.js",
       "./plugins/build/withQuickSettingsTileManifest.js",
       "./plugins/build/withAndroidNativeCode.js",
       "./plugins/build/withAbiSplits.js",
