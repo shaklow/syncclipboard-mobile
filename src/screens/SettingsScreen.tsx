@@ -45,6 +45,7 @@ export const SettingsScreen = () => {
     setAutoCheckUpdate,
     setLastUpdateCheckDate,
     setUpdateToBeta,
+    setEnableHistorySync,
   } = useSettingsStore();
 
   const [showServerModal, setShowServerModal] = useState(false);
@@ -59,6 +60,9 @@ export const SettingsScreen = () => {
   );
   const [localUpdateToBetaEnabled, setLocalUpdateToBetaEnabled] = useState(
     config?.updateToBeta ?? false
+  );
+  const [localHistorySyncEnabled, setLocalHistorySyncEnabled] = useState(
+    config?.enableHistorySync ?? false
   );
 
   // 更新检查状态
@@ -94,6 +98,10 @@ export const SettingsScreen = () => {
     setLocalUpdateToBetaEnabled(config?.updateToBeta ?? false);
   }, [config?.updateToBeta]);
 
+  useEffect(() => {
+    setLocalHistorySyncEnabled(config?.enableHistorySync ?? true);
+  }, [config?.enableHistorySync]);
+
   // 计算存储大小
   useEffect(() => {
     calculateStorageSizes();
@@ -117,6 +125,7 @@ export const SettingsScreen = () => {
   // 获取服务器列表
   const servers = config?.servers || [];
   const activeServerIndex = config?.activeServerIndex ?? -1;
+  const activeServer = activeServerIndex >= 0 ? servers[activeServerIndex] : null;
   const autoDownloadMaxSizeMB = Math.round(
     (config?.autoDownloadMaxSize ?? 5 * 1024 * 1024) / (1024 * 1024)
   );
@@ -188,11 +197,12 @@ export const SettingsScreen = () => {
   // 处理切换激活服务器
   const handleSetActiveServer = async (index: number) => {
     if (index === activeServerIndex) {
-      return; // 已经是激活状态
+      return;
     }
 
     try {
       await setActiveServer(index);
+      await updateConfig({ needsHistoryReorganize: true });
       showMessage('已切换服务器', 'success');
     } catch (error: unknown) {
       showMessage(error instanceof Error ? error.message : '切换失败', 'error');
@@ -286,6 +296,23 @@ export const SettingsScreen = () => {
       await setUpdateToBeta(enabled);
     } catch (error: unknown) {
       setLocalUpdateToBetaEnabled(!enabled);
+      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+    }
+  };
+
+  // 处理切换历史记录同步
+  const handleToggleHistorySync = async (enabled: boolean) => {
+    setLocalHistorySyncEnabled(enabled);
+    try {
+      await setEnableHistorySync(enabled);
+
+      if (!enabled) {
+        await updateConfig({ needsHistoryReorganize: true });
+      }
+
+      showMessage(enabled ? '已启用历史记录同步' : '已禁用历史记录同步', 'success');
+    } catch (error: unknown) {
+      setLocalHistorySyncEnabled(!enabled);
       showMessage(error instanceof Error ? error.message : '设置失败', 'error');
     }
   };
@@ -459,7 +486,7 @@ export const SettingsScreen = () => {
               />
             </View>
 
-            <View style={styles.settingRow}>
+            <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
                   允许自动同步的数据大小
@@ -487,6 +514,30 @@ export const SettingsScreen = () => {
                 />
                 <Text style={[styles.unitLabel, { color: theme.colors.textSecondary }]}>MB</Text>
               </View>
+            </View>
+
+            <View style={styles.settingRow}>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                  历史记录同步
+                </Text>
+                <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
+                  {activeServer?.type === 'webdav'
+                    ? 'WebDAV 服务器不支持历史记录同步'
+                    : '同步历史记录到服务器'}
+                </Text>
+              </View>
+              <Switch
+                value={localHistorySyncEnabled && activeServer?.type !== 'webdav'}
+                onValueChange={handleToggleHistorySync}
+                trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
+                thumbColor={
+                  localHistorySyncEnabled && activeServer?.type !== 'webdav'
+                    ? theme.colors.surface
+                    : theme.colors.textTertiary
+                }
+                disabled={activeServer?.type === 'webdav'}
+              />
             </View>
           </View>
         </View>
@@ -713,7 +764,7 @@ export const SettingsScreen = () => {
               />
             </View>
 
-            <View style={[styles.settingRow, styles.settingRowNoBorder]}>
+            <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>调试模式</Text>
               </View>
@@ -901,9 +952,6 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 40,
-  },
-  settingRowNoBorder: {
-    borderBottomWidth: 0,
   },
   versionBlock: {
     paddingHorizontal: 16,

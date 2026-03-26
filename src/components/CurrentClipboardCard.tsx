@@ -166,14 +166,6 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
     // 文本类型：当 hasData 为 true 且有 fileName 但没有 fileUri 时，需要下载完整文本
     if (clipboard.type === 'Text') {
       const needsDownload = !!(clipboard.hasData && clipboard.fileName && !clipboard.fileUri);
-      if (isDebugMode) {
-        console.log('[CurrentClipboardCard] Text needsFileDownload check:', {
-          hasData: clipboard.hasData,
-          fileName: clipboard.fileName,
-          fileUri: clipboard.fileUri,
-          needsDownload,
-        });
-      }
       return needsDownload;
     }
 
@@ -191,16 +183,6 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   };
 
   const showDownloadButton = isRemote && onDownload && needsFileDownload();
-
-  if (isDebugMode && isRemote && clipboard?.type === 'Text') {
-    console.log('[CurrentClipboardCard] Text button display check:', {
-      isRemote,
-      hasOnDownload: !!onDownload,
-      needsFileDownload: needsFileDownload(),
-      showDownloadButton,
-      willShowCopyButton: !showDownloadButton,
-    });
-  }
 
   // 可以"打开"的非文本类型（有 fileUri）
   const canOpenFile = clipboard.type !== 'Text' && !!clipboard.fileUri;

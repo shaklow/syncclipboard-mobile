@@ -3,7 +3,11 @@
  * 远程剪贴板工具函数 - 下载文件并保存到历史记录
  */
 
-import { ClipboardContent, ClipboardItem } from '../types/clipboard';
+import {
+  ClipboardContent,
+  createDefaultClipboardItem,
+  HistorySyncStatus,
+} from '../types/clipboard';
 import { ISyncClipboardAPI } from '../services/SyncClipboardAPI';
 import { historyStorage } from '../services/HistoryStorage';
 import { useHistoryStore } from '../stores/historyStore';
@@ -68,7 +72,7 @@ export async function downloadAndAddToHistory(
 
   // 写入历史记录
   try {
-    const item: ClipboardItem = {
+    const item = createDefaultClipboardItem({
       type: updatedContent.type,
       text: updatedContent.text || '',
       profileHash: profileHash || '',
@@ -76,9 +80,9 @@ export async function downloadAndAddToHistory(
       dataName: updatedContent.fileName,
       size: updatedContent.fileSize,
       timestamp: updatedContent.timestamp || Date.now(),
-      synced: true,
+      syncStatus: HistorySyncStatus.Synced,
       fileUri: updatedContent.fileUri,
-    };
+    });
     await useHistoryStore.getState().addItem(item);
 
     // addItem 内部会将文件移动到历史目录，重新读取以获取最新的 fileUri

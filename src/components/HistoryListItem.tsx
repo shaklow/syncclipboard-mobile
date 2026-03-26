@@ -6,6 +6,7 @@
 import React, { useState, useRef, forwardRef, useImperativeHandle, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableHighlight, Image, TouchableOpacity } from 'react-native';
 import { Copy, Download, Share, Trash2, ExternalLink } from 'react-native-feather';
+import { Ionicons } from '@expo/vector-icons';
 import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Reanimated, {
   useAnimatedReaction,
@@ -20,6 +21,9 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { useTheme } from '@/hooks/useTheme';
 import { ClipboardItem } from '@/types/clipboard';
 import { useSettingsStore } from '@/stores';
+import { useTransferQueueStore } from '@/stores/transferQueueStore';
+import { getHistoryTransferQueue } from '@/services/HistoryTransferQueue';
+import { getProfileId } from '@/services/HistoryAPI';
 
 export interface HistoryListItemHandle {
   startDelete: () => void;
@@ -33,17 +37,50 @@ interface HistoryListItemProps {
   onOpen?: (item: ClipboardItem) => void;
   onLongPress: (item: ClipboardItem) => void;
   onDelete?: (item: ClipboardItem) => void;
+  onToggleStar?: (item: ClipboardItem) => void;
+  onDownload?: (item: ClipboardItem) => void;
+  onUpload?: (item: ClipboardItem) => void;
   showFullImage?: boolean;
+  enableHistorySync?: boolean;
 }
 
 export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItemProps>(
   (
-    { item, onCopy, onShare, onSave, onOpen, onLongPress, onDelete, showFullImage = false },
+    {
+      item,
+      onCopy,
+      onShare,
+      onSave,
+      onOpen,
+      onLongPress,
+      onDelete,
+      onToggleStar,
+      onDownload,
+      onUpload,
+      showFullImage = false,
+      enableHistorySync = true,
+    },
     ref
   ) => {
     const { theme } = useTheme();
     const { config } = useSettingsStore();
     const isDebugMode = config?.debugMode ?? false;
+    const tasks = useTransferQueueStore((state) => state.tasks);
+    const profileId = getProfileId(item.type, item.profileHash);
+    const activeTask = tasks.find(
+      (t) => t.profileId === profileId && (t.status === 'running' || t.status === 'pending')
+    );
+    const isTransferring = !!activeTask;
+    const transferProgress = activeTask?.progress || 0;
+    const isUploadTask = activeTask?.type === 'upload';
+
+    const handleCancelTransfer = () => {
+      if (activeTask) {
+        const queue = getHistoryTransferQueue();
+        queue.cancelTask(activeTask.profileId, activeTask.type);
+      }
+    };
+
     const [imageDimensions, setImageDimensions] = useState<{
       width: number;
       height: number;
@@ -168,13 +205,15 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
         return item.text || '';
       }
       if (item.type === 'Image') {
-        return item.dataName || '图片';
+        // Image: isLocalFileReady 为 false 时显示 text，为 true 时不显示文本
+        return item.text || '图片';
       }
       if (item.type === 'File') {
-        return item.dataName || '文件';
+        // File: 无论 isLocalFileReady 为 true 还是 false 都显示 text
+        return item.text || '文件';
       }
       if (item.type === 'Group') {
-        return item.dataName || '文件组';
+        return item.text || '文件组';
       }
       return '';
     };
@@ -394,18 +433,20 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
                 </Text>
               </View>
 
-              {/* 预览文本 - 另起一行（非图片类型显示） */}
-              {item.type !== 'Image' && (
+              {/* 预览文本 - 另起一行（文本类型始终显示，图片/文件类型在本地文件未就绪时显示） */}
+              {(item.type === 'Text' ||
+                item.type === 'File' ||
+                (item.type === 'Image' && item.isLocalFileReady === false)) && (
                 <Text
                   style={[styles.previewText, { color: theme.colors.text }]}
-                  numberOfLines={2}
+                  numberOfLines={10}
                   ellipsizeMode="tail"
                 >
                   {previewText}
                 </Text>
               )}
 
-              {/* 图片预览 - 占据整个宽度 */}
+              {/* 图片预览 - 占据整个宽度（仅当有本地文件时显示） */}
               {item.type === 'Image' && item.fileUri && (
                 <View
                   style={styles.imagePreviewContainer}
@@ -447,24 +488,134 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
                       {formatSize(item.size, item.type)}
                     </Text>
                   )}
-                  {item.synced !== undefined && (
-                    <View style={styles.syncBadge}>
+                  {/* 传输中状态 - 复用按钮显示取消 */}
+                  {enableHistorySync && isTransferring && (
+                    <TouchableOpacity style={styles.syncBadge} onPress={handleCancelTransfer}>
+                      <Ionicons
+                        name="close-circle"
+                        size={14}
+                        color={theme.colors.error || '#F44336'}
+                      />
+                      <Text
+                        style={[styles.syncBadgeText, { color: theme.colors.error || '#F44336' }]}
+                      >
+                        {transferProgress > 0
+                          ? `${Math.round(transferProgress)}%`
+                          : isUploadTask
+                            ? '取消上传'
+                            : '取消下载'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  {/* 同步状态显示，仅当启用同步且不在传输中时显示 */}
+                  {enableHistorySync && !isTransferring && item.syncStatus !== undefined && (
+                    <TouchableOpacity style={styles.syncBadge} onPress={() => onUpload?.(item)}>
+                      <Ionicons
+                        name={
+                          item.syncStatus === 1
+                            ? 'cloud-done'
+                            : item.syncStatus === 0
+                              ? 'cloud-upload'
+                              : 'cloud-download'
+                        }
+                        size={14}
+                        color={
+                          item.syncStatus === 1
+                            ? theme.colors.success || '#4CAF50'
+                            : theme.colors.textTertiary
+                        }
+                      />
                       <Text
                         style={[
                           styles.syncBadgeText,
                           {
-                            color: item.synced
-                              ? theme.colors.success || '#4CAF50'
-                              : theme.colors.textTertiary,
+                            color:
+                              item.syncStatus === 1
+                                ? theme.colors.success || '#4CAF50'
+                                : theme.colors.textTertiary,
                           },
                         ]}
                       >
-                        {item.synced ? '✓ 已同步' : '未同步'}
+                        {item.syncStatus === 1
+                          ? '已同步'
+                          : item.syncStatus === 0
+                            ? '仅本地'
+                            : '待同步'}
                       </Text>
-                    </View>
+                    </TouchableOpacity>
                   )}
+                  {/* 兼容旧的 synced 字段，仅当启用同步且不在传输中时显示 */}
+                  {enableHistorySync &&
+                    !isTransferring &&
+                    item.syncStatus === undefined &&
+                    item.synced !== undefined && (
+                      <View style={styles.syncBadge}>
+                        <Ionicons
+                          name={item.synced ? 'cloud-done' : 'cloud-outline'}
+                          size={14}
+                          color={
+                            item.synced
+                              ? theme.colors.success || '#4CAF50'
+                              : theme.colors.textTertiary
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.syncBadgeText,
+                            {
+                              color: item.synced
+                                ? theme.colors.success || '#4CAF50'
+                                : theme.colors.textTertiary,
+                            },
+                          ]}
+                        >
+                          {item.synced ? '已同步' : '未同步'}
+                        </Text>
+                      </View>
+                    )}
+                  {/* 未下载标识 - 图片/文件类型但本地文件未就绪，仅当启用同步且不在传输中时显示 */}
+                  {enableHistorySync &&
+                    !isTransferring &&
+                    (item.type === 'Image' || item.type === 'File') &&
+                    item.isLocalFileReady === false && (
+                      <TouchableOpacity
+                        style={styles.syncBadge}
+                        onPress={() => onDownload?.(item)}
+                        disabled={!onDownload}
+                      >
+                        <Ionicons
+                          name="cloud-download-outline"
+                          size={14}
+                          color={onDownload ? theme.colors.primary : theme.colors.textTertiary}
+                        />
+                        <Text
+                          style={[
+                            styles.syncBadgeText,
+                            {
+                              color: onDownload ? theme.colors.primary : theme.colors.textTertiary,
+                            },
+                          ]}
+                        >
+                          未下载
+                        </Text>
+                      </TouchableOpacity>
+                    )}
                 </View>
                 <View style={styles.actionsRow}>
+                  {/* 收藏按钮 */}
+                  {onToggleStar && (
+                    <TouchableOpacity
+                      style={styles.actionButton}
+                      onPress={() => onToggleStar(item)}
+                      hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                    >
+                      <Ionicons
+                        name={item.starred ? 'star' : 'star-outline'}
+                        size={18}
+                        color={theme.colors.primary}
+                      />
+                    </TouchableOpacity>
+                  )}
                   {item.type === 'Text' && (
                     <TouchableOpacity
                       style={styles.actionButton}
@@ -500,15 +651,17 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
                           </View>
                         </TouchableOpacity>
                       )}
-                      <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={() => onShare(item)}
-                        hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-                      >
-                        <View style={{ transform: [{ scale: 0.6 }] }}>
-                          <Share color={theme.colors.primary} />
-                        </View>
-                      </TouchableOpacity>
+                      {item.isLocalFileReady !== false && (
+                        <TouchableOpacity
+                          style={styles.actionButton}
+                          onPress={() => onShare(item)}
+                          hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                        >
+                          <View style={{ transform: [{ scale: 0.6 }] }}>
+                            <Share color={theme.colors.primary} />
+                          </View>
+                        </TouchableOpacity>
+                      )}
                     </>
                   )}
                   {(item.type === 'File' || item.type === 'Group') && (
@@ -535,15 +688,17 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
                           </View>
                         </TouchableOpacity>
                       )}
-                      <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={() => onShare(item)}
-                        hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-                      >
-                        <View style={{ transform: [{ scale: 0.6 }] }}>
-                          <Share color={theme.colors.primary} />
-                        </View>
-                      </TouchableOpacity>
+                      {item.isLocalFileReady !== false && (
+                        <TouchableOpacity
+                          style={styles.actionButton}
+                          onPress={() => onShare(item)}
+                          hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                        >
+                          <View style={{ transform: [{ scale: 0.6 }] }}>
+                            <Share color={theme.colors.primary} />
+                          </View>
+                        </TouchableOpacity>
+                      )}
                     </>
                   )}
                 </View>
@@ -575,6 +730,30 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
                     ]}
                   >
                     {item.fileUri}
+                  </Text>
+                </View>
+              )}
+
+              {/* 调试信息：lastModified */}
+              {isDebugMode && item.lastModified !== undefined && (
+                <View style={styles.debugRow}>
+                  <Text style={[styles.debugLabel, { color: theme.colors.textTertiary }]}>
+                    LastModified:
+                  </Text>
+                  <Text style={[styles.debugValue, { color: theme.colors.textSecondary }]}>
+                    {new Date(item.lastModified).toISOString()}
+                  </Text>
+                </View>
+              )}
+
+              {/* 调试信息：version */}
+              {isDebugMode && item.version !== undefined && (
+                <View style={styles.debugRow}>
+                  <Text style={[styles.debugLabel, { color: theme.colors.textTertiary }]}>
+                    Version:
+                  </Text>
+                  <Text style={[styles.debugValue, { color: theme.colors.textSecondary }]}>
+                    {item.version}
                   </Text>
                 </View>
               )}
@@ -679,6 +858,9 @@ const styles = StyleSheet.create({
   },
   syncBadge: {
     marginLeft: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   syncBadgeText: {
     fontSize: 12,
@@ -694,6 +876,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
+  },
+  progressContainer: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  progressOverlay: {
+    position: 'absolute',
+    bottom: -4,
+  },
+  progressText: {
+    fontSize: 8,
+    fontWeight: '600',
+  },
+  errorText: {
+    fontSize: 10,
+    marginLeft: 4,
+    flex: 1,
   },
   actionButtonIcon: {
     fontSize: 14,

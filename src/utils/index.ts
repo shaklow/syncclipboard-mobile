@@ -64,3 +64,6 @@ export * from './clipboard';
 
 // Export file storage utilities
 export * from './fileStorage';
+
+// Export config utilities
+export * from './config';

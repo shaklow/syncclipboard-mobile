@@ -68,6 +68,9 @@ interface HistoryState {
   /** 切换标记 */
   toggleStar: (id: string) => Promise<void>;
 
+  /** 切换置顶 */
+  togglePin: (id: string) => Promise<void>;
+
   /** 增加使用次数 */
   incrementUseCount: (id: string) => Promise<void>;
 
@@ -100,6 +103,9 @@ interface HistoryState {
 
   /** 刷新 */
   refresh: () => Promise<void>;
+
+  /** 处理存储变更（实时更新） */
+  handleStorageChange: (items: ClipboardItem[], action: 'add' | 'update' | 'delete') => void;
 
   /** 重置 */
   reset: () => void;
@@ -237,16 +243,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ error: null });
 
     try {
-      await historyStorage.deleteItem(profileHash);
-
-      // 更新本地状态
-      set((state) => ({
-        items: state.items.filter((item) => item.profileHash !== profileHash),
-        totalCount: state.totalCount - 1,
-        selectedIds: new Set(
-          [...state.selectedIds].filter((selectedId) => selectedId !== profileHash)
-        ),
-      }));
+      await historyStorage.softDeleteItem(profileHash);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete item';
       set({ error: errorMessage });
@@ -257,16 +254,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ error: null });
 
     try {
-      await historyStorage.deleteItems(profileHashes);
-
-      // 更新本地状态
-      set((state) => ({
-        items: state.items.filter((item) => !profileHashes.includes(item.profileHash)),
-        totalCount: state.totalCount - profileHashes.length,
-        selectedIds: new Set(
-          [...state.selectedIds].filter((profileHash) => !profileHashes.includes(profileHash))
-        ),
-      }));
+      await historyStorage.softDeleteItems(profileHashes);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete items';
       set({ error: errorMessage });
@@ -277,16 +265,22 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ error: null });
 
     try {
-      const starred = await historyStorage.toggleStar(profileHash);
-
-      // 更新本地状态
-      set((state) => ({
-        items: state.items.map((item) =>
-          item.profileHash === profileHash ? { ...item, starred } : item
-        ) as ClipboardItem[],
-      }));
+      await historyStorage.toggleStar(profileHash);
+      // 状态更新由 handleStorageChange 处理
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to toggle star';
+      set({ error: errorMessage });
+    }
+  },
+
+  togglePin: async (profileHash: string) => {
+    set({ error: null });
+
+    try {
+      await historyStorage.togglePin(profileHash);
+      // 状态更新由 handleStorageChange 处理
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to toggle pin';
       set({ error: errorMessage });
     }
   },
@@ -377,6 +371,87 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
   refresh: async () => {
     await get().loadItems(1);
+  },
+
+  handleStorageChange: (changedItems: ClipboardItem[], action: 'add' | 'update' | 'delete') => {
+    const { items, filter } = get();
+
+    // 检查是否匹配当前筛选条件
+    const matchesFilter = (record: ClipboardItem): boolean => {
+      if (!filter) return true;
+      if (filter.keyword && !record.text.toLowerCase().includes(filter.keyword.toLowerCase())) {
+        return false;
+      }
+      if (filter.type && filter.type.length > 0 && !filter.type.includes(record.type)) {
+        return false;
+      }
+      return true;
+    };
+
+    if (action === 'add') {
+      // 新增记录：批量插入到列表开头
+      // 过滤掉已存在的记录（避免 refresh 和 notifyChange 竞争导致重复插入）
+      const existingHashes = new Set(items.map((i) => i.profileHash.toLowerCase()));
+      const filteredItems = changedItems.filter(
+        (item) =>
+          !item.isDeleted &&
+          matchesFilter(item) &&
+          !existingHashes.has(item.profileHash.toLowerCase())
+      );
+      if (filteredItems.length > 0) {
+        set({
+          items: [...filteredItems, ...items],
+          totalCount: get().totalCount + filteredItems.length,
+          lastAddedTimestamp: Date.now(),
+        });
+      }
+    } else if (action === 'update') {
+      // 更新记录：检查是否有软删除的项
+      const softDeletedHashes = new Set(
+        changedItems.filter((item) => item.isDeleted).map((item) => item.profileHash.toLowerCase())
+      );
+      const updatedItems = changedItems.filter((item) => !item.isDeleted);
+
+      const newItems = items.filter(
+        (item) => !softDeletedHashes.has(item.profileHash.toLowerCase())
+      );
+      let addedCount = 0;
+      for (const changedItem of updatedItems) {
+        const existingIndex = newItems.findIndex(
+          (i) => i.profileHash.toLowerCase() === changedItem.profileHash.toLowerCase()
+        );
+        if (existingIndex >= 0) {
+          const filteredUpdates = Object.fromEntries(
+            Object.entries(changedItem).filter(([, value]) => value !== undefined)
+          );
+          newItems[existingIndex] = { ...newItems[existingIndex], ...filteredUpdates };
+        } else if (matchesFilter(changedItem)) {
+          newItems.unshift(changedItem);
+          addedCount++;
+        }
+      }
+
+      const removedCount = softDeletedHashes.size;
+      if (removedCount > 0 || addedCount > 0) {
+        set({
+          items: newItems,
+          totalCount: Math.max(0, get().totalCount - removedCount + addedCount),
+          selectedIds: new Set(
+            [...get().selectedIds].filter((id) => !softDeletedHashes.has(id.toLowerCase()))
+          ),
+          ...(addedCount > 0 ? { lastAddedTimestamp: Date.now() } : {}),
+        });
+      } else {
+        set({ items: newItems });
+      }
+    } else if (action === 'delete') {
+      // 删除记录：批量从列表中移除
+      const deletedHashes = new Set(changedItems.map((i) => i.profileHash.toLowerCase()));
+      set({
+        items: items.filter((i) => !deletedHashes.has(i.profileHash.toLowerCase())),
+        totalCount: Math.max(0, get().totalCount - changedItems.length),
+      });
+    }
   },
 
   reset: () => {

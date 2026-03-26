@@ -128,6 +128,18 @@ export abstract class APIClient {
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError;
 
+      // 检查是否是取消请求的错误
+      if (
+        axiosError.code === 'ERR_CANCELED' ||
+        axiosError.message.includes('cancel') ||
+        error.name === 'AbortError' ||
+        axiosError.name === 'CanceledError'
+      ) {
+        const cancelError = new APIError('Request cancelled');
+        cancelError.name = 'AbortError';
+        return cancelError;
+      }
+
       // 网络错误
       if (!axiosError.response) {
         if (axiosError.code === 'ECONNABORTED' || axiosError.message.includes('timeout')) {
@@ -160,11 +172,19 @@ export abstract class APIClient {
 
       // 500+ 服务器错误
       if (status >= 500) {
-        return new ServerError(`Server error (HTTP ${status})`, status, data);
+        const responseMsg = this.extractResponseMessage(data);
+        const message = responseMsg
+          ? `Server error (HTTP ${status}): ${responseMsg}`
+          : `Server error (HTTP ${status})`;
+        return new ServerError(message, status, data);
       }
 
-      // 其他 HTTP 错误
-      return new ServerError(`HTTP ${status}: ${axiosError.message}`, status, data);
+      // 其他 HTTP 错误（如 400）
+      const responseMsg = this.extractResponseMessage(data);
+      const message = responseMsg
+        ? `HTTP ${status}: ${responseMsg}`
+        : `HTTP ${status}: ${axiosError.message}`;
+      return new ServerError(message, status, data);
     }
 
     // 其他类型的错误
@@ -175,6 +195,50 @@ export abstract class APIClient {
     // 未知错误
     const message = error instanceof Error ? error.message : 'Unknown error occurred';
     return new APIError(message);
+  }
+
+  /**
+   * 从响应数据中提取错误消息
+   */
+  private extractResponseMessage(data: unknown): string | null {
+    if (!data) return null;
+
+    // 如果是字符串，直接返回
+    if (typeof data === 'string') {
+      return data;
+    }
+
+    // 如果是对象，尝试提取常见字段
+    if (typeof data === 'object') {
+      const obj = data as Record<string, unknown>;
+
+      // 尝试常见错误消息字段
+      if (obj.message && typeof obj.message === 'string') {
+        return obj.message;
+      }
+      if (obj.error && typeof obj.error === 'string') {
+        return obj.error;
+      }
+      if (obj.errorMessage && typeof obj.errorMessage === 'string') {
+        return obj.errorMessage;
+      }
+      if (obj.detail && typeof obj.detail === 'string') {
+        return obj.detail;
+      }
+      if (obj.title && typeof obj.title === 'string') {
+        return obj.title;
+      }
+
+      // 如果有嵌套的 error 对象
+      if (obj.error && typeof obj.error === 'object') {
+        const errorObj = obj.error as Record<string, unknown>;
+        if (errorObj.message && typeof errorObj.message === 'string') {
+          return errorObj.message;
+        }
+      }
+    }
+
+    return null;
   }
 
   /**

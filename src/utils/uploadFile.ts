@@ -11,6 +11,7 @@ import { prepareTempFilePath } from '@/utils/fileStorage';
 import { useHistoryStore } from '@/stores/historyStore';
 import { createAPIClient } from '@/services';
 import type { ClipboardContent } from '@/types/clipboard';
+import { createDefaultClipboardItem } from '@/types/clipboard';
 import type { ClipboardContentType } from '@/types/api';
 import type { ServerConfig } from '@/types/api';
 
@@ -24,6 +25,58 @@ export interface UploadFileOptions {
   signal?: AbortSignal;
   /** 各阶段进度文字回调，供 UI 动态更新 loading 文本 */
   onProgress?: (stage: string) => void;
+}
+
+export interface ImportResult {
+  profileHash: string;
+  fileUri: string;
+  fileName: string;
+  fileSize: number;
+  contentType: ClipboardContentType;
+}
+
+/**
+ * importFileToHistory
+ * 将本地文件（content:// 或 file:// URI）复制到内部存储并添加到历史记录，不上传到服务器。
+ * 供历史记录页面"添加文件"菜单调用，也可被 uploadFileAndAddToHistory 内部调用。
+ */
+export async function importFileToHistory(
+  sourceUri: string,
+  fileName: string,
+  mimeType: string | null | undefined,
+  fileSize: number | undefined,
+  options?: UploadFileOptions
+): Promise<ImportResult> {
+  const contentType: ClipboardContentType = guessContentType(mimeType);
+  const tempPath = prepareTempFilePath(fileName);
+  const sourceFile = new File(sourceUri);
+  options?.onProgress?.('正在复制文件…');
+  await nativeCopyFile(sourceFile.uri, tempPath);
+
+  options?.onProgress?.('正在计算哈希…');
+  const profileHash = await calculateFileProfileHash(tempPath, fileName);
+  const resolvedSize = fileSize ?? sourceFile.size;
+
+  const savedItem = await useHistoryStore.getState().addItem(
+    createDefaultClipboardItem({
+      type: contentType,
+      text: fileName,
+      profileHash,
+      hasData: true,
+      dataName: fileName,
+      size: resolvedSize,
+      timestamp: Date.now(),
+      fileUri: tempPath,
+    })
+  );
+
+  return {
+    profileHash,
+    fileUri: savedItem.fileUri ?? tempPath,
+    fileName,
+    fileSize: resolvedSize,
+    contentType,
+  };
 }
 
 /**
@@ -42,46 +95,23 @@ export async function uploadFileAndAddToHistory(
   activeServer: ServerConfig,
   options?: UploadFileOptions
 ): Promise<void> {
-  const contentType: ClipboardContentType = guessContentType(mimeType);
-  const tempPath = prepareTempFilePath(fileName);
-  var sourceFile = new File(sourceUri);
-  options?.onProgress?.('正在复制文件…');
-  await nativeCopyFile(sourceFile.uri, tempPath);
-
-  options?.onProgress?.('正在计算哈希…');
-  const profileHash = await calculateFileProfileHash(tempPath, fileName);
-  const resolvedSize = fileSize ?? sourceFile.size;
+  const result = await importFileToHistory(sourceUri, fileName, mimeType, fileSize, options);
 
   const content: ClipboardContent = {
-    type: contentType,
-    text: fileName,
-    fileUri: tempPath,
-    fileName,
-    fileSize: resolvedSize,
-    profileHash,
-    localClipboardHash: profileHash,
+    type: result.contentType,
+    text: result.fileName,
+    fileUri: result.fileUri,
+    fileName: result.fileName,
+    fileSize: result.fileSize,
+    profileHash: result.profileHash,
+    localClipboardHash: result.profileHash,
     hasData: true,
     timestamp: Date.now(),
   };
-
-  const savedItem = await useHistoryStore.getState().addItem({
-    type: contentType,
-    text: fileName,
-    profileHash,
-    hasData: true,
-    dataName: fileName,
-    size: resolvedSize,
-    timestamp: Date.now(),
-    fileUri: tempPath,
-    synced: false,
-  });
-
-  // 使用移动到历史记录目录后的最新 fileUri
-  content.fileUri = savedItem.fileUri ?? tempPath;
 
   const apiClient = createAPIClient(activeServer);
   options?.onProgress?.('正在上传文件…');
   await apiClient.putContent(content, options);
 
-  await useHistoryStore.getState().updateItem(profileHash, { synced: true });
+  await useHistoryStore.getState().updateItem(result.profileHash, { synced: true });
 }

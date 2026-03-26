@@ -103,6 +103,9 @@ interface SettingsState {
   /** 设置是否更新到测试版 */
   setUpdateToBeta: (enabled: boolean) => Promise<void>;
 
+  /** 设置是否启用历史记录同步 */
+  setEnableHistorySync: (enabled: boolean) => Promise<void>;
+
   // 导入/导出
   /** 导出配置 */
   exportConfig: () => Promise<string>;
@@ -294,6 +297,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setUpdateToBeta: async (enabled: boolean) => {
     await get().updateConfig({ updateToBeta: enabled });
+  },
+
+  setEnableHistorySync: async (enabled: boolean) => {
+    await get().updateConfig({ enableHistorySync: enabled });
   },
 
   exportConfig: async () => {

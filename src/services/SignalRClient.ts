@@ -5,13 +5,14 @@
 
 import * as SignalR from '@microsoft/signalr';
 import { ServerConfig, ProfileDto } from '@/types/api';
+import { HistoryRecordDto } from './HistoryAPI';
 
 export interface RemoteClipboardChangedCallback {
   (profile: ProfileDto): void;
 }
 
 export interface RemoteHistoryChangedCallback {
-  (historyRecord: unknown): void;
+  (historyRecord: HistoryRecordDto): void;
 }
 
 /**
@@ -180,8 +181,8 @@ export class SignalRClient {
     });
 
     // 远程历史变化
-    this.connection.on('RemoteHistoryChanged', (historyRecord: unknown) => {
-      console.log('[SignalRClient] Remote history changed');
+    this.connection.on('RemoteHistoryChanged', (historyRecord: HistoryRecordDto) => {
+      console.log('[SignalRClient] Remote history changed:', historyRecord.hash);
       this.remoteHistoryCallbacks.forEach((callback) => {
         try {
           callback(historyRecord);

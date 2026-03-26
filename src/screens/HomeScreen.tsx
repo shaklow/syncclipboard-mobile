@@ -24,7 +24,7 @@ import { useSyncStore } from '@/stores/syncStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useHistoryStore } from '@/stores/historyStore';
 import { SyncDirection } from '@/types/sync';
-import { ClipboardContent, ClipboardItem } from '@/types/clipboard';
+import { ClipboardContent, createDefaultClipboardItem, HistorySyncStatus } from '@/types/clipboard';
 import { CurrentClipboardCard } from '@/components/CurrentClipboardCard';
 import { MessageToast } from '@/components/MessageToast';
 import { TopRightMenu, type MenuItemConfig } from '@/components/TopRightMenu';
@@ -33,7 +33,8 @@ import type { RemoteClipboardChangedCallback } from '@/services';
 import { copyToLocalClipboard } from '@/utils/clipboard';
 import { downloadAndAddToHistory } from '@/utils/remoteClipboard';
 import { uploadFileAndAddToHistory } from '@/utils/uploadFile';
-import { useMessageToast } from '@/hooks/useMessageToast';
+import { useMessageStore } from '@/stores/messageStore';
+import { useErrorStore } from '@/stores/errorStore';
 
 export function HomeScreen() {
   const { theme } = useTheme();
@@ -44,8 +45,8 @@ export function HomeScreen() {
   const [downloadingRemote, setDownloadingRemote] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [uploadingClipboard, setUploadingClipboard] = useState(false);
-  const [error, setError] = useState<{ title: string; message: string } | null>(null);
-  const { message, showMessage, handleMessageShown } = useMessageToast();
+  const { error, setError, clearError } = useErrorStore();
+  const { message, showMessage, clearMessage } = useMessageStore();
   const appState = useRef(AppState.currentState);
   const remotePollingInterval = useRef<NodeJS.Timeout | null>(null);
   const lastRemoteProfileHash = useRef<string | null>(null);
@@ -216,7 +217,7 @@ export function HomeScreen() {
       if (shouldAddToHistory && !hasData) {
         // 没有文件数据，直接添加到历史记录
         try {
-          const historyItem: ClipboardItem = {
+          const historyItem = createDefaultClipboardItem({
             type: finalContent.type,
             text: finalContent.text || '',
             profileHash: finalContent.profileHash || '',
@@ -224,8 +225,8 @@ export function HomeScreen() {
             dataName: finalContent.fileName,
             size: finalContent.fileSize,
             timestamp: finalContent.timestamp || Date.now(),
-            synced: true,
-          };
+            syncStatus: HistorySyncStatus.Synced,
+          });
           await useHistoryStore.getState().addItem(historyItem);
           console.log(`[HomeScreen] ${logPrefix}Added remote clipboard (no file) to history`);
         } catch (error) {
@@ -414,7 +415,7 @@ export function HomeScreen() {
     }
 
     try {
-      setError(null); // 清除之前的错误
+      clearError(); // 清除之前的错误
 
       // 选择文件
       const result = await DocumentPicker.getDocumentAsync({
@@ -690,7 +691,7 @@ export function HomeScreen() {
     }
 
     try {
-      setError(null);
+      clearError();
       setUploadingClipboard(true);
       const abortController = new AbortController();
       clipboardUploadAbortControllerRef.current = abortController;
@@ -919,7 +920,7 @@ export function HomeScreen() {
                       {error.message}
                     </Text>
                   </ScrollView>
-                  <TouchableOpacity style={styles.dismissButton} onPress={() => setError(null)}>
+                  <TouchableOpacity style={styles.dismissButton} onPress={() => clearError()}>
                     <Text style={[styles.dismissButtonText, { color: theme.colors.errorTitle }]}>
                       关闭
                     </Text>
@@ -953,7 +954,7 @@ export function HomeScreen() {
       </ScrollView>
 
       {/* 消息提示 */}
-      <MessageToast message={message} onMessageShown={handleMessageShown} />
+      <MessageToast message={message} onMessageShown={clearMessage} />
 
       {uploadingFile && (
         <View style={[styles.uploadOverlay, { backgroundColor: theme.colors.backdrop }]}>

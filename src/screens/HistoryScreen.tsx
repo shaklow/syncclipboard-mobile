@@ -20,24 +20,41 @@ import {
   NativeScrollEvent,
   Animated,
   Easing,
+  ActivityIndicator,
 } from 'react-native';
-import { Check } from 'react-native-feather';
+import { Check, ArrowUp, RefreshCw, List } from 'react-native-feather';
 import { FlashList, FlashListRef } from '@shopify/flash-list';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import * as DocumentPicker from 'expo-document-picker';
 import { useTheme } from '@/hooks/useTheme';
 import { useHistoryStore } from '@/stores/historyStore';
 import { useSettingsStore } from '@/stores';
+import { useTransferQueueStore } from '@/stores/transferQueueStore';
 import { useHistoryDisplaySettings } from '@/hooks/useHistoryDisplaySettings';
-import { ClipboardItem, ClipboardContent } from '@/types/clipboard';
+import { ClipboardItem, ClipboardContent, createDefaultClipboardItem } from '@/types/clipboard';
+import { HistoryFilter } from '@/types/storage';
 import { HistoryListItem, type HistoryListItemHandle } from '@/components/HistoryListItem';
 import { MessageToast } from '@/components/MessageToast';
 import { TopRightMenu, type MenuItemConfig } from '@/components/TopRightMenu';
+import { TransferQueueModal } from '@/components/TransferQueueModal';
 import { copyToLocalClipboard } from '@/utils/clipboard';
 import { openFile, saveFile, shareFile } from '@/utils/fileActions';
-import { useMessageToast } from '@/hooks/useMessageToast';
+import { useMessageStore } from '@/stores/messageStore';
+import { useErrorStore } from '@/stores/errorStore';
 import { calculateTextHash } from '@/utils/hash';
+import { importFileToHistory } from '@/utils/uploadFile';
+import { isHistorySyncEnabled } from '@/utils/config';
 
-type FilterType = 'all' | 'Text' | 'Image' | 'File';
+type FilterType = 'all' | 'Text' | 'Image' | 'File' | 'starred' | 'transferring';
+
+const FILTER_LABELS: Record<FilterType, string> = {
+  all: '全部',
+  Text: '文本',
+  Image: '图片',
+  File: '文件',
+  starred: '收藏',
+  transferring: '传输中',
+};
 
 export function HistoryScreen() {
   const navigation = useNavigation();
@@ -52,7 +69,9 @@ export function HistoryScreen() {
     deleteItem,
     clearHistory,
     currentPage,
+    toggleStar,
     lastAddedTimestamp,
+    handleStorageChange,
   } = useHistoryStore();
   const { config } = useSettingsStore();
 
@@ -62,12 +81,68 @@ export function HistoryScreen() {
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [selectedItem, setSelectedItem] = useState<ClipboardItem | null>(null);
   const [showActionSheet, setShowActionSheet] = useState(false);
-  const { message, showMessage, handleMessageShown } = useMessageToast();
+  const [sortField, setSortField] = useState<'timestamp' | 'lastAccessed'>('timestamp');
+  const { message, showMessage, clearMessage } = useMessageStore();
+  const { setError } = useErrorStore();
   const actionSheetTranslateY = useRef(new Animated.Value(320)).current;
   const isDebugMode = config?.debugMode ?? false;
+  const [showTransferQueue, setShowTransferQueue] = useState(false);
+  const [importingFile, setImportingFile] = useState(false);
+  const [isReorganizing, setIsReorganizing] = useState(false);
+  const {
+    hasTasks,
+    pendingCount,
+    activeCount,
+    subscribe: subscribeTransferQueue,
+  } = useTransferQueueStore();
+
+  const historySyncEnabled = useMemo(() => isHistorySyncEnabled(config), [config]);
+
+  const ensureSyncServiceInitialized = useCallback(async (): Promise<boolean> => {
+    if (!historySyncEnabled) {
+      return false;
+    }
+
+    const serverConfig = config!.servers[config!.activeServerIndex];
+    const { getHistorySyncService } = await import('@/services/HistorySyncService');
+    const syncService = getHistorySyncService();
+    return syncService.ensureInitialized(serverConfig);
+  }, [config, historySyncEnabled]);
+
+  // 加载排序设置
+  useEffect(() => {
+    const loadSortSetting = async () => {
+      try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        const savedSort = await AsyncStorage.getItem('@syncclipboard:history:sort_field');
+        if (savedSort === 'timestamp' || savedSort === 'lastAccessed') {
+          setSortField(savedSort);
+        }
+      } catch (error) {
+        console.warn('[HistoryScreen] Failed to load sort setting:', error);
+      }
+    };
+    loadSortSetting();
+  }, []);
+
+  useEffect(() => {
+    return subscribeTransferQueue();
+  }, [subscribeTransferQueue]);
+
+  // 保存排序设置
+  const handleSortChange = useCallback(async (field: 'timestamp' | 'lastAccessed') => {
+    setSortField(field);
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      await AsyncStorage.setItem('@syncclipboard:history:sort_field', field);
+    } catch (error) {
+      console.warn('[HistoryScreen] Failed to save sort setting:', error);
+    }
+  }, []);
 
   const listRef = useRef<FlashListRef<ClipboardItem>>(null);
   const isScrolledRef = useRef(false);
+  const [showScrollToTop, setShowScrollToTop] = useState(false);
   const itemRefsMap = useRef<Map<string, React.RefObject<HistoryListItemHandle | null>>>(
     new Map()
   ).current;
@@ -127,13 +202,52 @@ export function HistoryScreen() {
 
   // 搜索防抖（含初始加载）
   useEffect(() => {
+    if (isReorganizing) {
+      return;
+    }
+
     const timer = setTimeout(() => {
-      // 统一使用 searchItems：有关键词时过滤，无关键词时传 undefined 以清除旧 filter 并加载全部
-      searchItems(searchText ? { keyword: searchText } : undefined);
+      // 根据当前筛选类型构建 filter 参数
+      let filter: HistoryFilter | undefined;
+      if (searchText) {
+        filter = { keyword: searchText };
+        // 搜索时保持当前分类筛选
+        switch (filterType) {
+          case 'Text':
+          case 'Image':
+          case 'File':
+            filter.type = [filterType];
+            break;
+          case 'starred':
+            filter.starredOnly = true;
+            break;
+          case 'transferring':
+            filter.syncStatus = [2];
+            break;
+        }
+      } else {
+        // 无搜索关键词时，根据当前分类筛选
+        switch (filterType) {
+          case 'Text':
+          case 'Image':
+          case 'File':
+            filter = { type: [filterType] };
+            break;
+          case 'starred':
+            filter = { starredOnly: true };
+            break;
+          case 'transferring':
+            filter = { syncStatus: [2] };
+            break;
+          default:
+            filter = undefined;
+        }
+      }
+      searchItems(filter);
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchText, searchItems]);
+  }, [searchText, searchItems, isReorganizing, filterType]);
 
   // 监听新项目添加，如果列表未滚动则滚动到顶部
   useEffect(() => {
@@ -150,19 +264,60 @@ export function HistoryScreen() {
     }
   }, [lastAddedTimestamp]);
 
+  // 监听 HistoryStorage 变更，实时更新 UI
+  useEffect(() => {
+    const { HistoryStorage } = require('@/services/HistoryStorage');
+    const storage = HistoryStorage.getInstance();
+
+    const handleChange = (items: ClipboardItem[], action: 'add' | 'update' | 'delete') => {
+      handleStorageChange(items, action);
+    };
+
+    storage.addChangeCallback(handleChange);
+
+    return () => {
+      storage.removeChangeCallback(handleChange);
+    };
+  }, [handleStorageChange]);
+
   // 滚动事件处理
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetY = event.nativeEvent.contentOffset.y;
     isScrolledRef.current = offsetY > 10;
+    setShowScrollToTop(offsetY > 200);
   }, []);
 
-  // 过滤数据
-  const filteredItems = useMemo(() => {
-    if (filterType === 'all') {
-      return items;
-    }
-    return items.filter((item) => item.type === filterType);
-  }, [items, filterType]);
+  // 排序数据（置顶记录始终在顶部）
+  const sortedItems = useMemo(() => {
+    const result = [...items];
+
+    // 排序：置顶记录始终在顶部
+    result.sort((a, b) => {
+      // 置顶记录优先
+      const aPinned = a.pinned ? 1 : 0;
+      const bPinned = b.pinned ? 1 : 0;
+      if (aPinned !== bPinned) {
+        return bPinned - aPinned;
+      }
+
+      // 按选定字段排序
+      if (sortField === 'lastAccessed') {
+        const aAccessed = a.lastAccessed || a.timestamp;
+        const bAccessed = b.lastAccessed || b.timestamp;
+        return bAccessed - aAccessed;
+      }
+
+      // 默认按创建时间排序
+      return b.timestamp - a.timestamp;
+    });
+
+    return result;
+  }, [items, sortField]);
+
+  // 回到顶部
+  const handleScrollToTop = useCallback(() => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, []);
 
   // ClipboardItem 转换为 ClipboardContent 后调用公共复制函数
   const copyItemWithSync = useCallback(async (item: ClipboardItem) => {
@@ -212,6 +367,7 @@ export function HistoryScreen() {
       try {
         await deleteItem(item.profileHash);
         showMessage('已删除', 'success');
+        // 同步由 HistorySyncService.handleLocalHistoryChanged 自动处理
       } catch (error) {
         console.error('[HistoryScreen] Failed to delete:', error);
         showMessage('删除失败', 'error');
@@ -290,6 +446,20 @@ export function HistoryScreen() {
     [showMessage]
   );
 
+  // 切换收藏状态
+  const handleToggleStar = useCallback(
+    async (item: ClipboardItem) => {
+      try {
+        await toggleStar(item.profileHash);
+        // 同步由 HistorySyncService.handleLocalHistoryChanged 自动处理
+      } catch (error) {
+        console.error('[HistoryScreen] Failed to toggle star:', error);
+        showMessage('操作失败', 'error');
+      }
+    },
+    [toggleStar, showMessage]
+  );
+
   // 长按列表项 - 显示操作菜单
   const handleItemLongPress = useCallback(
     (item: ClipboardItem) => {
@@ -361,6 +531,9 @@ export function HistoryScreen() {
         onPress: async () => {
           try {
             await clearHistory();
+            const { getHistorySyncService } = await import('@/services/HistorySyncService');
+            const syncService = getHistorySyncService();
+            await syncService.resetSyncCursor();
             showMessage('已清空所有历史记录', 'success');
           } catch (error) {
             console.error('[HistoryScreen] Failed to clear:', error);
@@ -370,6 +543,214 @@ export function HistoryScreen() {
       },
     ]);
   }, [clearHistory, showMessage]);
+
+  // 添加文件到历史记录
+  const handleImportFile = useCallback(async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        multiple: false,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const asset = result.assets?.[0];
+      if (!asset) {
+        showMessage('未选择文件', 'error');
+        return;
+      }
+
+      const fileName = asset.name || 'file';
+
+      showMessage('正在添加文件...', 'info');
+      setImportingFile(true);
+
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => resolve());
+        });
+      });
+
+      await importFileToHistory(asset.uri, fileName, asset.mimeType, asset.size);
+
+      showMessage(`文件 ${fileName} 已添加到历史记录`, 'success');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '添加文件失败，请重试';
+      console.error('[HistoryScreen] Failed to import file:', error);
+      showMessage(errorMessage, 'error');
+    } finally {
+      setImportingFile(false);
+    }
+  }, [showMessage]);
+
+  // 重新同步历史记录
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // 同步动画
+  const syncRotation = useRef(new Animated.Value(0)).current;
+  const syncAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  useEffect(() => {
+    if (isSyncing) {
+      syncRotation.setValue(0);
+      const animation = Animated.loop(
+        Animated.timing(syncRotation, {
+          toValue: 1,
+          duration: 1000,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      );
+      animation.start();
+      syncAnimationRef.current = animation;
+    } else {
+      syncAnimationRef.current?.stop();
+      syncAnimationRef.current = null;
+      syncRotation.setValue(0);
+    }
+  }, [isSyncing, syncRotation]);
+
+  const syncRotationInterpolate = syncRotation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  const handleResyncHistory = useCallback(async () => {
+    if (isSyncing) return;
+
+    const initialized = await ensureSyncServiceInitialized();
+    if (!initialized) {
+      showMessage('请先配置服务器', 'error');
+      return;
+    }
+
+    const { getHistorySyncService } = await import('@/services/HistorySyncService');
+    const syncService = getHistorySyncService();
+
+    setIsSyncing(true);
+    showMessage('开始同步历史记录...', 'info');
+
+    try {
+      await syncService.syncAll((progress: { message?: string }) => {
+        if (progress.message) {
+          console.log(`[HistoryScreen] Sync progress: ${progress.message}`);
+        }
+      });
+      showMessage('历史记录同步完成', 'success');
+    } catch (error) {
+      console.error('[HistoryScreen] Failed to resync history:', error);
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      setError({
+        title: '历史记录同步失败',
+        message: errorMessage,
+      });
+      showMessage('同步失败: ' + errorMessage, 'error');
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [isSyncing, showMessage, setError, ensureSyncServiceInitialized]);
+
+  const handleIncrementalSync = useCallback(
+    async (isPullToRefresh = false) => {
+      if (isSyncing) return;
+
+      const initialized = await ensureSyncServiceInitialized();
+      if (!initialized) {
+        return;
+      }
+
+      const { getHistorySyncService } = await import('@/services/HistorySyncService');
+      const syncService = getHistorySyncService();
+
+      setIsSyncing(true);
+      if (isPullToRefresh) {
+        setIsRefreshing(true);
+      }
+
+      try {
+        await syncService.syncIncremental();
+      } catch (error) {
+        console.error('[HistoryScreen] Failed to incremental sync:', error);
+        const errorMessage = error instanceof Error ? error.message : '未知错误';
+        setError({
+          title: '历史记录增量同步失败',
+          message: errorMessage,
+        });
+      } finally {
+        setIsSyncing(false);
+        if (isPullToRefresh) {
+          setIsRefreshing(false);
+        }
+      }
+    },
+    [isSyncing, setError, ensureSyncServiceInitialized]
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      const onScreenFocus = async () => {
+        const currentConfig = useSettingsStore.getState().config;
+        if (currentConfig?.needsHistoryReorganize) {
+          const { getHistorySyncService } = await import('@/services/HistorySyncService');
+          const syncService = getHistorySyncService();
+          await syncService.resetSyncCursor();
+
+          const latestConfig = useSettingsStore.getState().config;
+          const shouldReorganize = !isHistorySyncEnabled(latestConfig);
+
+          if (!shouldReorganize) {
+            console.log('[HistoryScreen] Skipped history reorganization (sync re-enabled)');
+            await useSettingsStore.getState().updateConfig({ needsHistoryReorganize: false });
+          } else {
+            setIsReorganizing(true);
+            console.log('[HistoryScreen] Starting history reorganization...');
+
+            const { HistoryStorage } = await import('@/services/HistoryStorage');
+            const historyStorage = HistoryStorage.getInstance();
+            historyStorage.beginSilentMode();
+
+            try {
+              await syncService.cleanupRemoteHistorys();
+              await historyStorage.cleanupByCount();
+              console.log('[HistoryScreen] History reorganization completed');
+              await useSettingsStore.getState().updateConfig({ needsHistoryReorganize: false });
+            } catch (error) {
+              console.error('[HistoryScreen] History reorganization failed:', error);
+            } finally {
+              setIsReorganizing(false);
+              historyStorage.endSilentMode();
+              await useHistoryStore.getState().refresh();
+            }
+          }
+        }
+
+        if (historySyncEnabled) {
+          console.log('[HistoryScreen] Screen focused, starting incremental sync');
+          const { getHistorySyncService } = await import('@/services/HistorySyncService');
+          const syncService = getHistorySyncService();
+          if (syncService.isInitialized()) {
+            setIsSyncing(true);
+            try {
+              await syncService.syncIncremental();
+            } catch (error) {
+              console.error('[HistoryScreen] Failed to incremental sync:', error);
+              const errorMessage = error instanceof Error ? error.message : '未知错误';
+              setError({
+                title: '历史记录增量同步失败',
+                message: errorMessage,
+              });
+            } finally {
+              setIsSyncing(false);
+            }
+          }
+        }
+      };
+
+      onScreenFocus();
+    }, [historySyncEnabled])
+  );
 
   const generateRandomDebugText = useCallback(() => {
     const randomInt = (min: number, max: number) =>
@@ -415,14 +796,13 @@ export function HistoryScreen() {
           const seed = `debug-random-${now}-${index}-${Math.random().toString(36).slice(2, 10)}`;
           const profileHash = await calculateTextHash(seed);
 
-          return {
+          return createDefaultClipboardItem({
             type: 'Text' as const,
             text: generateRandomDebugText(),
             profileHash,
             hasData: false,
             timestamp: now - index * 1000,
-            synced: false,
-          };
+          });
         })
       );
 
@@ -443,9 +823,33 @@ export function HistoryScreen() {
   }, [isLoading, items.length, totalCount, currentPage, loadItems]);
 
   // 切换筛选类型
-  const handleFilterChange = useCallback((type: FilterType) => {
-    setFilterType(type);
-  }, []);
+  const handleFilterChange = useCallback(
+    (type: FilterType) => {
+      setFilterType(type);
+
+      // 根据筛选类型设置 filter 参数
+      let filter: HistoryFilter | undefined;
+      switch (type) {
+        case 'Text':
+        case 'Image':
+        case 'File':
+          filter = { type: [type] };
+          break;
+        case 'starred':
+          filter = { starredOnly: true };
+          break;
+        case 'transferring':
+          filter = { syncStatus: [2] };
+          break;
+        default:
+          filter = undefined;
+      }
+
+      // 使用 store 的 searchItems 进行异步过滤
+      searchItems(filter);
+    },
+    [searchItems]
+  );
 
   const handleClearSearch = useCallback(() => {
     setSearchText('');
@@ -456,7 +860,57 @@ export function HistoryScreen() {
     await setShowFullImage(!showFullImage);
   }, [showFullImage, setShowFullImage]);
 
-  // 渲染列表项
+  const handleDownload = useCallback(async (item: ClipboardItem) => {
+    console.log(`[HistoryScreen] ========== Download Button Clicked ==========`);
+    console.log(`[HistoryScreen] Item profileHash: ${item.profileHash}`);
+    console.log(`[HistoryScreen] Item type: ${item.type}`);
+    console.log(`[HistoryScreen] Item dataName: ${item.dataName}`);
+    console.log(`[HistoryScreen] Item hasRemoteData: ${item.hasRemoteData}`);
+    console.log(`[HistoryScreen] Item isLocalFileReady: ${item.isLocalFileReady}`);
+
+    const { getHistoryTransferQueue } = await import('@/services/HistoryTransferQueue');
+    const { getProfileId } = await import('@/services/HistoryAPI');
+
+    const profileId = getProfileId(item.type, item.profileHash);
+    console.log(`[HistoryScreen] Generated profileId: ${profileId}`);
+
+    const queue = getHistoryTransferQueue();
+    queue.start();
+    await queue.addDownloadTask(profileId, true);
+  }, []);
+
+  const handleUpload = useCallback(
+    async (item: ClipboardItem) => {
+      console.log(`[HistoryScreen] ========== Upload Button Clicked ==========`);
+      console.log(`[HistoryScreen] Item profileHash: ${item.profileHash}`);
+      console.log(`[HistoryScreen] Item type: ${item.type}`);
+      console.log(`[HistoryScreen] Item isLocalFileReady: ${item.isLocalFileReady}`);
+      console.log(`[HistoryScreen] Item syncStatus: ${item.syncStatus}`);
+
+      // 验证本地文件是否存在
+      if (item.fileUri) {
+        const { File } = await import('expo-file-system');
+        const file = new File(item.fileUri);
+        if (!file.exists) {
+          console.warn(`[HistoryScreen] Local file not found: ${item.fileUri}`);
+          showMessage('本地文件不存在', 'error');
+          return;
+        }
+      }
+
+      const { getHistoryTransferQueue } = await import('@/services/HistoryTransferQueue');
+      const { getProfileId } = await import('@/services/HistoryAPI');
+
+      const profileId = getProfileId(item.type, item.profileHash);
+      console.log(`[HistoryScreen] Generated profileId: ${profileId}`);
+
+      const queue = getHistoryTransferQueue();
+      queue.start();
+      await queue.addUploadTask(profileId, true);
+    },
+    [showMessage]
+  );
+
   const renderItem = useCallback(
     ({ item }: { item: ClipboardItem }) => {
       const itemRef = getOrCreateItemRef(item.profileHash);
@@ -471,7 +925,11 @@ export function HistoryScreen() {
           onOpen={handleOpen}
           onLongPress={handleItemLongPress}
           onDelete={performDelete}
+          onToggleStar={handleToggleStar}
+          onDownload={historySyncEnabled ? handleDownload : undefined}
+          onUpload={historySyncEnabled ? handleUpload : undefined}
           showFullImage={showFullImage}
+          enableHistorySync={historySyncEnabled}
         />
       );
     },
@@ -482,7 +940,11 @@ export function HistoryScreen() {
       handleOpen,
       handleItemLongPress,
       performDelete,
+      handleToggleStar,
+      handleDownload,
+      handleUpload,
       showFullImage,
+      historySyncEnabled,
     ]
   );
 
@@ -503,11 +965,44 @@ export function HistoryScreen() {
   const menuItems = useMemo<MenuItemConfig[]>(() => {
     const items: MenuItemConfig[] = [
       {
+        label: '添加文件',
+        onPress: handleImportFile,
+      },
+      {
         label: '展示完整图片',
         onPress: handleToggleFullImage,
         icon: showFullImage ? <Check color="#2196F3" width={18} height={18} /> : undefined,
       },
+      {
+        label: '排序方式',
+        submenu: [
+          {
+            label: '按创建时间排序',
+            onPress: () => handleSortChange('timestamp'),
+            icon:
+              sortField === 'timestamp' ? (
+                <Check color="#2196F3" width={18} height={18} />
+              ) : undefined,
+          },
+          {
+            label: '按访问时间排序',
+            onPress: () => handleSortChange('lastAccessed'),
+            icon:
+              sortField === 'lastAccessed' ? (
+                <Check color="#2196F3" width={18} height={18} />
+              ) : undefined,
+          },
+        ],
+      },
     ];
+
+    if (historySyncEnabled) {
+      items.push({
+        label: isSyncing ? '同步中...' : '重新同步历史记录',
+        onPress: handleResyncHistory,
+        disabled: isSyncing,
+      });
+    }
 
     if (isDebugMode) {
       items.push({
@@ -523,7 +1018,19 @@ export function HistoryScreen() {
     });
 
     return items;
-  }, [showFullImage, isDebugMode, handleToggleFullImage, handleAddRandomRecords, handleClearAll]);
+  }, [
+    showFullImage,
+    sortField,
+    isDebugMode,
+    isSyncing,
+    historySyncEnabled,
+    handleImportFile,
+    handleToggleFullImage,
+    handleSortChange,
+    handleResyncHistory,
+    handleAddRandomRecords,
+    handleClearAll,
+  ]);
 
   // 设置标题栏菜单按钮
   useLayoutEffect(() => {
@@ -535,12 +1042,68 @@ export function HistoryScreen() {
         shadowOpacity: 0,
         borderBottomWidth: 0,
       },
-      headerRight: () => <TopRightMenu items={menuItems} />,
+      headerRight: () => (
+        <View style={styles.headerRightContainer}>
+          {hasTasks && (
+            <TouchableOpacity
+              style={styles.queueButton}
+              onPress={() => setShowTransferQueue(true)}
+              hitSlop={{ top: 10, right: 5, bottom: 10, left: 5 }}
+            >
+              <List width={20} height={20} color={theme.colors.primary} />
+              <View style={[styles.queueBadge, { backgroundColor: theme.colors.primary }]}>
+                <Text style={[styles.queueBadgeText, { color: theme.colors.white }]}>
+                  {activeCount + pendingCount}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
+          {isSyncing && (
+            <Animated.View
+              style={[styles.syncIndicator, { transform: [{ rotate: syncRotationInterpolate }] }]}
+            >
+              <RefreshCw width={18} height={18} color={theme.colors.primary} />
+            </Animated.View>
+          )}
+          {showScrollToTop && (
+            <TouchableOpacity
+              style={[styles.scrollToTopButton, { backgroundColor: theme.colors.surface }]}
+              onPress={handleScrollToTop}
+              hitSlop={{ top: 10, right: 5, bottom: 10, left: 5 }}
+            >
+              <ArrowUp width={20} height={20} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+          )}
+          <TopRightMenu items={menuItems} />
+        </View>
+      ),
     });
-  }, [navigation, theme.colors.surface, menuItems]);
+  }, [
+    navigation,
+    theme.colors.surface,
+    theme.colors.primary,
+    theme.colors.textSecondary,
+    menuItems,
+    showScrollToTop,
+    handleScrollToTop,
+    isSyncing,
+    syncRotationInterpolate,
+    hasTasks,
+    activeCount,
+    pendingCount,
+  ]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      {/* 整理中提示 */}
+      {isReorganizing && (
+        <View style={[styles.reorganizingOverlay, { backgroundColor: theme.colors.background }]}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={[styles.reorganizingText, { color: theme.colors.text }]}>
+            正在整理历史记录...
+          </Text>
+        </View>
+      )}
       {/* 搜索栏 */}
       <View style={[styles.searchContainer, { backgroundColor: theme.colors.surface }]}>
         <TextInput
@@ -578,7 +1141,7 @@ export function HistoryScreen() {
 
       {/* 筛选按钮 */}
       <View style={[styles.filterContainer, { backgroundColor: theme.colors.surface }]}>
-        {(['all', 'Text', 'Image', 'File'] as FilterType[]).map((type) => (
+        {(['all', 'Text', 'Image', 'File', 'starred'] as FilterType[]).map((type) => (
           <TouchableOpacity
             key={type}
             onPress={() => handleFilterChange(type)}
@@ -595,13 +1158,7 @@ export function HistoryScreen() {
                 { color: filterType === type ? theme.colors.white : theme.colors.textSecondary },
               ]}
             >
-              {type === 'all'
-                ? '全部'
-                : type === 'Text'
-                  ? '文本'
-                  : type === 'Image'
-                    ? '图片'
-                    : '文件'}
+              {FILTER_LABELS[type]}
             </Text>
           </TouchableOpacity>
         ))}
@@ -610,7 +1167,7 @@ export function HistoryScreen() {
       {/* 历史记录列表 */}
       <FlashList
         ref={listRef}
-        data={filteredItems}
+        data={sortedItems}
         renderItem={renderItem}
         keyExtractor={(item) => item.profileHash}
         onEndReached={handleEndReached}
@@ -618,6 +1175,8 @@ export function HistoryScreen() {
         onScroll={handleScroll}
         ListEmptyComponent={renderEmptyComponent}
         contentContainerStyle={styles.listContent}
+        refreshing={isRefreshing}
+        onRefresh={historySyncEnabled ? () => handleIncrementalSync(true) : undefined}
       />
 
       {/* Android 操作菜单 Modal */}
@@ -748,8 +1307,23 @@ export function HistoryScreen() {
         </Modal>
       )}
 
+      {/* 传输队列弹窗 */}
+      <TransferQueueModal visible={showTransferQueue} onClose={() => setShowTransferQueue(false)} />
+
       {/* 消息提示 */}
-      <MessageToast message={message} onMessageShown={handleMessageShown} />
+      <MessageToast message={message} onMessageShown={clearMessage} />
+
+      {/* 导入文件遮罩 */}
+      {importingFile && (
+        <View style={[styles.importOverlay, { backgroundColor: theme.colors.backdrop }]}>
+          <View style={[styles.importOverlayCard, { backgroundColor: theme.colors.surface }]}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={[styles.importOverlayTitle, { color: theme.colors.text }]}>
+              正在添加文件...
+            </Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -757,6 +1331,60 @@ export function HistoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  reorganizingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  reorganizingText: {
+    marginTop: 16,
+    fontSize: 16,
+  },
+  headerRightContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  syncIndicator: {
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  queueButton: {
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 4,
+  },
+  queueBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  queueBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  scrollToTopButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -849,5 +1477,21 @@ const styles = StyleSheet.create({
   },
   actionSheetDivider: {
     height: StyleSheet.hairlineWidth,
+  },
+  importOverlay: {
+    ...StyleSheet.absoluteFill,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  importOverlayCard: {
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    minWidth: 160,
+  },
+  importOverlayTitle: {
+    marginTop: 16,
+    fontSize: 16,
+    fontWeight: '500',
   },
 });

@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand';
-import { ClipboardContent, ClipboardItem } from '../types/clipboard';
+import { ClipboardContent, createDefaultClipboardItem } from '../types/clipboard';
 import { clipboardManager, clipboardMonitor } from '../services';
 import { useHistoryStore } from './historyStore';
 
@@ -94,7 +94,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
 
       // 添加到历史记录
       if (content) {
-        const historyItem: ClipboardItem = {
+        const historyItem = createDefaultClipboardItem({
           type: content.type,
           text: content.text || '',
           profileHash: content.profileHash || '',
@@ -102,9 +102,8 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
           dataName: content.fileName,
           size: content.fileSize,
           timestamp: content.timestamp || Date.now(),
-          synced: false,
           fileUri: content.fileUri,
-        };
+        });
         await useHistoryStore.getState().addItem(historyItem);
       }
     } catch (error) {
@@ -129,7 +128,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
       set({ currentContent: content, isLoading: false });
 
       // 添加到历史记录
-      const historyItem: ClipboardItem = {
+      const historyItem = createDefaultClipboardItem({
         type: content.type,
         text: content.text || '',
         profileHash: content.profileHash || '',
@@ -137,9 +136,8 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
         dataName: content.fileName,
         size: content.fileSize,
         timestamp: content.timestamp || Date.now(),
-        synced: false,
         fileUri: content.fileUri,
-      };
+      });
       await useHistoryStore.getState().addItem(historyItem);
     } catch (error) {
       const errorMessage =
@@ -157,7 +155,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
         set({ currentContent: content, isLoading: false });
 
         // 添加到历史记录
-        const historyItem: ClipboardItem = {
+        const historyItem = createDefaultClipboardItem({
           type: content.type,
           text: content.text || '',
           profileHash: content.profileHash || '',
@@ -165,8 +163,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
           dataName: content.fileName,
           size: content.fileSize,
           timestamp: content.timestamp || Date.now(),
-          synced: false,
-        };
+        });
         await useHistoryStore.getState().addItem(historyItem);
       } else {
         set({ isLoading: false });
@@ -186,7 +183,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
         set({ currentContent: content, isLoading: false });
 
         // 添加到历史记录
-        const historyItem: ClipboardItem = {
+        const historyItem = createDefaultClipboardItem({
           type: content.type,
           text: content.text || '',
           profileHash: content.profileHash || '',
@@ -194,8 +191,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
           dataName: content.fileName,
           size: content.fileSize,
           timestamp: content.timestamp || Date.now(),
-          synced: false,
-        };
+        });
         await useHistoryStore.getState().addItem(historyItem);
       } else {
         set({ isLoading: false });
@@ -221,7 +217,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
       set({ currentContent: content });
 
       // 添加到历史记录
-      const historyItem: ClipboardItem = {
+      const historyItem = createDefaultClipboardItem({
         type: content.type,
         text: content.text || '',
         profileHash: content.profileHash || '',
@@ -229,9 +225,8 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
         dataName: content.fileName,
         size: content.fileSize,
         timestamp: content.timestamp || Date.now(),
-        synced: false,
         fileUri: content.fileUri,
-      };
+      });
       await useHistoryStore.getState().addItem(historyItem);
     });
 

@@ -5,6 +5,7 @@
 
 import { ServerConfig } from './api';
 import { SyncMode, ConflictResolution } from './sync';
+import { HistorySyncStatus } from './clipboard';
 
 /**
  * 应用配置
@@ -72,6 +73,12 @@ export interface AppConfig {
 
   /** 是否更新到测试版（beta） */
   updateToBeta: boolean;
+
+  /** 是否启用历史记录同步 */
+  enableHistorySync: boolean;
+
+  /** 是否需要整理历史记录（关闭同步或切换服务器后设置） */
+  needsHistoryReorganize?: boolean;
 }
 
 /**
@@ -132,6 +139,18 @@ export interface HistoryFilter {
 
   /** 是否仅显示已同步项 */
   syncedOnly?: boolean;
+
+  /** 是否仅显示置顶项 */
+  pinnedOnly?: boolean;
+
+  /** 是否仅显示本地有数据的项 */
+  localOnly?: boolean;
+
+  /** 同步状态筛选 */
+  syncStatus?: HistorySyncStatus[];
+
+  /** 是否仅显示传输中的项 */
+  transferringOnly?: boolean;
 }
 
 /**
@@ -139,7 +158,7 @@ export interface HistoryFilter {
  */
 export interface HistorySort {
   /** 排序字段 */
-  field: 'timestamp' | 'useCount' | 'size';
+  field: 'timestamp' | 'useCount' | 'size' | 'lastAccessed';
 
   /** 排序方向 */
   order: 'asc' | 'desc';
@@ -184,6 +203,9 @@ export const STORAGE_KEYS = {
   /** 历史记录 */
   HISTORY: '@syncclipboard:history',
 
+  /** 历史记录数据版本号 */
+  HISTORY_VERSION: '@syncclipboard:history:version',
+
   /** 缓存前缀 */
   CACHE_PREFIX: '@syncclipboard:cache:',
 
@@ -222,6 +244,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   autoCheckUpdate: true,
   lastUpdateCheckDate: '',
   updateToBeta: false,
+  enableHistorySync: false, // 默认关闭历史记录同步
 };
 
 /**
