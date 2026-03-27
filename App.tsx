@@ -1,11 +1,12 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet, Linking, BackHandler } from 'react-native';
+import { StyleSheet, Linking, BackHandler, ToastAndroid } from 'react-native';
 import { useEffect, useState } from 'react';
 import { ThemeProvider } from './src/contexts/ThemeContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { QuickTileLoadingScreen } from './src/screens/QuickTileLoadingScreen';
 import { ShareReceiveScreen } from './src/screens/ShareReceiveScreen';
 import { SyncDirection } from './src/types/sync';
+import { useSettingsStore } from './src/stores';
 
 const QUICK_TILE_UPLOAD_URL = 'syncclipboard://quick-tile-upload';
 const QUICK_TILE_DOWNLOAD_URL = 'syncclipboard://quick-tile';
@@ -34,16 +35,28 @@ function isShareIntentUrl(url: string | null): boolean {
   }
 }
 
-type AppMode = 'home' | 'quick_tile_loading' | 'share_receive';
+type AppMode = 'checking' | 'home' | 'quick_tile_loading' | 'share_receive';
 
 export default function App() {
-  const [appMode, setAppMode] = useState<AppMode>('home');
+  const [appMode, setAppMode] = useState<AppMode>('checking');
   const [shouldExitAfterSync, setShouldExitAfterSync] = useState(false);
   const [syncDirection, setSyncDirection] = useState<SyncDirection>(SyncDirection.Download);
+  const { config, loadConfig, isLoaded } = useSettingsStore();
 
   useEffect(() => {
+    if (!isLoaded) {
+      loadConfig();
+    }
+  }, [isLoaded, loadConfig]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+
     // Cold start: app launched via URL scheme
     Linking.getInitialURL().then((url) => {
+      if (config?.debugMode) {
+        ToastAndroid.show(`getInitialURL: ${url ?? 'null'}`, ToastAndroid.LONG);
+      }
       if (isShareIntentUrl(url)) {
         setAppMode('share_receive');
         return;
@@ -53,11 +66,16 @@ export default function App() {
         setShouldExitAfterSync(!fromForeground);
         setSyncDirection(direction);
         setAppMode('quick_tile_loading');
+        return;
       }
+      setAppMode('home');
     });
 
     // Hot start: app already running, receives URL deep link event
     const urlSub = Linking.addEventListener('url', ({ url }) => {
+      if (config?.debugMode) {
+        ToastAndroid.show(`addEventListener url: ${url ?? 'null'}`, ToastAndroid.LONG);
+      }
       if (isShareIntentUrl(url)) {
         setAppMode('share_receive');
         return;
@@ -71,12 +89,12 @@ export default function App() {
     });
 
     return () => urlSub.remove();
-  }, []);
+  }, [isLoaded, config?.debugMode]);
 
   return (
     <GestureHandlerRootView style={styles.container}>
       <ThemeProvider>
-        {appMode === 'share_receive' ? (
+        {appMode === 'checking' ? null : appMode === 'share_receive' ? (
           <ShareReceiveScreen
             onComplete={() => {
               setAppMode('home');
