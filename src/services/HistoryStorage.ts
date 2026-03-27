@@ -377,7 +377,7 @@ export class HistoryStorage {
       const existing = this.history[existingIndex];
 
       // 如果现有记录没有 text 但新记录有，则更新 text
-      const text = (!existing.text && processedItem.text) ? processedItem.text : existing.text;
+      const text = !existing.text && processedItem.text ? processedItem.text : existing.text;
 
       // 如果记录之前是软删除状态，需要恢复并触发同步
       const wasDeleted = existing.isDeleted === true;
@@ -433,7 +433,7 @@ export class HistoryStorage {
       if (existingIndex >= 0) {
         // 更新现有记录 - 参照桌面客户端 AddLocalProfile 逻辑
         const existing = this.history[existingIndex];
-        const text = (!existing.text && item.text) ? item.text : existing.text;
+        const text = !existing.text && item.text ? item.text : existing.text;
 
         // 如果记录之前是软删除状态，需要恢复并触发同步
         const wasDeleted = existing.isDeleted === true;

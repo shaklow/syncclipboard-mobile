@@ -27,7 +27,7 @@ import { ServerConfigModal, ServerListItem, MessageToast } from '@/components';
 import { ServerConfig } from '@/types/api';
 import { useMessageToast } from '@/hooks/useMessageToast';
 import { ShortcutService, checkForUpdate } from '@/services';
-import { Plus, RefreshCw, Check } from 'react-native-feather';
+import { Plus, RefreshCw, Check, ChevronDown, ChevronUp } from 'react-native-feather';
 
 export const SettingsScreen = () => {
   const { theme, themeMode, setThemeMode } = useTheme();
@@ -50,6 +50,7 @@ export const SettingsScreen = () => {
 
   const [showServerModal, setShowServerModal] = useState(false);
   const [editingServerIndex, setEditingServerIndex] = useState<number | null>(null);
+  const [serversCollapsed, setServersCollapsed] = useState(true);
   const { message, showMessage, handleMessageShown } = useMessageToast();
 
   // 本地状态用于跟踪Switch的当前值，避免闪烁
@@ -197,7 +198,14 @@ export const SettingsScreen = () => {
   // 处理切换激活服务器
   const handleSetActiveServer = async (index: number) => {
     if (index === activeServerIndex) {
+      if (servers.length > 1) {
+        setServersCollapsed(true);
+      }
       return;
+    }
+
+    if (servers.length > 1) {
+      setServersCollapsed(true);
     }
 
     try {
@@ -435,7 +443,22 @@ export const SettingsScreen = () => {
         {/* 服务器配置部分 */}
         <View style={styles.section}>
           <View style={[styles.sectionHeaderBase, styles.sectionHeaderRow]}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>服务器配置</Text>
+            <TouchableOpacity
+              style={styles.sectionTitleContainer}
+              onPress={() => servers.length > 1 && setServersCollapsed(!serversCollapsed)}
+              disabled={servers.length <= 1}
+            >
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>服务器配置</Text>
+              {servers.length > 1 && (
+                <View style={styles.collapseIcon}>
+                  {serversCollapsed ? (
+                    <ChevronDown color={theme.colors.textSecondary} width={18} height={18} />
+                  ) : (
+                    <ChevronUp color={theme.colors.textSecondary} width={18} height={18} />
+                  )}
+                </View>
+              )}
+            </TouchableOpacity>
             <TouchableOpacity style={styles.iconButton} onPress={handleAddServer}>
               <Plus color={theme.colors.primary} width={20} height={20} />
             </TouchableOpacity>
@@ -450,6 +473,16 @@ export const SettingsScreen = () => {
                 点击右上角"添加"按钮添加第一个服务器
               </Text>
             </View>
+          ) : serversCollapsed && servers.length > 1 ? (
+            activeServer && (
+              <ServerListItem
+                config={activeServer}
+                isActive={true}
+                onPress={() => {}}
+                onEdit={() => handleEditServer(activeServerIndex)}
+                onDelete={() => handleDeleteServer(activeServerIndex)}
+              />
+            )
           ) : (
             servers.map((server, index) => (
               <ServerListItem
@@ -859,6 +892,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  sectionTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  collapseIcon: {
+    marginTop: 1,
   },
   iconButton: {
     width: 34,
