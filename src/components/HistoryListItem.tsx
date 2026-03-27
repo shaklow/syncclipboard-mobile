@@ -73,6 +73,8 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
     const isTransferring = !!activeTask;
     const transferProgress = activeTask?.progress || 0;
     const isUploadTask = activeTask?.type === 'upload';
+    const bytesTransferred = activeTask?.bytesTransferred || 0;
+    const totalBytes = activeTask?.totalBytes;
 
     const handleCancelTransfer = () => {
       if (activeTask) {
@@ -505,7 +507,7 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
                         style={[styles.syncBadgeText, { color: theme.colors.error || '#F44336' }]}
                       >
                         {transferProgress > 0
-                          ? `${Math.round(transferProgress)}%`
+                          ? `${Math.round(transferProgress)}%${totalBytes ? ` (${formatSize(bytesTransferred)}/${formatSize(totalBytes)})` : ''}`
                           : isUploadTask
                             ? '取消上传'
                             : '取消下载'}

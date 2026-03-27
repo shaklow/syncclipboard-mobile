@@ -104,6 +104,9 @@ export const TransferQueueModal: React.FC<TransferQueueModalProps> = ({ visible,
               {task.status === 'running' && task.progress >= 0 && (
                 <Text style={[styles.progressText, { color: theme.colors.textSecondary }]}>
                   {Math.round(task.progress)}%
+                  {task.totalBytes
+                    ? ` (${formatBytes(task.bytesTransferred)}/${formatBytes(task.totalBytes)})`
+                    : ''}
                 </Text>
               )}
               {task.status === 'running' && task.progress < 0 && (

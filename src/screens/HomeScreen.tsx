@@ -54,6 +54,7 @@ export function HomeScreen() {
   const isAutoSyncing = useRef(false);
   const signalRClient = useRef(getSignalRClient());
   const signalRConnected = useRef(false);
+  const signalRCallbackRef = useRef<RemoteClipboardChangedCallback | null>(null);
   const uploadAbortControllerRef = useRef<AbortController | null>(null);
   const downloadAbortControllerRef = useRef<AbortController | null>(null);
   const clipboardUploadAbortControllerRef = useRef<AbortController | null>(null);
@@ -383,6 +384,8 @@ export function HomeScreen() {
         );
       };
 
+      // 保存回调引用，用于断开时移除
+      signalRCallbackRef.current = callback;
       signalRClient.current.onRemoteClipboardChanged(callback);
 
       // 开始连接
@@ -401,7 +404,10 @@ export function HomeScreen() {
   const disconnectSignalR = async () => {
     if (signalRConnected.current) {
       console.log('[HomeScreen] Disconnecting SignalR...');
-      signalRClient.current.clearCallbacks();
+      if (signalRCallbackRef.current) {
+        signalRClient.current.offRemoteClipboardChanged(signalRCallbackRef.current);
+        signalRCallbackRef.current = null;
+      }
       await signalRClient.current.disconnect();
       signalRConnected.current = false;
     }
