@@ -1,13 +1,38 @@
 import { logger, consoleTransport } from 'react-native-logs';
 import { Paths, Directory, File } from 'expo-file-system';
 import { StorageAccessFramework } from 'expo-file-system/legacy';
-import { Platform, NativeModules } from 'react-native';
-import { nativeCopyFile } from 'native-util';
-import JSZip from 'jszip';
-import { CLIPBOARD_TEMP_DIR } from '@/utils/fileStorage';
+import { Platform } from 'react-native';
+import { nativeZipFiles } from 'native-util';
 
 const LOG_DIR = new Directory(Paths.document, 'logs');
 const MAX_LOG_DAYS = 3;
+
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatLocalDateTime(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  return `${year}-${month}-${day}_${hours}-${minutes}-${seconds}`;
+}
+
+function formatLocalTimestamp(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -37,11 +62,11 @@ const customFileTransport = (props: {
     }
 
     const today = new Date();
-    const dateStr = today.toISOString().slice(0, 10);
+    const dateStr = formatLocalDate(today);
     const fileName = `app_${dateStr}.log`;
     const logFile = new File(LOG_DIR, fileName);
 
-    const timestamp = today.toISOString().slice(0, 19).replace('T', ' ');
+    const timestamp = formatLocalTimestamp(today);
     const level = props.level.text.toUpperCase();
     const extension = props.extension ? ` [${props.extension}]` : '';
     const message = props.msg;
@@ -195,87 +220,39 @@ export const log = {
   error: (...args: unknown[]) => getLogger().error(args.length === 1 ? args[0] : args),
 };
 
-export async function exportLogs(): Promise<string | null> {
+export function getLogFileUris(): string[] {
   if (!LOG_DIR.exists) {
-    return null;
+    return [];
   }
 
-  const files = LOG_DIR.list().filter(
-    (entry): entry is File => entry instanceof File && entry.name.endsWith('.log')
-  );
-
-  if (files.length === 0) {
-    return null;
-  }
-
-  const zip = new JSZip();
-
-  for (const file of files) {
-    try {
-      const content = file.textSync() || '';
-      zip.file(file.name, content);
-    } catch {
-      // ignore
-    }
-  }
-
-  const zipContent = await zip.generateAsync({ type: 'base64' });
-
-  if (!CLIPBOARD_TEMP_DIR.exists) {
-    CLIPBOARD_TEMP_DIR.create();
-  }
-
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const zipFileName = `logs_${timestamp}.zip`;
-  const zipFile = new File(CLIPBOARD_TEMP_DIR, zipFileName);
-
-  const binaryString = atob(zipContent);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  zipFile.write(bytes);
-
-  return zipFile.uri;
+  return LOG_DIR.list()
+    .filter((entry): entry is File => entry instanceof File && entry.name.endsWith('.log'))
+    .map((file) => file.uri);
 }
 
-export async function saveLogsToFile(): Promise<boolean> {
-  const zipUri = await exportLogs();
-  if (!zipUri) {
-    return false;
+export async function saveLogsToFile(signal?: AbortSignal): Promise<void> {
+  if (Platform.OS !== 'android') {
+    throw new Error('saveLogsToFile is only supported on Android');
   }
 
-  try {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const zipFileName = `logs_${timestamp}`;
-
-    const permissions = await StorageAccessFramework.requestDirectoryPermissionsAsync();
-    if (!permissions.granted) {
-      return false;
-    }
-
-    const destUri = await StorageAccessFramework.createFileAsync(
-      permissions.directoryUri,
-      zipFileName,
-      'application/zip'
-    );
-
-    const hashModule = Platform.OS === 'android' ? (NativeModules.NativeUtilModule ?? null) : null;
-
-    if (hashModule?.copyFile) {
-      await nativeCopyFile(zipUri, destUri);
-    } else {
-      const FileSystem = await import('expo-file-system/legacy');
-      const content = await FileSystem.readAsStringAsync(zipUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      await FileSystem.writeAsStringAsync(destUri, content, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-    }
-
-    return true;
-  } catch {
-    return false;
+  const fileUris = getLogFileUris();
+  if (fileUris.length === 0) {
+    throw new Error('没有可导出的日志文件');
   }
+
+  const timestamp = formatLocalDateTime(new Date());
+  const zipFileName = `logs_${timestamp}`;
+
+  const permissions = await StorageAccessFramework.requestDirectoryPermissionsAsync();
+  if (!permissions.granted) {
+    throw new Error('未授予存储权限');
+  }
+
+  const destUri = await StorageAccessFramework.createFileAsync(
+    permissions.directoryUri,
+    zipFileName,
+    'application/zip'
+  );
+
+  await nativeZipFiles(fileUris, destUri, signal);
 }

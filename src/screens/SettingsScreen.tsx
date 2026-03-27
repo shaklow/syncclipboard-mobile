@@ -3,7 +3,7 @@
  * 提供主题切换功能、服务器配置、多用户切换
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -152,6 +152,8 @@ export const SettingsScreen = () => {
   const [historySize, setHistorySize] = useState<number>(0);
   const [logSize, setLogSize] = useState<number>(0);
   const [isCalculating, setIsCalculating] = useState<boolean>(true);
+  const [isExportingLogs, setIsExportingLogs] = useState<boolean>(false);
+  const exportLogsAbortControllerRef = useRef<AbortController | null>(null);
 
   // 目录对象
   const cacheDir = CLIPBOARD_TEMP_DIR;
@@ -449,15 +451,28 @@ export const SettingsScreen = () => {
 
   // 导出日志
   const handleExportLogs = async () => {
+    if (isExportingLogs) {
+      exportLogsAbortControllerRef.current?.abort();
+      return;
+    }
+
+    const abortController = new AbortController();
+    exportLogsAbortControllerRef.current = abortController;
+    setIsExportingLogs(true);
+
     try {
-      const success = await saveLogsToFile();
-      if (success) {
-        showMessage('日志已保存', 'success');
+      await saveLogsToFile(abortController.signal);
+      showMessage('日志已保存', 'success');
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        showMessage('已取消导出', 'info');
       } else {
-        showMessage('导出日志失败', 'error');
+        const message = error instanceof Error ? error.message : '导出日志失败';
+        showMessage(message, 'error');
       }
-    } catch {
-      showMessage('导出日志失败', 'error');
+    } finally {
+      setIsExportingLogs(false);
+      exportLogsAbortControllerRef.current = null;
     }
   };
 
@@ -872,7 +887,9 @@ export const SettingsScreen = () => {
                 onPress={handleExportLogs}
                 disabled={isCalculating}
               >
-                <Text style={[styles.clearButtonText, { color: theme.colors.white }]}>导出</Text>
+                <Text style={[styles.clearButtonText, { color: theme.colors.white }]}>
+                  {isExportingLogs ? '取消' : '导出'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>

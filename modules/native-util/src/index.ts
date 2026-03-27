@@ -21,6 +21,13 @@ export interface DownloadProgressEvent {
   totalBytes: number;
 }
 
+export interface ZipProgressEvent {
+  jobId: string;
+  progress: number;
+  bytesWritten: number;
+  totalBytes: number;
+}
+
 export interface ProgressInfo {
   progress: number;
   bytesTransferred: number;
@@ -40,6 +47,7 @@ export interface NativeUtilModuleType {
     formFields: Record<string, string>,
     fileUri: string | null
   ): string;
+  startZipFiles(fileUris: string[], destUri: string): string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   addListener(eventName: string, listener: (event: any) => void): EventSubscription;
 }
@@ -127,6 +135,48 @@ export async function nativeUploadFile(
   }
 
   const jobId = NativeUtilModule.startUploadFile(url, headers, fileUri);
+  resolvedJobId = jobId;
+
+  const abortHandler = () => NativeUtilModule.cancelJob(jobId);
+  signal?.addEventListener('abort', abortHandler);
+
+  try {
+    await NativeUtilModule.waitForJob(jobId);
+  } finally {
+    signal?.removeEventListener('abort', abortHandler);
+    progressSub?.remove();
+  }
+}
+
+export async function nativeZipFiles(
+  fileUris: string[],
+  destUri: string,
+  signal?: AbortSignal,
+  onProgress?: (info: ProgressInfo) => void
+): Promise<void> {
+  if (Platform.OS !== 'android') {
+    throw new Error('NativeUtilModule is not available on this platform');
+  }
+
+  if (signal?.aborted) {
+    throw new DOMException('Zip aborted', 'AbortError');
+  }
+
+  let progressSub: EventSubscription | null = null;
+  let resolvedJobId: string | null = null;
+  if (onProgress) {
+    progressSub = NativeUtilModule.addListener('onZipProgress', (event: ZipProgressEvent) => {
+      if (resolvedJobId && event.jobId === resolvedJobId) {
+        onProgress({
+          progress: event.progress,
+          bytesTransferred: event.bytesWritten,
+          totalBytes: event.totalBytes,
+        });
+      }
+    });
+  }
+
+  const jobId = NativeUtilModule.startZipFiles(fileUris, destUri);
   resolvedJobId = jobId;
 
   const abortHandler = () => NativeUtilModule.cancelJob(jobId);

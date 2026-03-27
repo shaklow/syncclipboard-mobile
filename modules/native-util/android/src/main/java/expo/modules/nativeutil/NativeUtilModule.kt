@@ -12,6 +12,8 @@ import java.net.URL
 import java.nio.channels.Channels
 import java.security.MessageDigest
 import java.util.UUID
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
@@ -24,6 +26,7 @@ class NativeUtilModule : Module() {
         private const val EVENT_HASH_PROGRESS = "onHashProgress"
         private const val EVENT_UPLOAD_PROGRESS = "onUploadProgress"
         private const val EVENT_DOWNLOAD_PROGRESS = "onDownloadProgress"
+        private const val EVENT_ZIP_PROGRESS = "onZipProgress"
     }
 
     private val executor = Executors.newCachedThreadPool()
@@ -33,7 +36,7 @@ class NativeUtilModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("NativeUtilModule")
 
-        Events(EVENT_HASH_PROGRESS, EVENT_UPLOAD_PROGRESS, EVENT_DOWNLOAD_PROGRESS)
+        Events(EVENT_HASH_PROGRESS, EVENT_UPLOAD_PROGRESS, EVENT_DOWNLOAD_PROGRESS, EVENT_ZIP_PROGRESS)
 
         Function("startCalculateFileHash") { fileUri: String ->
             val jobId = UUID.randomUUID().toString()
@@ -158,6 +161,97 @@ class NativeUtilModule : Module() {
                     promise.reject(CopyErrorException(e.message ?: "Unknown error", e))
                 }
             }
+        }
+
+        Function("startZipFiles") { fileUris: List<String>, destUri: String ->
+            val jobId = UUID.randomUUID().toString()
+            val cancelFlag = AtomicBoolean(false)
+            cancelFlags[jobId] = cancelFlag
+            val future = CompletableFuture<Any>()
+            pendingJobs[jobId] = future
+
+            executor.submit {
+                try {
+                    val files = fileUris.map { File(resolveFilePath(it)) }
+                    val nonExistent = files.firstOrNull { !it.exists() }
+                    if (nonExistent != null) {
+                        cancelFlags.remove(jobId)
+                        future.complete(FileNotFoundException(nonExistent.absolutePath))
+                        return@submit
+                    }
+
+                    val totalBytes = files.sumOf { it.length() }
+                    var bytesWritten = 0L
+                    var lastReportTime = 0L
+                    val buffer = ByteArray(UPLOAD_BUFFER_SIZE)
+
+                    val dest = Uri.parse(destUri)
+                    val outputStream = appContext.reactContext?.contentResolver?.openOutputStream(dest)
+                        ?: run {
+                            cancelFlags.remove(jobId)
+                            future.complete(OpenFailedException(destUri))
+                            return@submit
+                        }
+
+                    ZipOutputStream(outputStream).use { zipOut ->
+                        for (file in files) {
+                            if (cancelFlag.get()) {
+                                cancelFlags.remove(jobId)
+                                future.complete(CancelledException())
+                                return@submit
+                            }
+
+                            val entry = ZipEntry(file.name)
+                            zipOut.putNextEntry(entry)
+
+                            FileInputStream(file).use { input ->
+                                var read: Int
+                                while (input.read(buffer).also { read = it } != -1) {
+                                    if (cancelFlag.get()) {
+                                        cancelFlags.remove(jobId)
+                                        future.complete(CancelledException())
+                                        return@submit
+                                    }
+                                    zipOut.write(buffer, 0, read)
+                                    bytesWritten += read
+
+                                    val currentTime = System.currentTimeMillis()
+                                    if (currentTime - lastReportTime >= 500) {
+                                        lastReportTime = currentTime
+                                        val progress = if (totalBytes > 0) {
+                                            bytesWritten.toDouble() / totalBytes.toDouble()
+                                        } else {
+                                            -1.0
+                                        }
+                                        sendEvent(EVENT_ZIP_PROGRESS, mapOf(
+                                            "jobId" to jobId,
+                                            "progress" to progress,
+                                            "bytesWritten" to bytesWritten.toDouble(),
+                                            "totalBytes" to totalBytes.toDouble()
+                                        ))
+                                    }
+                                }
+                            }
+                            zipOut.closeEntry()
+                        }
+                    }
+
+                    cancelFlags.remove(jobId)
+                    val progress = if (totalBytes > 0) 1.0 else -1.0
+                    sendEvent(EVENT_ZIP_PROGRESS, mapOf(
+                        "jobId" to jobId,
+                        "progress" to progress,
+                        "bytesWritten" to bytesWritten.toDouble(),
+                        "totalBytes" to totalBytes.toDouble()
+                    ))
+                    future.complete("success")
+                } catch (e: Exception) {
+                    cancelFlags.remove(jobId)
+                    future.complete(ZipErrorException(e.message ?: "Unknown error", e))
+                }
+            }
+
+            return@Function jobId
         }
 
         Function("startUploadFile") { url: String, headers: Map<String, String>, fileUri: String ->
@@ -533,3 +627,5 @@ class DownloadErrorException(message: String, cause: Throwable? = null) : CodedE
 class UnexpectedResultException(type: String) : CodedException("Unexpected result type: $type")
 
 class WaitForJobException(message: String, cause: Throwable? = null) : CodedException(message, cause)
+
+class ZipErrorException(message: String, cause: Throwable? = null) : CodedException(message, cause)
