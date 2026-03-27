@@ -674,24 +674,68 @@ export class HistorySyncService {
   }
 
   /**
-   * 处理本地历史变更（自动同步 NeedSync 记录）
+   * 处理本地历史变更
+   * - NeedSync 记录：同步元数据更新到服务器
+   * - 新增记录：上传到服务器（如果启用了历史记录同步）
    */
   private handleLocalHistoryChanged = async (
     items: ClipboardItem[],
-    _action: 'add' | 'update' | 'delete'
+    action: 'add' | 'update' | 'delete'
   ): Promise<void> => {
     if (!this.historyAPI || !(await this.isHistorySyncEnabled())) return;
 
     for (const item of items) {
-      if (item.syncStatus === HistorySyncStatus.NeedSync) {
-        try {
+      try {
+        if (item.syncStatus === HistorySyncStatus.NeedSync) {
           await this.syncOneRecord(item);
-        } catch (error) {
-          console.error(`[HistorySyncService] Failed to sync record ${item.profileHash}:`, error);
+        } else if (action === 'add' && item.syncStatus === HistorySyncStatus.LocalOnly) {
+          await this.uploadNewRecord(item);
         }
+      } catch (error) {
+        console.error(`[HistorySyncService] Failed to sync record ${item.profileHash}:`, error);
       }
     }
   };
+
+  /**
+   * 上传新记录到服务器
+   * - hasData === true: 不上传（有数据文件，移动端不支持上传大文件）
+   * - hasData === false: 上传元数据（纯文本，不需要数据文件）
+   */
+  private async uploadNewRecord(item: ClipboardItem): Promise<void> {
+    if (!this.historyAPI) return;
+
+    if (item.hasData) {
+      console.log(
+        `[HistorySyncService] Skipping new record with data (mobile does not support file upload): ${item.profileHash}`
+      );
+      return;
+    }
+
+    try {
+      const { clipboardItemToDto } = await import('./HistoryAPI');
+      const dto = clipboardItemToDto(item);
+
+      const createdRecord = await this.historyAPI.uploadRecord(dto);
+
+      await this.historyStorage.updateItem(item.profileHash, {
+        version: createdRecord.version,
+        lastModified: createdRecord.lastModified
+          ? new Date(createdRecord.lastModified).getTime()
+          : Date.now(),
+        syncStatus: HistorySyncStatus.Synced,
+        hasRemoteData: false,
+      });
+
+      console.log(`[HistorySyncService] New record uploaded: ${item.profileHash}`);
+    } catch (error) {
+      if (error instanceof SyncConflictError) {
+        await this.handleSyncConflict(item, error.serverRecord);
+      } else {
+        throw error;
+      }
+    }
+  }
 
   /**
    * 推送记录更新到服务器（统一处理返回结果）

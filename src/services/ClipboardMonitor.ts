@@ -4,8 +4,17 @@
  */
 
 import { AppState, AppStateStatus, Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ClipboardManager } from './ClipboardManager';
 import { ClipboardContent, ClipboardChangeCallback, ClipboardMonitorOptions } from '@/types';
+
+const LAST_CLIPBOARD_HASH_KEY = '@last_clipboard_hash';
+
+interface PersistedClipboardHash {
+  localClipboardHash?: string;
+  profileHash?: string;
+  type?: string;
+}
 
 /**
  * 剪贴板监听器类
@@ -36,15 +45,55 @@ export class ClipboardMonitor {
   }
 
   /**
+   * 从 AsyncStorage 加载持久化的 hash
+   */
+  private async loadPersistedHash(): Promise<void> {
+    try {
+      const stored = await AsyncStorage.getItem(LAST_CLIPBOARD_HASH_KEY);
+      if (stored) {
+        const parsed: PersistedClipboardHash = JSON.parse(stored);
+        if (parsed.localClipboardHash || parsed.profileHash) {
+          this.lastContent = {
+            type: (parsed.type as 'Text' | 'Image' | 'File') || 'Text',
+            localClipboardHash: parsed.localClipboardHash,
+            profileHash: parsed.profileHash,
+          };
+        }
+      }
+    } catch (error) {
+      console.error('[ClipboardMonitor] Failed to load persisted hash:', error);
+    }
+  }
+
+  /**
+   * 将 hash 持久化到 AsyncStorage
+   */
+  private async persistHash(content: ClipboardContent): Promise<void> {
+    try {
+      const toStore: PersistedClipboardHash = {
+        localClipboardHash: content.localClipboardHash,
+        profileHash: content.profileHash,
+        type: content.type,
+      };
+      await AsyncStorage.setItem(LAST_CLIPBOARD_HASH_KEY, JSON.stringify(toStore));
+    } catch (error) {
+      console.error('[ClipboardMonitor] Failed to persist hash:', error);
+    }
+  }
+
+  /**
    * 开始监听剪贴板变化
    */
-  start(): void {
+  async start(): Promise<void> {
     if (this.isMonitoring) {
       console.warn('[ClipboardMonitor] Already monitoring');
       return;
     }
 
     this.isMonitoring = true;
+
+    // 从 AsyncStorage 加载持久化的 hash
+    await this.loadPersistedHash();
 
     // 监听应用状态变化
     if (this.options.stopOnBackground) {
@@ -150,8 +199,9 @@ export class ClipboardMonitor {
 
       // 检查内容是否发生变化
       if (this.hasContentChanged(content)) {
-        console.log('[ClipboardMonitor] ✓ Change detected, notifying callbacks');
         this.lastContent = content;
+        // 持久化 hash
+        await this.persistHash(content);
         this.notifyCallbacks(content);
       }
     } catch (error) {
@@ -237,10 +287,26 @@ export class ClipboardMonitor {
   }
 
   /**
+   * 检查内容是否变化，如果变化则更新 lastContent 并持久化
+   * @param content 要检查的内容
+   * @returns 是否发生变化
+   */
+  async checkAndUpdateLastContent(content: ClipboardContent): Promise<boolean> {
+    const changed = this.hasContentChanged(content);
+    // 无论是否变化，都更新 lastContent 为完整内容
+    this.lastContent = content;
+    if (changed) {
+      await this.persistHash(content);
+    }
+    return changed;
+  }
+
+  /**
    * 手动更新上次已知内容，防止监听器将外部设置的剪贴板内容误判为用户新复制
    */
-  setLastContent(content: ClipboardContent): void {
+  async setLastContent(content: ClipboardContent): Promise<void> {
     this.lastContent = content;
+    await this.persistHash(content);
   }
 
   /**
@@ -264,9 +330,14 @@ export class ClipboardMonitor {
   /**
    * 重置监听器状态
    */
-  reset(): void {
+  async reset(): Promise<void> {
     this.lastContent = null;
     this.clipboardManager.resetLastProfileHash();
+    try {
+      await AsyncStorage.removeItem(LAST_CLIPBOARD_HASH_KEY);
+    } catch (error) {
+      console.error('[ClipboardMonitor] Failed to clear persisted hash:', error);
+    }
   }
 }
 

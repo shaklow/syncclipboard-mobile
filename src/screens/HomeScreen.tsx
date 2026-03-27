@@ -517,10 +517,25 @@ export function HomeScreen() {
       if (!isLoaded) {
         await loadConfig();
       }
-      await getContent();
 
-      // 启动剪贴板持续监听
-      startMonitoring();
+      // 先启动剪贴板持续监听（加载持久化的 hash）
+      await startMonitoring();
+
+      // 初始化历史记录同步服务（如果启用）- 必须在 getContent 之前
+      const currentConfig = useSettingsStore.getState().config;
+      if (currentConfig?.enableHistorySync && activeServer) {
+        try {
+          const { getHistorySyncService } = await import('@/services/HistorySyncService');
+          const syncService = getHistorySyncService();
+          await syncService.ensureInitialized(activeServer);
+          console.log('[HomeScreen] HistorySyncService initialized');
+        } catch (error) {
+          console.error('[HomeScreen] Failed to initialize HistorySyncService:', error);
+        }
+      }
+
+      // 最后获取剪贴板内容（此时持久化 hash 已加载，同步服务已初始化）
+      await getContent();
     };
     initialize();
 
@@ -528,7 +543,7 @@ export function HomeScreen() {
     return () => {
       stopMonitoring();
     };
-  }, [isLoaded, loadConfig, getContent, startMonitoring, stopMonitoring]);
+  }, [isLoaded, loadConfig, getContent, startMonitoring, stopMonitoring, activeServer]);
 
   // 监听本地剪贴板变化，自动上传
   useEffect(() => {

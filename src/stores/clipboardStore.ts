@@ -39,7 +39,7 @@ interface ClipboardState {
   takePhoto: () => Promise<void>;
 
   /** 开始监听剪贴板 */
-  startMonitoring: () => void;
+  startMonitoring: () => Promise<void>;
 
   /** 停止监听剪贴板 */
   stopMonitoring: () => void;
@@ -92,19 +92,22 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
 
       set({ currentContent: content, isLoading: false });
 
-      // 添加到历史记录
+      // 使用持久化的 hash 判断是否需要添加历史记录
       if (content) {
-        const historyItem = createDefaultClipboardItem({
-          type: content.type,
-          text: content.text || '',
-          profileHash: content.profileHash || '',
-          hasData: !!(content.fileName || content.fileUri),
-          dataName: content.fileName,
-          size: content.fileSize,
-          timestamp: content.timestamp || Date.now(),
-          fileUri: content.fileUri,
-        });
-        await useHistoryStore.getState().addItem(historyItem);
+        const changed = await clipboardMonitor.checkAndUpdateLastContent(content);
+        if (changed) {
+          const historyItem = createDefaultClipboardItem({
+            type: content.type,
+            text: content.text || '',
+            profileHash: content.profileHash || '',
+            hasData: !!(content.fileName || content.fileUri),
+            dataName: content.fileName,
+            size: content.fileSize,
+            timestamp: content.timestamp || Date.now(),
+            fileUri: content.fileUri,
+          });
+          await useHistoryStore.getState().addItem(historyItem);
+        }
       }
     } catch (error) {
       const errorMessage =
@@ -126,6 +129,9 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
         )}, profileHash=${content.profileHash?.substring(0, 8)}, timestamp=${content.timestamp}`
       );
       set({ currentContent: content, isLoading: false });
+
+      // 更新持久化的 hash
+      await clipboardMonitor.setLastContent(content);
 
       // 添加到历史记录
       const historyItem = createDefaultClipboardItem({
@@ -153,6 +159,9 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
       const content = await clipboardManager.pickImageFromGallery();
       if (content) {
         set({ currentContent: content, isLoading: false });
+
+        // 更新持久化的 hash
+        await clipboardMonitor.setLastContent(content);
 
         // 添加到历史记录
         const historyItem = createDefaultClipboardItem({
@@ -182,6 +191,9 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
       if (content) {
         set({ currentContent: content, isLoading: false });
 
+        // 更新持久化的 hash
+        await clipboardMonitor.setLastContent(content);
+
         // 添加到历史记录
         const historyItem = createDefaultClipboardItem({
           type: content.type,
@@ -202,10 +214,12 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
     }
   },
 
-  startMonitoring: () => {
+  startMonitoring: async () => {
     if (get().isMonitoring) {
       return;
     }
+
+    set({ isMonitoring: true });
 
     clipboardMonitor.addCallback(async (content) => {
       console.log('[ClipboardStore] Clipboard content updated:', {
@@ -230,8 +244,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
       await useHistoryStore.getState().addItem(historyItem);
     });
 
-    clipboardMonitor.start();
-    set({ isMonitoring: true });
+    await clipboardMonitor.start();
   },
 
   stopMonitoring: () => {

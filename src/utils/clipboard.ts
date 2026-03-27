@@ -345,6 +345,8 @@ export async function copyToLocalClipboard(content: ClipboardContent): Promise<C
     const result = await copyClipboardItem(contentToCopy, clipboardManager);
     if (result.success) {
       useClipboardStore.getState().setCurrentContentDisplay(contentToCopy);
+      // 更新 lastContent，避免轮询恢复后误判为变化
+      await clipboardMonitor.setLastContent(contentToCopy);
     }
     return result;
   } catch (error) {

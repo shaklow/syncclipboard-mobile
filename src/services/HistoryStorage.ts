@@ -370,20 +370,39 @@ export class HistoryStorage {
     );
 
     let action: 'add' | 'update';
+    let resultItem: ClipboardItem;
+
     if (existingIndex >= 0) {
-      // 更新现有记录
-      this.history[existingIndex] = {
-        ...this.history[existingIndex],
-        ...processedItem,
-        timestamp: Date.now(),
+      // 更新现有记录 - 参照桌面客户端 AddLocalProfile 逻辑
+      const existing = this.history[existingIndex];
+
+      // 如果现有记录没有 text 但新记录有，则更新 text
+      const text = (!existing.text && processedItem.text) ? processedItem.text : existing.text;
+
+      // 如果记录之前是软删除状态，需要恢复并触发同步
+      const wasDeleted = existing.isDeleted === true;
+
+      resultItem = {
+        ...existing,
+        text,
+        fileUri: processedItem.fileUri ?? existing.fileUri,
+        isLocalFileReady: true,
+        isDeleted: false,
+        lastModified: Date.now(),
+        lastAccessed: Date.now(),
+        version: existing.version + 1,
+        syncStatus: wasDeleted ? HistorySyncStatus.LocalOnly : HistorySyncStatus.NeedSync,
       };
+
+      this.history[existingIndex] = resultItem;
       action = 'update';
     } else {
       // 添加新记录
-      this.history.unshift({
+      resultItem = {
         ...processedItem,
         timestamp: processedItem.timestamp || Date.now(),
-      });
+      };
+      this.history.unshift(resultItem);
       action = 'add';
 
       // 清理超出数量的记录（仅清理 LocalOnly 状态的记录）
@@ -391,8 +410,8 @@ export class HistoryStorage {
     }
 
     await this.saveHistory();
-    this.notifyChange(processedItem, action);
-    return processedItem;
+    this.notifyChange(resultItem, action);
+    return resultItem;
   }
 
   /**
@@ -412,10 +431,24 @@ export class HistoryStorage {
       );
 
       if (existingIndex >= 0) {
+        // 更新现有记录 - 参照桌面客户端 AddLocalProfile 逻辑
+        const existing = this.history[existingIndex];
+        const text = (!existing.text && item.text) ? item.text : existing.text;
+
+        // 如果记录之前是软删除状态，需要恢复并触发同步
+        const wasDeleted = existing.isDeleted === true;
+
         this.history[existingIndex] = {
-          ...this.history[existingIndex],
-          ...item,
-          timestamp: Date.now(),
+          ...existing,
+          text,
+          fileUri: item.fileUri ?? existing.fileUri,
+          isLocalFileReady: true,
+          isDeleted: false,
+          lastModified: Date.now(),
+          lastAccessed: Date.now(),
+          // 如果之前是删除状态，需要增加版本号并标记为需要同步
+          version: wasDeleted ? existing.version + 1 : existing.version,
+          syncStatus: wasDeleted ? HistorySyncStatus.NeedSync : existing.syncStatus,
         };
         updatedItems.push(this.history[existingIndex]);
       } else {
