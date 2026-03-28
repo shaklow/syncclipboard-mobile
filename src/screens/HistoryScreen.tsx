@@ -742,10 +742,6 @@ export function HistoryScreen() {
       const onScreenFocus = async () => {
         const currentConfig = useSettingsStore.getState().config;
         if (currentConfig?.needsHistoryReorganize) {
-          const { getHistorySyncService } = await import('@/services/HistorySyncService');
-          const syncService = getHistorySyncService();
-          await syncService.resetSyncCursor();
-
           const latestConfig = useSettingsStore.getState().config;
           const shouldReorganize = !isHistorySyncEnabled(latestConfig);
 
@@ -761,6 +757,8 @@ export function HistoryScreen() {
             historyStorage.beginSilentMode();
 
             try {
+              const { getHistorySyncService } = await import('@/services/HistorySyncService');
+              const syncService = getHistorySyncService();
               await syncService.cleanupRemoteHistorys();
               await historyStorage.cleanupByCount();
               console.log('[HistoryScreen] History reorganization completed');
@@ -783,18 +781,30 @@ export function HistoryScreen() {
           if (serverConfig) {
             const initialized = await syncService.ensureInitialized(serverConfig);
             if (initialized) {
-              setIsSyncing(true);
-              try {
-                await syncService.syncIncremental();
-              } catch (error) {
-                console.error('[HistoryScreen] Failed to incremental sync:', error);
-                const errorMessage = error instanceof Error ? error.message : '未知错误';
-                setError({
-                  title: '历史记录增量同步失败',
-                  message: errorMessage,
-                });
-              } finally {
-                setIsSyncing(false);
+              if (syncService.isSyncInProgress()) {
+                console.log('[HistoryScreen] Sync already in progress, showing indicator');
+                setIsSyncing(true);
+                const progressCallback = (progress: { phase: string }) => {
+                  if (progress.phase === 'completed' || progress.phase === 'error') {
+                    syncService.removeProgressCallback(progressCallback);
+                    setIsSyncing(false);
+                  }
+                };
+                syncService.addProgressCallback(progressCallback);
+              } else {
+                setIsSyncing(true);
+                try {
+                  await syncService.syncIncremental();
+                } catch (error) {
+                  console.error('[HistoryScreen] Failed to incremental sync:', error);
+                  const errorMessage = error instanceof Error ? error.message : '未知错误';
+                  setError({
+                    title: '历史记录增量同步失败',
+                    message: errorMessage,
+                  });
+                } finally {
+                  setIsSyncing(false);
+                }
               }
             }
           }

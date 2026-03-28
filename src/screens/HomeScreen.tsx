@@ -37,6 +37,9 @@ import type { ProgressInfo } from 'native-util';
 import { useMessageStore } from '@/stores/messageStore';
 import { useErrorStore } from '@/stores/errorStore';
 import { QuickLoadingPage } from '@/components/QuickLoadingPage';
+import { useTransferQueueStore } from '@/stores/transferQueueStore';
+import { getHistoryTransferQueue, TransferTask } from '@/services/HistoryTransferQueue';
+import { getProfileId } from '@/services/HistoryAPI';
 
 export function HomeScreen() {
   const { theme } = useTheme();
@@ -77,8 +80,69 @@ export function HomeScreen() {
   const initializeSync = useSyncStore((state) => state.initialize);
   const destroySync = useSyncStore((state) => state.destroy);
   const { getActiveServer, loadConfig, isLoaded, config } = useSettingsStore();
+  const { tasks: transferTasks, subscribe: subscribeTransferQueue } = useTransferQueueStore();
 
   const activeServer = getActiveServer();
+
+  // 订阅下载队列状态变化
+  useEffect(() => {
+    return subscribeTransferQueue();
+  }, [subscribeTransferQueue]);
+
+  // 获取远程内容的下载任务状态
+  const remoteDownloadTask = useMemo(() => {
+    if (!remoteContent?.profileHash) return null;
+    const profileId = getProfileId(remoteContent.type, remoteContent.profileHash);
+    return transferTasks.find(
+      (t) =>
+        t.profileId === profileId &&
+        t.type === 'download' &&
+        (t.status === 'running' || t.status === 'pending' || t.status === 'waitForRetry')
+    );
+  }, [remoteContent, transferTasks]);
+
+  // 远程内容是否正在下载
+  const isRemoteDownloading = !!remoteDownloadTask;
+  const remoteDownloadProgress = remoteDownloadTask
+    ? {
+        progress: remoteDownloadTask.progress / 100,
+        bytesTransferred: remoteDownloadTask.bytesTransferred,
+        totalBytes: remoteDownloadTask.totalBytes || 0,
+      }
+    : null;
+
+  // 监听下载完成，更新 remoteContent 的 fileUri（仅 SyncClipboard 服务器）
+  useEffect(() => {
+    // 仅 SyncClipboard 服务器使用下载队列
+    if (activeServer?.type !== 'syncclipboard') return;
+
+    const queue = getHistoryTransferQueue();
+
+    const handleTaskStatusChanged = async (task: TransferTask) => {
+      if (task.type !== 'download' || task.status !== 'completed') return;
+      if (!remoteContent?.profileHash) return;
+
+      const profileId = getProfileId(remoteContent.type, remoteContent.profileHash);
+      if (task.profileId !== profileId) return;
+
+      const { getHistoryFileUri } = await import('@/utils/fileStorage');
+      const fileUri = await getHistoryFileUri(
+        remoteContent.type,
+        remoteContent.profileHash,
+        remoteContent.fileName!
+      );
+
+      if (fileUri && fileUri !== remoteContent.fileUri) {
+        setRemoteContent((prev) => (prev ? { ...prev, fileUri } : null));
+        showMessage('文件已下载', 'success');
+      }
+    };
+
+    queue.onTaskStatusChanged(handleTaskStatusChanged);
+    return () => {
+      queue.offTaskStatusChanged(handleTaskStatusChanged);
+    };
+  }, [remoteContent, showMessage, activeServer]);
 
   // 远程剪贴板轮询间隔（毫秒）
   const REMOTE_POLLING_INTERVAL = 3000; // 3秒
@@ -821,24 +885,9 @@ export function HomeScreen() {
     }
   };
 
-  // 下载远程剪贴板的文件数据
-  const handleDownloadRemoteFile = async () => {
-    if (!activeServer || !remoteContent) {
-      return;
-    }
-
-    // 检查是否需要下载文件
-    const needsDownload =
-      (remoteContent.type === 'Text' &&
-        remoteContent.hasData &&
-        remoteContent.fileName &&
-        !remoteContent.fileUri) ||
-      (remoteContent.type === 'Image' && remoteContent.fileName && !remoteContent.fileUri) ||
-      (remoteContent.type === 'File' && remoteContent.fileName && !remoteContent.fileUri);
-
-    if (!needsDownload) {
-      return;
-    }
+  // WebDAV 服务器：直接下载
+  const downloadForWebDAV = async () => {
+    if (!activeServer || !remoteContent) return;
 
     setDownloadingRemote(true);
     setDownloadProgress(null);
@@ -854,7 +903,6 @@ export function HomeScreen() {
     };
 
     try {
-      // 使用公共函数：下载并添加到历史记录
       const apiClient = createAPIClient(activeServer);
       const updatedContent = await downloadAndAddToHistory(
         remoteContent,
@@ -888,17 +936,93 @@ export function HomeScreen() {
     }
   };
 
-  // 取消下载
-  const handleCancelDownload = useCallback(() => {
-    if (!downloadingRemote) {
+  // SyncClipboard 服务器：使用下载队列
+  const downloadForSyncClipboard = async () => {
+    if (!activeServer || !remoteContent?.profileHash) return;
+
+    const { getHistorySyncService } = await import('@/services/HistorySyncService');
+    const syncService = getHistorySyncService();
+    const initialized = await syncService.ensureInitialized(activeServer);
+    if (!initialized) {
+      showMessage('历史同步服务初始化失败', 'error');
       return;
     }
 
+    const profileId = getProfileId(remoteContent.type, remoteContent.profileHash);
+    const queue = getHistoryTransferQueue();
+
+    try {
+      const historyItem = createDefaultClipboardItem({
+        type: remoteContent.type,
+        text: remoteContent.text || '',
+        profileHash: remoteContent.profileHash,
+        hasData: remoteContent.hasData || false,
+        dataName: remoteContent.fileName,
+        size: remoteContent.fileSize,
+        timestamp: remoteContent.timestamp || Date.now(),
+        syncStatus: HistorySyncStatus.NeedSync,
+        hasRemoteData: true,
+        isLocalFileReady: false,
+      });
+      await useHistoryStore.getState().addItem(historyItem);
+    } catch (error) {
+      console.error('[HomeScreen] Failed to add history item before download:', error);
+    }
+
+    await queue.addDownloadTask(profileId, true);
+    showMessage('已添加到下载队列', 'info');
+  };
+
+  // 取消下载 - WebDAV
+  const cancelDownloadForWebDAV = () => {
     if (downloadAbortControllerRef.current) {
       downloadAbortControllerRef.current.abort();
       showMessage('正在取消下载...', 'info');
     }
-  }, [downloadingRemote, showMessage]);
+  };
+
+  // 取消下载 - SyncClipboard
+  const cancelDownloadForSyncClipboard = () => {
+    if (remoteContent?.profileHash) {
+      const profileId = getProfileId(remoteContent.type, remoteContent.profileHash);
+      const queue = getHistoryTransferQueue();
+      queue.cancelTask(profileId, 'download');
+      showMessage('已取消下载', 'info');
+    }
+  };
+
+  // 检查是否需要下载文件
+  const needsDownload = useMemo(() => {
+    if (!remoteContent) return false;
+    return (
+      (remoteContent.type === 'Text' &&
+        remoteContent.hasData &&
+        remoteContent.fileName &&
+        !remoteContent.fileUri) ||
+      (remoteContent.type === 'Image' && remoteContent.fileName && !remoteContent.fileUri) ||
+      (remoteContent.type === 'File' && remoteContent.fileName && !remoteContent.fileUri)
+    );
+  }, [remoteContent]);
+
+  // 下载远程剪贴板的文件数据
+  const handleDownloadRemoteFile = async () => {
+    if (!activeServer || !remoteContent || !needsDownload) return;
+
+    if (activeServer.type !== 'syncclipboard') {
+      await downloadForWebDAV();
+    } else {
+      await downloadForSyncClipboard();
+    }
+  };
+
+  // 取消下载
+  const handleCancelDownload = useCallback(() => {
+    if (activeServer?.type !== 'syncclipboard') {
+      cancelDownloadForWebDAV();
+    } else {
+      cancelDownloadForSyncClipboard();
+    }
+  }, [activeServer, remoteContent, showMessage]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -932,8 +1056,14 @@ export function HomeScreen() {
                   clipboard={remoteContent}
                   isRemote={true}
                   onDownload={handleDownloadRemoteFile}
-                  downloading={downloadingRemote}
-                  downloadProgress={downloadProgress}
+                  downloading={
+                    activeServer?.type === 'syncclipboard' ? isRemoteDownloading : downloadingRemote
+                  }
+                  downloadProgress={
+                    activeServer?.type === 'syncclipboard'
+                      ? remoteDownloadProgress
+                      : downloadProgress
+                  }
                   onCancelDownload={handleCancelDownload}
                   onCopy={async (content) => {
                     const result = await copyRemoteToLocal(content, 'Manual copy: ');
