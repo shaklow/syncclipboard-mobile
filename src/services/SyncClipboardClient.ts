@@ -147,6 +147,9 @@ export class SyncClipboardClient extends APIClient implements ISyncClipboardAPI,
     let existingRecord: HistoryRecordDto | null = null;
     try {
       existingRecord = await this.getRecord(profileId, signal);
+      if (existingRecord.isDeleted) {
+        existingRecord = null;
+      }
     } catch (error) {
       if (error instanceof RecordNotFoundError) {
         existingRecord = null;

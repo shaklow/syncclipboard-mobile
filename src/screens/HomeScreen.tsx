@@ -36,6 +36,7 @@ import { downloadAndAddToHistory } from '@/utils/remoteClipboard';
 import { uploadFileAndAddToHistory } from '@/utils/uploadFile';
 import { useMessageStore } from '@/stores/messageStore';
 import { useErrorStore } from '@/stores/errorStore';
+import { QuickLoadingPage } from '@/components/QuickLoadingPage';
 
 export function HomeScreen() {
   const { theme } = useTheme();
@@ -44,7 +45,13 @@ export function HomeScreen() {
   const [remoteContent, setRemoteContent] = useState<ClipboardContent | null>(null);
   const [loadingRemote, setLoadingRemote] = useState(false);
   const [downloadingRemote, setDownloadingRemote] = useState(false);
-  const [uploadingFile, setUploadingFile] = useState(false);
+  const [fileUploadPayload, setFileUploadPayload] = useState<{
+    uri: string;
+    fileName: string;
+    mimeType?: string | null;
+    fileSize?: number;
+  } | null>(null);
+  const [fileUploadLoadingText, setFileUploadLoadingText] = useState('正在处理文件…');
   const [uploadingClipboard, setUploadingClipboard] = useState(false);
   const { error, setError, clearError } = useErrorStore();
   const { message, showMessage, clearMessage } = useMessageStore();
@@ -56,7 +63,6 @@ export function HomeScreen() {
   const signalRClient = useRef(getSignalRClient());
   const signalRConnected = useRef(false);
   const signalRCallbackRef = useRef<RemoteClipboardChangedCallback | null>(null);
-  const uploadAbortControllerRef = useRef<AbortController | null>(null);
   const downloadAbortControllerRef = useRef<AbortController | null>(null);
   const clipboardUploadAbortControllerRef = useRef<AbortController | null>(null);
 
@@ -422,9 +428,8 @@ export function HomeScreen() {
     }
 
     try {
-      clearError(); // 清除之前的错误
+      clearError();
 
-      // 选择文件
       const result = await DocumentPicker.getDocumentAsync({
         multiple: false,
       });
@@ -439,66 +444,18 @@ export function HomeScreen() {
         return;
       }
 
-      const fileName = asset.name || 'file';
-
-      showMessage('开始上传文件...', 'info');
-      setUploadingFile(true);
-      const abortController = new AbortController();
-      uploadAbortControllerRef.current = abortController;
-
-      // 让出至少两帧，确保上传遮罩先渲染出来，再进入 hash 计算和上传流程
-      await new Promise<void>((resolve) => {
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => resolve());
-        });
+      setFileUploadPayload({
+        uri: asset.uri,
+        fileName: asset.name || 'file',
+        mimeType: asset.mimeType,
+        fileSize: asset.size,
       });
-
-      await uploadFileAndAddToHistory(
-        asset.uri,
-        fileName,
-        asset.mimeType,
-        asset.size,
-        activeServer,
-        { signal: abortController.signal }
-      );
-
-      showMessage(`文件 ${fileName} 上传成功`, 'success');
+      setFileUploadLoadingText('正在处理文件…');
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '文件上传失败，请重试';
-      const normalizedMessage = errorMessage.toLowerCase();
-      const isCanceled =
-        (error instanceof Error && error.name === 'AbortError') ||
-        normalizedMessage.includes('abort') ||
-        normalizedMessage.includes('canceled') ||
-        normalizedMessage.includes('cancelled');
-
-      if (isCanceled) {
-        showMessage('已取消上传', 'info');
-        return;
-      }
-
-      console.error('[HomeScreen] Failed to upload file:', error);
-      setError({
-        title: '文件上传失败',
-        message: errorMessage,
-      });
-      showMessage('文件上传失败', 'error');
-    } finally {
-      uploadAbortControllerRef.current = null;
-      setUploadingFile(false);
+      console.error('[HomeScreen] Failed to pick file:', error);
+      showMessage('选择文件失败', 'error');
     }
   }, [activeServer, showMessage]);
-
-  const handleCancelFileUpload = useCallback(() => {
-    if (!uploadingFile) {
-      return;
-    }
-
-    if (uploadAbortControllerRef.current) {
-      uploadAbortControllerRef.current.abort();
-      showMessage('正在取消上传...', 'info');
-    }
-  }, [uploadingFile, showMessage]);
 
   // 处理上传图片
   const handleUploadImage = useCallback(async () => {
@@ -525,54 +482,40 @@ export function HomeScreen() {
         return;
       }
 
-      const fileName = asset.fileName || `image_${Date.now()}.jpg`;
-
-      showMessage('开始上传图片...', 'info');
-      setUploadingFile(true);
-      const abortController = new AbortController();
-      uploadAbortControllerRef.current = abortController;
-
-      await new Promise<void>((resolve) => {
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => resolve());
-        });
+      setFileUploadPayload({
+        uri: asset.uri,
+        fileName: asset.fileName || `image_${Date.now()}.jpg`,
+        mimeType: asset.mimeType,
+        fileSize: asset.fileSize,
       });
-
-      await uploadFileAndAddToHistory(
-        asset.uri,
-        fileName,
-        asset.mimeType,
-        asset.fileSize,
-        activeServer,
-        { signal: abortController.signal }
-      );
-
-      showMessage(`图片 ${fileName} 上传成功`, 'success');
+      setFileUploadLoadingText('正在处理图片…');
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '图片上传失败，请重试';
-      const normalizedMessage = errorMessage.toLowerCase();
-      const isCanceled =
-        (error instanceof Error && error.name === 'AbortError') ||
-        normalizedMessage.includes('abort') ||
-        normalizedMessage.includes('canceled') ||
-        normalizedMessage.includes('cancelled');
-
-      if (isCanceled) {
-        showMessage('已取消上传', 'info');
-        return;
-      }
-
-      console.error('[HomeScreen] Failed to upload image:', error);
-      setError({
-        title: '图片上传失败',
-        message: errorMessage,
-      });
-      showMessage('图片上传失败', 'error');
-    } finally {
-      uploadAbortControllerRef.current = null;
-      setUploadingFile(false);
+      console.error('[HomeScreen] Failed to pick image:', error);
+      showMessage('选择图片失败', 'error');
     }
   }, [activeServer, showMessage]);
+
+  const fileUploadTask = useCallback(
+    async (signal: AbortSignal) => {
+      if (!activeServer) throw new Error('请先在设置中配置服务器');
+      if (!fileUploadPayload) throw new Error('没有可上传的文件');
+
+      await uploadFileAndAddToHistory(
+        fileUploadPayload.uri,
+        fileUploadPayload.fileName,
+        fileUploadPayload.mimeType,
+        fileUploadPayload.fileSize,
+        activeServer,
+        { signal, onProgress: setFileUploadLoadingText }
+      );
+    },
+    [fileUploadPayload, activeServer]
+  );
+
+  const handleFileUploadComplete = useCallback(() => {
+    setFileUploadPayload(null);
+    setFileUploadLoadingText('正在处理文件…');
+  }, []);
 
   // 菜单项配置
   const menuItems = useMemo<MenuItemConfig[]>(
@@ -1056,22 +999,15 @@ export function HomeScreen() {
       {/* 消息提示 */}
       <MessageToast message={message} onMessageShown={clearMessage} />
 
-      {uploadingFile && (
-        <View style={[styles.uploadOverlay, { backgroundColor: theme.colors.backdrop }]}>
-          <View style={[styles.uploadOverlayCard, { backgroundColor: theme.colors.surface }]}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-            <Text style={[styles.uploadOverlayTitle, { color: theme.colors.text }]}>
-              文件上传中...
-            </Text>
-            <TouchableOpacity
-              style={[styles.uploadCancelButton, { backgroundColor: theme.colors.error }]}
-              onPress={handleCancelFileUpload}
-            >
-              <Text style={[styles.uploadCancelButtonText, { color: theme.colors.white }]}>
-                取消上传
-              </Text>
-            </TouchableOpacity>
-          </View>
+      {fileUploadPayload && (
+        <View style={styles.fullScreenOverlay}>
+          <QuickLoadingPage
+            task={fileUploadTask}
+            loadingText={fileUploadLoadingText}
+            successText="上传成功"
+            failureText="上传失败"
+            onComplete={handleFileUploadComplete}
+          />
         </View>
       )}
     </View>
@@ -1081,6 +1017,9 @@ export function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  fullScreenOverlay: {
+    ...StyleSheet.absoluteFill,
   },
 
   infoLabelSpaced: {
@@ -1112,34 +1051,6 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 15,
-  },
-  uploadOverlay: {
-    ...StyleSheet.absoluteFill,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  uploadOverlayCard: {
-    width: '100%',
-    maxWidth: 320,
-    borderRadius: 12,
-    padding: 20,
-    alignItems: 'center',
-  },
-  uploadOverlayTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginTop: 12,
-    marginBottom: 16,
-  },
-  uploadCancelButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  uploadCancelButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
   },
   emptyState: {
     marginTop: 16,
