@@ -10,8 +10,8 @@ export * from './errors';
 export { AuthService, type Credentials } from './AuthService';
 
 // API Clients
-export { APIClient, type APIClientConfig } from './APIClient';
-export { SyncClipboardAPI, type ISyncClipboardAPI } from './SyncClipboardAPI';
+export { APIClient, type APIClientConfig, type ISyncClipboardAPI } from './APIClient';
+export { SyncClipboardClient } from './SyncClipboardClient';
 export { WebDAVClient, type WebDAVConfig } from './WebDAVClient';
 
 // Clipboard Services
@@ -56,7 +56,7 @@ export {
 } from './Logger';
 
 // Factory function to create appropriate API client
-import { SyncClipboardAPI } from './SyncClipboardAPI';
+import { SyncClipboardClient } from './SyncClipboardClient';
 import { WebDAVClient } from './WebDAVClient';
 import { AuthService } from './AuthService';
 import { ServerConfig } from '../types/api';
@@ -65,7 +65,7 @@ import { ConfigurationError } from './errors';
 /**
  * 创建 API 客户端工厂函数
  */
-export function createAPIClient(config: ServerConfig): SyncClipboardAPI | WebDAVClient {
+export function createAPIClient(config: ServerConfig): SyncClipboardClient | WebDAVClient {
   const { type, url, username, password } = config;
 
   if (!url) {
@@ -82,7 +82,7 @@ export function createAPIClient(config: ServerConfig): SyncClipboardAPI | WebDAV
   if (type === 'syncclipboard') {
     const authService = username && password ? new AuthService(username, password) : undefined;
 
-    return new SyncClipboardAPI({ baseURL: url, authService });
+    return new SyncClipboardClient({ baseURL: url, authService });
   }
 
   throw new ConfigurationError(`Unsupported server type: ${type}`);

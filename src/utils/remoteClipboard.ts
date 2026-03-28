@@ -8,7 +8,7 @@ import {
   createDefaultClipboardItem,
   HistorySyncStatus,
 } from '../types/clipboard';
-import { ISyncClipboardAPI } from '../services/SyncClipboardAPI';
+import { ISyncClipboardAPI } from '../services/APIClient';
 import { historyStorage } from '../services/HistoryStorage';
 import { useHistoryStore } from '../stores/historyStore';
 import { prepareTempFilePath } from './fileStorage';
@@ -54,14 +54,15 @@ export async function downloadAndAddToHistory(
 
   // 缓存未命中，流式下载到临时目录，避免加载进内存
   if (!fileUri) {
-    const destUri = prepareTempFilePath(content.fileName!);
-    fileUri = await apiClient.downloadFile(content.fileName!, destUri, signal);
+    const fileName = content.fileName || 'data';
+    const destUri = prepareTempFilePath(fileName);
+    fileUri = await apiClient.downloadFile(fileName, destUri, signal);
   }
 
   // 如果 profileHash 为空，下载完成后重新计算
   let profileHash = content.profileHash;
   if (!profileHash) {
-    profileHash = await calculateFileProfileHash(fileUri, content.fileName);
+    profileHash = await calculateFileProfileHash(fileUri, content.fileName || 'data');
   }
 
   let updatedContent: ClipboardContent = {

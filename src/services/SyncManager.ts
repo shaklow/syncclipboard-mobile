@@ -4,7 +4,8 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SyncClipboardAPI, ISyncClipboardAPI } from './SyncClipboardAPI';
+import { SyncClipboardClient } from './SyncClipboardClient';
+import { ISyncClipboardAPI } from './APIClient';
 import { WebDAVClient } from './WebDAVClient';
 import { AuthService } from './AuthService';
 import { clipboardManager } from './ClipboardManager';
@@ -117,7 +118,7 @@ export class SyncManager {
 
     if (type === 'syncclipboard') {
       const authService = username && password ? new AuthService(username, password) : undefined;
-      return new SyncClipboardAPI({ baseURL: url, authService });
+      return new SyncClipboardClient({ baseURL: url, authService });
     }
 
     throw new ConfigurationError(`Unsupported server type: ${type}`);

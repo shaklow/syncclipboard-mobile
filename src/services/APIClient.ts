@@ -5,7 +5,7 @@
 
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
 import { AuthService } from './AuthService';
-import { ProfileDto } from '../types/api';
+import { ProfileDto, ServerInfo } from '../types/api';
 import type { ClipboardContent } from '../types/clipboard';
 import { nativeDownloadFile } from 'native-util';
 import {
@@ -44,6 +44,38 @@ export interface APIClientConfig {
 
 export interface PutContentOptions {
   signal?: AbortSignal;
+}
+
+/**
+ * SyncClipboard API 接口（基础功能）
+ */
+export interface ISyncClipboardAPI {
+  /** 获取剪贴板配置 */
+  getClipboard(signal?: AbortSignal): Promise<ProfileDto>;
+
+  /** 上传剪贴板配置 */
+  putClipboard(profile: ProfileDto, signal?: AbortSignal): Promise<void>;
+
+  /** 直接下载文件到指定路径（优化内存占用） */
+  downloadFile(fileName: string, destinationUri: string, signal?: AbortSignal): Promise<string>;
+
+  /** 上传文件数据 */
+  putFile(fileName: string, fileUri: string, signal?: AbortSignal): Promise<void>;
+
+  /**
+   * 上传剪贴板内容
+   * 先上传数据文件（如果有），再上传配置
+   */
+  putContent(content: ClipboardContent, options?: PutContentOptions): Promise<void>;
+
+  /** 获取服务器时间 */
+  getServerTime(signal?: AbortSignal): Promise<Date>;
+
+  /** 获取服务器版本 */
+  getVersion(): Promise<string>;
+
+  /** 获取服务器信息 */
+  getServerInfo(): Promise<ServerInfo>;
 }
 
 /**
@@ -372,50 +404,6 @@ export abstract class APIClient {
    */
   async testConnection(signal?: AbortSignal): Promise<void> {
     await this.get('/', { signal });
-  }
-
-  /**
-   * 上传剪贴板内容（模板方法）
-   * 子类必须实现 putFile 和 putClipboard 方法
-   * @param content 剪贴板内容对象
-   */
-  async putContent(content: ClipboardContent, options?: PutContentOptions): Promise<void> {
-    try {
-      const prefix = `[${this.constructor.name}]`;
-      console.log(`${prefix} Starting putContent:`, {
-        type: content.type,
-        hasData: content.hasData,
-        fileName: content.fileName,
-      });
-
-      // 转换为 ProfileDto
-      const { contentToProfileDto } = await import('../utils/clipboard');
-      const profile = await contentToProfileDto(content, { signal: options?.signal });
-
-      // 如果有数据文件，先上传
-      if (profile.hasData && profile.dataName && content.fileUri) {
-        console.log(`${prefix} Uploading data file: ${profile.dataName}`);
-        try {
-          await this.putFile(profile.dataName, content.fileUri, options?.signal);
-        } catch (fileError) {
-          throw this.buildError(fileError, `${prefix} File upload failed`);
-        }
-      }
-
-      // 然后上传配置
-      console.log(`${prefix} Uploading profile...`);
-      try {
-        await this.putClipboard(profile, options?.signal);
-      } catch (configError) {
-        throw this.buildError(configError, `${prefix} Profile upload failed`);
-      }
-
-      console.log(`${prefix} putContent completed successfully`);
-    } catch (error) {
-      const prefix = `[${this.constructor.name}]`;
-      console.error(`${prefix} Failed to put content:`, error);
-      throw error;
-    }
   }
 
   /**

@@ -4,9 +4,9 @@
  */
 
 import { nativeUploadFile } from 'native-util';
-import { APIClient } from './APIClient';
+import { APIClient, ISyncClipboardAPI, PutContentOptions } from './APIClient';
 import { ProfileDto, ServerInfo } from '../types/api';
-import { ISyncClipboardAPI } from './SyncClipboardAPI';
+import type { ClipboardContent } from '../types/clipboard';
 import { ValidationError, ServerError } from './errors';
 import { AuthService } from './AuthService';
 
@@ -291,6 +291,44 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
       });
     } catch (error) {
       console.error('[WebDAVClient] Connection test failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 上传剪贴板内容
+   * 先上传数据文件（如果有），再上传配置
+   */
+  async putContent(content: ClipboardContent, options?: PutContentOptions): Promise<void> {
+    try {
+      console.log('[WebDAVClient] Starting putContent:', {
+        type: content.type,
+        hasData: content.hasData,
+        fileName: content.fileName,
+      });
+
+      const { contentToProfileDto } = await import('../utils/clipboard');
+      const profile = await contentToProfileDto(content, { signal: options?.signal });
+
+      if (profile.hasData && profile.dataName && content.fileUri) {
+        console.log(`[WebDAVClient] Uploading data file: ${profile.dataName}`);
+        try {
+          await this.putFile(profile.dataName, content.fileUri, options?.signal);
+        } catch (fileError) {
+          throw this.buildError(fileError, '[WebDAVClient] File upload failed');
+        }
+      }
+
+      console.log('[WebDAVClient] Uploading profile...');
+      try {
+        await this.putClipboard(profile, options?.signal);
+      } catch (configError) {
+        throw this.buildError(configError, '[WebDAVClient] Profile upload failed');
+      }
+
+      console.log('[WebDAVClient] putContent completed successfully');
+    } catch (error) {
+      console.error('[WebDAVClient] Failed to put content:', error);
       throw error;
     }
   }
