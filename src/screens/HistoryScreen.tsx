@@ -29,6 +29,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/hooks/useTheme';
 import { useHistoryStore } from '@/stores/historyStore';
+import { useClipboardStore } from '@/stores/clipboardStore';
 import { useSettingsStore } from '@/stores';
 import { useTransferQueueStore } from '@/stores/transferQueueStore';
 import { useHistoryDisplaySettings } from '@/hooks/useHistoryDisplaySettings';
@@ -323,21 +324,22 @@ export function HistoryScreen() {
 
   // ClipboardItem 转换为 ClipboardContent 后调用公共复制函数
   const copyItemWithSync = useCallback(async (item: ClipboardItem) => {
-    // 构建 ClipboardContent
-    // 对于Text类型的hasData，不在内存中读取完整文本，只设置fileUri
-    // 完整文本的读取将在 copyToLocalClipboard 中进行
     const content: ClipboardContent = {
       type: item.type,
-      text: item.text, // 预览文本或完整文本（如果hasData为false）
+      text: item.text,
       profileHash: item.profileHash,
-      fileUri: item.fileUri, // 对于hasData为true且需要完整文本的情况，使用fileUri
+      fileUri: item.fileUri,
       fileName: item.dataName,
       fileSize: item.size,
       timestamp: item.timestamp,
       localClipboardHash: item.localClipboardHash,
-      hasData: item.hasData, // 添加 hasData 字段
+      hasData: item.hasData,
     };
-    return copyToLocalClipboard(content);
+    const result = await copyToLocalClipboard(content);
+    if (result.success) {
+      useClipboardStore.getState().setCurrentContentDisplay(content);
+    }
+    return result;
   }, []);
 
   // 点击列表项 - 复制到剪贴板

@@ -3,7 +3,15 @@
  * 历史记录列表项组件
  */
 
-import React, { useState, useRef, forwardRef, useImperativeHandle, useEffect } from 'react';
+import React, {
+  useState,
+  useRef,
+  forwardRef,
+  useImperativeHandle,
+  useEffect,
+  useCallback,
+  memo,
+} from 'react';
 import { View, Text, StyleSheet, TouchableHighlight, Image, TouchableOpacity } from 'react-native';
 import { Copy, Download, Share, Trash2, ExternalLink } from 'react-native-feather';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,6 +37,97 @@ import { formatSizeWithType, formatFileSize } from '@/utils';
 export interface HistoryListItemHandle {
   startDelete: () => void;
 }
+
+interface DeleteActionComponentProps {
+  progress: SharedValue<number>;
+  onDelete: (item: ClipboardItem) => void;
+  swipeDeleteHint: 'default' | 'continue' | 'release';
+  theme: ReturnType<typeof useTheme>['theme'];
+  item: ClipboardItem;
+  deleteAnimProgress: SharedValue<number>;
+  updateSwipeDeleteState: (
+    hint: 'default' | 'continue' | 'release',
+    shouldAutoDelete: boolean
+  ) => void;
+}
+
+const DeleteActionComponent = memo(
+  ({
+    progress,
+    onDelete,
+    swipeDeleteHint,
+    theme,
+    item,
+    deleteAnimProgress,
+    updateSwipeDeleteState,
+  }: DeleteActionComponentProps) => {
+    const deleteButtonHideStyle = useAnimatedStyle(() => {
+      const opacity = deleteAnimProgress.value > 0 ? 0 : 1;
+      return {
+        opacity,
+      };
+    });
+
+    useAnimatedReaction(
+      () => progress.value,
+      (progressVal, previousVal) => {
+        const continueThreshold = 1.02;
+        const releaseThreshold = 1.55;
+        const continueBufferBack = 0.95;
+        const releaseBufferBack = 1.4;
+
+        let hint: 'default' | 'continue' | 'release' = 'default';
+
+        if (progressVal >= releaseThreshold) {
+          hint = 'release';
+        } else if (progressVal >= continueThreshold) {
+          hint = 'continue';
+        } else if (
+          previousVal !== null &&
+          previousVal >= releaseThreshold &&
+          progressVal >= releaseBufferBack
+        ) {
+          hint = 'release';
+        } else if (
+          previousVal !== null &&
+          previousVal >= continueThreshold &&
+          progressVal >= continueBufferBack
+        ) {
+          hint = 'continue';
+        }
+
+        const shouldAutoDelete = progressVal >= releaseThreshold;
+        scheduleOnRN(updateSwipeDeleteState, hint, shouldAutoDelete);
+      }
+    );
+
+    return (
+      <Reanimated.View style={[styles.swipeActionsContainer, deleteButtonHideStyle]}>
+        <View style={[styles.deleteButton, { backgroundColor: theme.colors.error || '#F44336' }]}>
+          <TouchableOpacity
+            style={styles.deleteButtonContent}
+            onPress={() => {
+              deleteAnimProgress.value = withTiming(1, { duration: 400 }, (finished) => {
+                if (finished) {
+                  scheduleOnRN(onDelete, item);
+                }
+              });
+            }}
+          >
+            <Trash2 color={theme.colors.white} width={20} height={20} />
+            <Text style={[styles.deleteButtonText, { color: theme.colors.white }]}>
+              {swipeDeleteHint === 'release'
+                ? '松手删除'
+                : swipeDeleteHint === 'continue'
+                  ? '继续滑动删除'
+                  : '删除'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </Reanimated.View>
+    );
+  }
+);
 
 interface HistoryListItemProps {
   item: ClipboardItem;
@@ -107,6 +206,9 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
       shouldAutoDeleteRef.current = false;
       lastHintRef.current = 'default';
       setSwipeDeleteHint('default');
+      // 重置图片尺寸（避免复用时使用旧尺寸）
+      setImageDimensions(null);
+      setContainerWidth(0);
       // 关闭Swipeable（如果打开）
       if (swipeableRef.current) {
         swipeableRef.current.close();
@@ -227,145 +329,54 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
 
     const previewText = getPreviewText();
 
-    const updateSwipeDeleteState = (
-      hint: 'default' | 'continue' | 'release',
-      shouldAutoDelete: boolean
-    ) => {
-      // 只在状态真正变化时更新，避免频繁重渲染导致闪烁
-      if (lastHintRef.current !== hint) {
-        lastHintRef.current = hint;
-        setSwipeDeleteHint(hint);
-      }
-      shouldAutoDeleteRef.current = shouldAutoDelete;
-    };
-
-    // 渲染右侧滑动操作（删除按钮）
-    const renderRightActions = (progress: SharedValue<number>) => {
-      if (!onDelete) return null;
-      return (
-        <DeleteActionComponent
-          progress={progress}
-          onDelete={onDelete}
-          swipeDeleteHint={swipeDeleteHint}
-          theme={theme}
-          item={item}
-          deleteAnimProgress={deleteAnimProgress}
-        />
-      );
-    };
-
-    // 删除按钮内部组件
-    const DeleteActionComponent = React.memo(
-      ({
-        progress,
-        onDelete,
-        swipeDeleteHint,
-        theme,
-        item,
-        deleteAnimProgress,
-      }: {
-        progress: SharedValue<number>;
-        onDelete: (item: ClipboardItem) => void;
-        swipeDeleteHint: 'default' | 'continue' | 'release';
-        theme: ReturnType<typeof useTheme>['theme'];
-        item: ClipboardItem;
-        deleteAnimProgress: SharedValue<number>;
-      }) => {
-        // 删除按钮直接隐去：删除动画开始时立即隐藏
-        const deleteButtonHideStyle = useAnimatedStyle(() => {
-          const opacity = deleteAnimProgress.value > 0 ? 0 : 1;
-          return {
-            opacity,
-          };
-        });
-        // 继续左滑时切换到“松手删除”，并标记松手后自动删除
-        useAnimatedReaction(
-          () => progress.value,
-          (progressVal, previousVal) => {
-            const continueThreshold = 1.02;
-            const releaseThreshold = 1.55;
-            // 添加回退缓冲，避免边界抖动
-            const continueBufferBack = 0.95;
-            const releaseBufferBack = 1.4;
-
-            let hint: 'default' | 'continue' | 'release' = 'default';
-
-            // 向前滑动使用正常阈值，向后滑动使用缓冲阈值，形成滞后效应
-            if (progressVal >= releaseThreshold) {
-              hint = 'release';
-            } else if (progressVal >= continueThreshold) {
-              hint = 'continue';
-            } else if (
-              previousVal !== null &&
-              previousVal >= releaseThreshold &&
-              progressVal >= releaseBufferBack
-            ) {
-              hint = 'release';
-            } else if (
-              previousVal !== null &&
-              previousVal >= continueThreshold &&
-              progressVal >= continueBufferBack
-            ) {
-              hint = 'continue';
-            }
-
-            const shouldAutoDelete = progressVal >= releaseThreshold;
-            scheduleOnRN(updateSwipeDeleteState, hint, shouldAutoDelete);
-          }
-        );
-
-        return (
-          <Reanimated.View style={[styles.swipeActionsContainer, deleteButtonHideStyle]}>
-            <View
-              style={[styles.deleteButton, { backgroundColor: theme.colors.error || '#F44336' }]}
-            >
-              <TouchableOpacity
-                style={styles.deleteButtonContent}
-                onPress={() => {
-                  // 触发滑出动画
-                  deleteAnimProgress.value = withTiming(1, { duration: 400 }, (finished) => {
-                    if (finished) {
-                      scheduleOnRN(onDelete, item);
-                    }
-                  });
-                }}
-              >
-                <Trash2 color={theme.colors.white} width={20} height={20} />
-                <Text style={[styles.deleteButtonText, { color: theme.colors.white }]}>
-                  {swipeDeleteHint === 'release'
-                    ? '松手删除'
-                    : swipeDeleteHint === 'continue'
-                      ? '继续滑动删除'
-                      : '删除'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </Reanimated.View>
-        );
-      }
+    const updateSwipeDeleteState = useCallback(
+      (hint: 'default' | 'continue' | 'release', shouldAutoDelete: boolean) => {
+        // 只在状态真正变化时更新，避免频繁重渲染导致闪烁
+        if (lastHintRef.current !== hint) {
+          lastHintRef.current = hint;
+          setSwipeDeleteHint(hint);
+        }
+        shouldAutoDeleteRef.current = shouldAutoDelete;
+      },
+      []
     );
 
-    // 完全滑开时检查是否应该自动删除
-    const handleSwipeableWillOpen = () => {
+    const renderRightActions = useCallback(
+      (progress: SharedValue<number>) => {
+        if (!onDelete) return null;
+        return (
+          <DeleteActionComponent
+            progress={progress}
+            onDelete={onDelete}
+            swipeDeleteHint={swipeDeleteHint}
+            theme={theme}
+            item={item}
+            deleteAnimProgress={deleteAnimProgress}
+            updateSwipeDeleteState={updateSwipeDeleteState}
+          />
+        );
+      },
+      [onDelete, swipeDeleteHint, theme, item, deleteAnimProgress, updateSwipeDeleteState]
+    );
+
+    const handleSwipeableWillOpen = useCallback(() => {
       if (shouldAutoDeleteRef.current && onDelete) {
         handleAutoDelete();
       }
-    };
+    }, [onDelete, handleAutoDelete]);
 
-    // 打开后（用户松手后）再次检查是否需要删除，保证“松手删除”可触发
-    const handleSwipeableOpen = () => {
+    const handleSwipeableOpen = useCallback(() => {
       if (shouldAutoDeleteRef.current && onDelete) {
         handleAutoDelete();
       }
-    };
+    }, [onDelete, handleAutoDelete]);
 
-    // 关闭时重置状态
-    const handleSwipeableClose = () => {
+    const handleSwipeableClose = useCallback(() => {
       shouldAutoDeleteRef.current = false;
       lastHintRef.current = 'default';
       setSwipeDeleteHint('default');
       isDeletingRef.current = false;
-    };
+    }, []);
 
     return (
       <Reanimated.View style={[cardDeleteAnimStyle]} renderToHardwareTextureAndroid={true}>

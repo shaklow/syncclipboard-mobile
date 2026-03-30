@@ -178,7 +178,7 @@ export function HomeScreen() {
   const copyRemoteToLocal = async (content: ClipboardContent, logPrefix: string = '') => {
     const result = await copyToLocalClipboard(content);
     if (result.success) {
-      // 更新本地哈希，避免触发自动上传
+      useClipboardStore.getState().setCurrentContentDisplay(content);
       lastLocalProfileHash.current = content.profileHash || content.text || '';
       console.log(`[HomeScreen] ${logPrefix}Copy to local clipboard completed`);
     } else {

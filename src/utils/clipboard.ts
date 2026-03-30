@@ -5,7 +5,6 @@
 
 import { ProfileDto, ClipboardContent, ClipboardContentType } from '@/types';
 import { calculateContentHash } from '@/utils/hash';
-import { useClipboardStore } from '@/stores/clipboardStore';
 import { isTextInvalid } from './textUtils';
 
 export interface ContentToProfileDtoOptions {
@@ -305,25 +304,18 @@ export async function copyClipboardItem(
 }
 
 /**
- * 将内容写入系统剪贴板并更新本地剪贴板卡片显示，不添加历史记录。
- *
- * 统一的"复制到本地"操作：
- * 1. 暂停轮询，避免写入期间监听器误触发
- * 2. 对于Text类型且有文件的情况，从文件读取完整文本
- * 3. 写入系统剪贴板
- * 4. 更新 Store 中的 currentContent，刷新本地剪贴板卡片
- * 5. 恢复轮询
+ * 将内容写入系统剪贴板。
+ * 只负责复制操作，不更新 Store。
+ * 调用者负责在成功后更新 UI 状态。
  */
 export async function copyToLocalClipboard(content: ClipboardContent): Promise<CopyResult> {
   const { clipboardManager, clipboardMonitor } = await import('@/services');
 
   clipboardMonitor.pausePolling();
   try {
-    // 对于Text类型且有fileUri，从文件读取完整文本进行复制
     let contentToCopy = content;
     if (content.type === 'Text' && content.fileUri && content.hasData) {
       try {
-        // 使用 File API 的 text() 方法读取文件内容
         const response = await fetch(content.fileUri);
         const completeText = await response.text();
         console.log(
@@ -335,18 +327,14 @@ export async function copyToLocalClipboard(content: ClipboardContent): Promise<C
         };
       } catch (error) {
         console.error('[copyToLocalClipboard] Failed to read text file:', error);
-        // 失败时如果有预览文本就使用预览文本，否则返回失败
         if (isTextInvalid(content.text)) {
           return { success: false, message: '无法读取完整文本' };
         }
-        // 使用预览文本继续执行
       }
     }
 
     const result = await copyClipboardItem(contentToCopy, clipboardManager);
     if (result.success) {
-      useClipboardStore.getState().setCurrentContentDisplay(contentToCopy);
-      // 更新 lastContent，避免轮询恢复后误判为变化
       await clipboardMonitor.setLastContent(contentToCopy);
     }
     return result;
