@@ -375,6 +375,7 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
           friction={1.2}
           rightThreshold={50}
           overshootRight={true}
+          dragOffsetFromRightEdge={30}
           onSwipeableWillOpen={handleSwipeableWillOpen}
           onSwipeableOpen={handleSwipeableOpen}
           onSwipeableClose={handleSwipeableClose}

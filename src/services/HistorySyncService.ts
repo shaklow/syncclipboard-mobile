@@ -1055,7 +1055,9 @@ export class HistorySyncService {
     }
 
     if (toMarkAsLocalOnly.length > 0) {
-      console.log(`[HistorySyncService] Marking ${toMarkAsLocalOnly.length} records as LocalOnly...`);
+      console.log(
+        `[HistorySyncService] Marking ${toMarkAsLocalOnly.length} records as LocalOnly...`
+      );
       await this.historyStorage.updateItems(
         toMarkAsLocalOnly.map((hash) => ({
           profileHash: hash,
