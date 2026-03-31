@@ -623,7 +623,7 @@ export class HistoryStorage {
             compareResult = (a.size || 0) - (b.size || 0);
             break;
           case 'lastAccessed':
-            compareResult = (a.lastAccessed || 0) - (b.lastAccessed || 0);
+            compareResult = (a.lastAccessed || a.timestamp) - (b.lastAccessed || b.timestamp);
             break;
         }
 
@@ -1098,14 +1098,14 @@ export class HistoryStorage {
   }
 
   /**
-   * 获取历史记录数量
+   * 获取历史记录数量（排除软删除）
    */
   public async getCount(): Promise<number> {
     if (!this.initialized) {
       await this.initialize();
     }
 
-    return this.history.length;
+    return this.history.filter((item) => !item.isDeleted).length;
   }
 
   /**

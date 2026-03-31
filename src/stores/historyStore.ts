@@ -150,29 +150,20 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     try {
       const { pageSize, filter, sort } = get();
 
-      if (filter || sort) {
-        const result = await historyStorage.searchItems(
-          filter || undefined,
-          sort || undefined,
-          page,
-          pageSize
-        );
-        set((state) => ({
-          items: page === 1 ? result.items : [...state.items, ...result.items],
-          totalCount: result.total,
-          currentPage: page,
-          isLoading: false,
-        }));
-      } else {
-        const newItems = await historyStorage.getItems(page, pageSize);
-        const totalCount = await historyStorage.getCount();
-        set((state) => ({
-          items: page === 1 ? newItems : [...state.items, ...newItems],
-          totalCount,
-          currentPage: page,
-          isLoading: false,
-        }));
-      }
+      const effectiveSort: HistorySort = sort || { field: 'timestamp', order: 'desc' };
+
+      const result = await historyStorage.searchItems(
+        filter || undefined,
+        effectiveSort,
+        page,
+        pageSize
+      );
+      set((state) => ({
+        items: page === 1 ? result.items : [...state.items, ...result.items],
+        totalCount: result.total,
+        currentPage: page,
+        isLoading: false,
+      }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to load history';
       set({ error: errorMessage, isLoading: false });

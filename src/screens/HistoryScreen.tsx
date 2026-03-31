@@ -75,6 +75,7 @@ export function HistoryScreen() {
     toggleStar,
     lastAddedTimestamp,
     handleStorageChange,
+    setSort,
   } = useHistoryStore();
   const { config } = useSettingsStore();
 
@@ -112,7 +113,7 @@ export function HistoryScreen() {
     return syncService.ensureInitialized(serverConfig);
   }, [config, historySyncEnabled]);
 
-  // 加载排序设置
+  // 加载排序设置并同步到 store
   useEffect(() => {
     const loadSortSetting = async () => {
       try {
@@ -120,28 +121,34 @@ export function HistoryScreen() {
         const savedSort = await AsyncStorage.getItem('@syncclipboard:history:sort_field');
         if (savedSort === 'timestamp' || savedSort === 'lastAccessed') {
           setSortField(savedSort);
+          setSort({ field: savedSort, order: 'desc' });
         }
       } catch (error) {
         console.warn('[HistoryScreen] Failed to load sort setting:', error);
       }
     };
     loadSortSetting();
-  }, []);
+  }, [setSort]);
 
   useEffect(() => {
     return subscribeTransferQueue();
   }, [subscribeTransferQueue]);
 
-  // 保存排序设置
-  const handleSortChange = useCallback(async (field: 'timestamp' | 'lastAccessed') => {
-    setSortField(field);
-    try {
-      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-      await AsyncStorage.setItem('@syncclipboard:history:sort_field', field);
-    } catch (error) {
-      console.warn('[HistoryScreen] Failed to save sort setting:', error);
-    }
-  }, []);
+  // 保存排序设置并重新加载数据
+  const handleSortChange = useCallback(
+    async (field: 'timestamp' | 'lastAccessed') => {
+      setSortField(field);
+      setSort({ field, order: 'desc' });
+      try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        await AsyncStorage.setItem('@syncclipboard:history:sort_field', field);
+      } catch (error) {
+        console.warn('[HistoryScreen] Failed to save sort setting:', error);
+      }
+      loadItems(1);
+    },
+    [setSort, loadItems]
+  );
 
   const listRef = useRef<FlashListRef<ClipboardItem>>(null);
   const isScrolledRef = useRef(false);
@@ -290,32 +297,10 @@ export function HistoryScreen() {
     setShowScrollToTop(offsetY > 200);
   }, []);
 
-  // 排序数据（置顶记录始终在顶部）
+  // 排序数据（排序已在 store 层面完成，这里直接返回）
   const sortedItems = useMemo(() => {
-    const result = [...items];
-
-    // 排序：置顶记录始终在顶部
-    result.sort((a, b) => {
-      // 置顶记录优先
-      const aPinned = a.pinned ? 1 : 0;
-      const bPinned = b.pinned ? 1 : 0;
-      if (aPinned !== bPinned) {
-        return bPinned - aPinned;
-      }
-
-      // 按选定字段排序
-      if (sortField === 'lastAccessed') {
-        const aAccessed = a.lastAccessed || a.timestamp;
-        const bAccessed = b.lastAccessed || b.timestamp;
-        return bAccessed - aAccessed;
-      }
-
-      // 默认按创建时间排序
-      return b.timestamp - a.timestamp;
-    });
-
-    return result;
-  }, [items, sortField]);
+    return items;
+  }, [items]);
 
   // 回到顶部
   const handleScrollToTop = useCallback(() => {
