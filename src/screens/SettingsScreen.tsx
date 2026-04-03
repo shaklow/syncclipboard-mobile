@@ -466,21 +466,25 @@ export const SettingsScreen = () => {
   // 处理切换前台服务常驻通知
   const handleToggleForegroundNotification = async (enabled: boolean) => {
     if (!enabled) {
-      Alert.alert('关闭常驻通知', '关闭常驻通知会降低后台服务稳定性，系统可能随时终止后台任务。', [
-        { text: '取消', style: 'cancel' },
-        {
-          text: '确认关闭',
-          onPress: async () => {
-            setLocalForegroundNotification(false);
-            try {
-              await updateConfig({ enableForegroundNotification: false });
-            } catch (error: unknown) {
-              setLocalForegroundNotification(true);
-              showMessage(error instanceof Error ? error.message : '设置失败', 'error');
-            }
+      Alert.alert(
+        '关闭常驻通知',
+        '关闭常驻通知会降低后台服务稳定性，系统终止后台任务的可能性增大。',
+        [
+          { text: '取消', style: 'cancel' },
+          {
+            text: '确认关闭',
+            onPress: async () => {
+              setLocalForegroundNotification(false);
+              try {
+                await updateConfig({ enableForegroundNotification: false });
+              } catch (error: unknown) {
+                setLocalForegroundNotification(true);
+                showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+              }
+            },
           },
-        },
-      ]);
+        ]
+      );
       return;
     }
 
