@@ -108,12 +108,12 @@ export abstract class APIClient {
       throw new ConfigurationError('Base URL is required');
     }
 
-    this.baseURL = baseURL;
+    this.baseURL = baseURL.replace(/\/+$/, '');
     this.authService = authService;
 
     // 创建 Axios 实例
     this.client = axios.create({
-      baseURL,
+      baseURL: this.baseURL,
       timeout,
       headers: {
         'Content-Type': 'application/json',
@@ -321,8 +321,8 @@ export abstract class APIClient {
    * 更新基础 URL
    */
   setBaseURL(baseURL: string): void {
-    this.baseURL = baseURL;
-    this.client.defaults.baseURL = baseURL;
+    this.baseURL = baseURL.replace(/\/+$/, '');
+    this.client.defaults.baseURL = this.baseURL;
   }
 
   /**
