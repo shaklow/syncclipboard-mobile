@@ -13,6 +13,9 @@ interface ClipboardOverlayModuleInterface {
   setMaxRetries(retries: number): boolean;
   hasOverlayPermission(): boolean;
   requestOverlayPermission(): void;
+  isOverlayShowing(): boolean;
+  showOverlayWindow(): Promise<boolean>;
+  hideOverlayWindow(): Promise<boolean>;
   getStringViaOverlay(): Promise<string>;
   hasStringViaOverlay(): Promise<boolean>;
   hasImageViaOverlay(): Promise<boolean>;
@@ -45,6 +48,27 @@ export function requestOverlayPermission(): void {
   if (NativeModule) {
     NativeModule.requestOverlayPermission();
   }
+}
+
+export function isOverlayShowing(): boolean {
+  if (NativeModule) {
+    return NativeModule.isOverlayShowing();
+  }
+  return false;
+}
+
+export async function showOverlayWindow(): Promise<boolean> {
+  if (NativeModule) {
+    return NativeModule.showOverlayWindow();
+  }
+  return false;
+}
+
+export async function hideOverlayWindow(): Promise<boolean> {
+  if (NativeModule) {
+    return NativeModule.hideOverlayWindow();
+  }
+  return false;
 }
 
 export async function getStringViaOverlay(): Promise<string> {

@@ -31,11 +31,19 @@ class ClipboardOverlayModule : Module() {
     private var debugMode = false
     private var maxRetries = DEFAULT_MAX_RETRIES
 
+    // Persistent overlay state
+    private var persistentView: View? = null
+    private var persistentWindowManager: WindowManager? = null
+    private var persistentParams: WindowManager.LayoutParams? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     override fun definition() = ModuleDefinition {
         Name("ClipboardOverlayModule")
 
         Function("setDebugMode") { enabled: Boolean ->
             debugMode = enabled
+            // Update persistent overlay appearance if showing
+            mainHandler.post { updatePersistentOverlayAppearance() }
             true
         }
 
@@ -65,6 +73,83 @@ class ClipboardOverlayModule : Module() {
                 context.startActivity(intent)
             }
             true
+        }
+
+        Function("isOverlayShowing") {
+            persistentView != null
+        }
+
+        AsyncFunction("showOverlayWindow") { promise: Promise ->
+            val context = appContext.reactContext
+            if (context == null) {
+                promise.reject("ERR_NO_CONTEXT", "React context is null", null)
+                return@AsyncFunction
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
+                promise.reject("ERR_NO_PERMISSION", "Overlay permission not granted", null)
+                return@AsyncFunction
+            }
+            mainHandler.post {
+                try {
+                    if (persistentView != null) {
+                        // Already showing
+                        promise.resolve(true)
+                        return@post
+                    }
+                    val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                    val view = View(context).apply {
+                        isFocusable = true
+                        isFocusableInTouchMode = true
+                    }
+
+                    val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                    } else {
+                        @Suppress("DEPRECATION")
+                        WindowManager.LayoutParams.TYPE_PHONE
+                    }
+
+                    val overlaySize = if (debugMode) 200 else 1
+
+                    if (debugMode) {
+                        view.setBackgroundColor(0xFFFF0000.toInt())
+                    }
+
+                    val params = WindowManager.LayoutParams(
+                        overlaySize, overlaySize,
+                        layoutType,
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                        PixelFormat.TRANSLUCENT
+                    ).apply {
+                        alpha = if (debugMode) 0.7f else 0f
+                        gravity = Gravity.START or Gravity.TOP
+                        x = 0
+                        y = 0
+                    }
+
+                    wm.addView(view, params)
+
+                    persistentView = view
+                    persistentWindowManager = wm
+                    persistentParams = params
+
+                    promise.resolve(true)
+                } catch (e: Exception) {
+                    promise.reject("ERR_OVERLAY_SHOW", e.message ?: "Unknown error", e)
+                }
+            }
+        }
+
+        AsyncFunction("hideOverlayWindow") { promise: Promise ->
+            mainHandler.post {
+                try {
+                    removePersistentOverlay()
+                    promise.resolve(true)
+                } catch (e: Exception) {
+                    promise.reject("ERR_OVERLAY_HIDE", e.message ?: "Unknown error", e)
+                }
+            }
         }
 
         AsyncFunction("getStringViaOverlay") { promise: Promise ->
@@ -161,6 +246,46 @@ class ClipboardOverlayModule : Module() {
     }
 
     /**
+     * Update the persistent overlay appearance based on current debug mode.
+     * Must be called on main thread.
+     */
+    private fun updatePersistentOverlayAppearance() {
+        val view = persistentView ?: return
+        val wm = persistentWindowManager ?: return
+        val params = persistentParams ?: return
+
+        val overlaySize = if (debugMode) 200 else 1
+        params.width = overlaySize
+        params.height = overlaySize
+        params.alpha = if (debugMode) 0.7f else 0f
+
+        if (debugMode) {
+            view.setBackgroundColor(0xFFFF0000.toInt())
+        } else {
+            view.setBackgroundColor(0x00000000)
+        }
+
+        try {
+            wm.updateViewLayout(view, params)
+        } catch (_: Exception) {}
+    }
+
+    /**
+     * Remove the persistent overlay window.
+     * Must be called on main thread.
+     */
+    private fun removePersistentOverlay() {
+        val view = persistentView ?: return
+        val wm = persistentWindowManager ?: return
+        try {
+            wm.removeView(view)
+        } catch (_: Exception) {}
+        persistentView = null
+        persistentWindowManager = null
+        persistentParams = null
+    }
+
+    /**
      * Reads the primary clip with fast retry logic.
      * Uses short intervals (10ms like AutoJs6) to minimize time the window has focus.
      */
@@ -182,14 +307,21 @@ class ClipboardOverlayModule : Module() {
     }
 
     /**
-     * Creates a 1px transparent overlay window, reads the clipboard, then immediately closes.
+     * Reads the clipboard using the overlay window focus trick.
      *
-     * Following AutoJs6's pattern:
-     * 1. Create window WITH FLAG_NOT_FOCUSABLE (won't steal focus from foreground app)
-     * 2. After window attached, temporarily REMOVE FLAG_NOT_FOCUSABLE via updateViewLayout
-     *    (like AutoJs6's requestWindowFocus — only flag manipulation + requestLayout, NO view.requestFocus)
-     * 3. Read clipboard with retry
-     * 4. Immediately close window (focus returns to foreground app)
+     * If a persistent overlay is showing, reuses it by toggling focus flags.
+     * Otherwise, falls back to creating a temporary overlay (legacy behavior).
+     *
+     * Persistent overlay flow:
+     * 1. Remove FLAG_NOT_FOCUSABLE from existing overlay (gains window focus)
+     * 2. Read clipboard with retry
+     * 3. Re-add FLAG_NOT_FOCUSABLE (releases focus back to foreground app)
+     *
+     * Legacy flow (no persistent overlay):
+     * 1. Create temporary 1px overlay with FLAG_NOT_FOCUSABLE
+     * 2. Remove FLAG_NOT_FOCUSABLE
+     * 3. Read clipboard
+     * 4. Destroy temporary overlay
      */
     private fun withOverlayClipboard(
         tag: String,
@@ -207,79 +339,107 @@ class ClipboardOverlayModule : Module() {
             return
         }
 
-        val handler = Handler(Looper.getMainLooper())
-        handler.post {
-            var overlayView: View? = null
-            var windowManager: WindowManager? = null
-            try {
-                windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-                overlayView = View(context).apply {
-                    isFocusable = true
-                    isFocusableInTouchMode = true
-                }
+        mainHandler.post {
+            val view = persistentView
+            val wm = persistentWindowManager
+            val params = persistentParams
 
-                val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                } else {
-                    @Suppress("DEPRECATION")
-                    WindowManager.LayoutParams.TYPE_PHONE
-                }
-
-                // Debug mode: large visible red overlay; Normal mode: 1px transparent
-                val overlaySize = if (debugMode) 200 else 1
-
-                if (debugMode) {
-                    overlayView.setBackgroundColor(0xFFFF0000.toInt())
-                }
-
-                // Step 1: Create window with FLAG_NOT_FOCUSABLE — won't steal focus
-                val params = WindowManager.LayoutParams(
-                    overlaySize, overlaySize,
-                    layoutType,
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-                    PixelFormat.TRANSLUCENT
-                ).apply {
-                    alpha = if (debugMode) 0.7f else 0f
-                    gravity = Gravity.START or Gravity.TOP
-                    x = 0
-                    y = 0
-                }
-
-                windowManager.addView(overlayView, params)
-
-                val wm = windowManager
-                val view = overlayView
-
-                // Step 2: After window is attached, remove FLAG_NOT_FOCUSABLE
-                // Like AutoJs6's requestWindowFocus(): only flag manipulation + requestLayout
-                // Do NOT call view.requestFocus() — that steals input focus and interrupts foreground
-                view.post {
+            if (view != null && wm != null && params != null) {
+                // Persistent overlay path: toggle focus on existing window
+                try {
+                    // Step 1: Remove FLAG_NOT_FOCUSABLE to gain window focus
                     params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
                     wm.updateViewLayout(view, params)
                     view.requestLayout()
 
-                    // Step 3: Read clipboard with retry, then close immediately
-                    readClipWithRetry(context, handler, 0) { clip ->
+                    // Step 2: Read clipboard with retry
+                    readClipWithRetry(context, mainHandler, 0) { clip ->
+                        // Step 3: Re-add FLAG_NOT_FOCUSABLE to release focus
+                        try {
+                            params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            wm.updateViewLayout(view, params)
+                        } catch (_: Exception) {}
+
                         try {
                             action(context, clip)
                         } catch (e: Exception) {
                             promise.reject("ERR_OVERLAY_$tag", e.message ?: "Unknown error", e)
-                        } finally {
-                            // Step 4: Close window immediately — focus returns to foreground app
-                            try {
-                                wm.removeView(view)
-                            } catch (_: Exception) {}
                         }
                     }
+                } catch (e: Exception) {
+                    // Restore FLAG_NOT_FOCUSABLE on error
+                    try {
+                        params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        wm.updateViewLayout(view, params)
+                    } catch (_: Exception) {}
+                    promise.reject("ERR_OVERLAY_$tag", e.message ?: "Unknown error", e)
                 }
-            } catch (e: Exception) {
+            } else {
+                // Legacy path: create temporary overlay
+                var overlayView: View? = null
+                var tempWm: WindowManager? = null
                 try {
-                    if (overlayView != null && windowManager != null) {
-                        windowManager.removeView(overlayView)
+                    tempWm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                    overlayView = View(context).apply {
+                        isFocusable = true
+                        isFocusableInTouchMode = true
                     }
-                } catch (_: Exception) {}
-                promise.reject("ERR_OVERLAY_$tag", e.message ?: "Unknown error", e)
+
+                    val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                    } else {
+                        @Suppress("DEPRECATION")
+                        WindowManager.LayoutParams.TYPE_PHONE
+                    }
+
+                    val overlaySize = if (debugMode) 200 else 1
+                    if (debugMode) {
+                        overlayView.setBackgroundColor(0xFFFF0000.toInt())
+                    }
+
+                    val tempParams = WindowManager.LayoutParams(
+                        overlaySize, overlaySize,
+                        layoutType,
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                        PixelFormat.TRANSLUCENT
+                    ).apply {
+                        alpha = if (debugMode) 0.7f else 0f
+                        gravity = Gravity.START or Gravity.TOP
+                        x = 0
+                        y = 0
+                    }
+
+                    tempWm.addView(overlayView, tempParams)
+
+                    val finalWm = tempWm
+                    val finalView = overlayView
+
+                    finalView.post {
+                        tempParams.flags = tempParams.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+                        finalWm.updateViewLayout(finalView, tempParams)
+                        finalView.requestLayout()
+
+                        readClipWithRetry(context, mainHandler, 0) { clip ->
+                            try {
+                                action(context, clip)
+                            } catch (e: Exception) {
+                                promise.reject("ERR_OVERLAY_$tag", e.message ?: "Unknown error", e)
+                            } finally {
+                                try {
+                                    finalWm.removeView(finalView)
+                                } catch (_: Exception) {}
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    try {
+                        if (overlayView != null && tempWm != null) {
+                            tempWm.removeView(overlayView)
+                        }
+                    } catch (_: Exception) {}
+                    promise.reject("ERR_OVERLAY_$tag", e.message ?: "Unknown error", e)
+                }
             }
         }
     }

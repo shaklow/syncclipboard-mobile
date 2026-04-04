@@ -216,9 +216,13 @@ export function HomeScreen() {
 
     // 检查是否是本地刚上传的内容（避免上传后又下载同一内容）
     const lastUploadedHash = SyncManager.getInstance().getLastUploadedHash();
-    if (lastUploadedHash && compareHash(currentHash, lastUploadedHash)) {
-      console.log(`[HomeScreen] ${logPrefix}Remote hash matches last uploaded hash, skipping`);
+    const isJustUploaded = !!(lastUploadedHash && compareHash(currentHash, lastUploadedHash));
+    if (isJustUploaded) {
+      console.log(
+        `[HomeScreen] ${logPrefix}Remote hash matches last uploaded hash, skipping auto-download/copy but updating display`
+      );
       lastRemoteProfileHash.current = currentHash;
+      setRemoteContent(content);
       return;
     }
 

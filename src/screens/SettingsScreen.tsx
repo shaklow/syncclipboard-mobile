@@ -99,8 +99,6 @@ export const SettingsScreen = () => {
   const [localForegroundNotification, setLocalForegroundNotification] = useState(
     config?.enableForegroundNotification ?? true
   );
-  const [localDebugBgTestEnabled, setLocalDebugBgTestEnabled] = useState(false);
-  const [lastBgTestDuration, setLastBgTestDuration] = useState<string>('无记录');
   const [localDebugOverlayVisible, setLocalDebugOverlayVisible] = useState(
     config?.debugOverlayVisible ?? false
   );
@@ -166,16 +164,6 @@ export const SettingsScreen = () => {
   useEffect(() => {
     setLocalForegroundNotification(config?.enableForegroundNotification ?? true);
   }, [config?.enableForegroundNotification]);
-
-  // 加载上次后台测试持续时长
-  useEffect(() => {
-    const loadDuration = async () => {
-      const { BackgroundTestService } = await import('@/services/BackgroundTestService');
-      const ms = await BackgroundTestService.getLastDuration();
-      setLastBgTestDuration(BackgroundTestService.formatDuration(ms));
-    };
-    loadDuration();
-  }, []);
 
   // 计算存储大小
   useEffect(() => {
@@ -334,6 +322,30 @@ export const SettingsScreen = () => {
           {
             text: '确认开启',
             onPress: async () => {
+              // Android 13+ 需要通知权限（后台任务依赖前台服务通知）
+              if (Platform.OS === 'android') {
+                const { PermissionsAndroid } = require('react-native');
+                const granted = await PermissionsAndroid.check(
+                  PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+                );
+                if (!granted) {
+                  const result = await PermissionsAndroid.request(
+                    PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+                  );
+                  if (result !== PermissionsAndroid.RESULTS.GRANTED) {
+                    Alert.alert(
+                      '需要通知权限',
+                      '后台任务需要通知权限才能正常运行，请在系统设置中允许',
+                      [
+                        { text: '取消', style: 'cancel' },
+                        { text: '前往设置', onPress: () => Linking.openSettings() },
+                      ]
+                    );
+                    return;
+                  }
+                }
+              }
+
               setLocalBackgroundTasksEnabled(true);
               try {
                 await setEnableBackgroundTasks(true);
@@ -400,7 +412,7 @@ export const SettingsScreen = () => {
     if (enabled && Platform.OS === 'android') {
       Alert.alert(
         '启用悬浮窗获取剪贴板',
-        '启用后，应用将通过不可见的悬浮窗在后台获取剪贴板内容。这可能导致部分应用因焦点问题产生功能异常、系统通知中心持续闪烁提示「SyncClipboard 显示在其他应用上层」等问题。\n\n如果您已通过基于 root 的工具授予了 SyncClipboard 后台剪贴板读取权限，建议关闭此选项。',
+        '启用后，应用将通过不可见的悬浮窗在后台获取剪贴板内容。这可能导致部分应用因焦点问题产生功能异常以及其他问题。\n\n如果您已通过基于 root 的工具授予了 SyncClipboard 后台剪贴板读取权限，建议关闭此选项。',
         [
           { text: '取消', style: 'cancel' },
           {
@@ -592,49 +604,6 @@ export const SettingsScreen = () => {
       // 如果设置失败，恢复原来的状态
       setLocalDebugModeEnabled(!enabled);
       showMessage(error instanceof Error ? error.message : '设置失败', 'error');
-    }
-  };
-
-  // 处理切换后台服务稳定性测试
-  const handleToggleDebugBgTest = async (enabled: boolean) => {
-    setLocalDebugBgTestEnabled(enabled);
-    try {
-      // 启动前检查通知权限（Android 13+ 需要 POST_NOTIFICATIONS）
-      if (enabled && Platform.OS === 'android') {
-        const { PermissionsAndroid } = require('react-native');
-        const granted = await PermissionsAndroid.check(
-          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-        );
-        if (!granted) {
-          const result = await PermissionsAndroid.request(
-            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-          );
-          if (result !== PermissionsAndroid.RESULTS.GRANTED) {
-            setLocalDebugBgTestEnabled(false);
-            Alert.alert('需要通知权限', '后台服务需要通知权限才能正常运行，请在系统设置中允许', [
-              { text: '取消', style: 'cancel' },
-              { text: '前往设置', onPress: () => Linking.openSettings() },
-            ]);
-            return;
-          }
-        }
-      }
-      const { getBackgroundTestService, BackgroundTestService } =
-        await import('@/services/BackgroundTestService');
-      const service = getBackgroundTestService();
-      if (enabled) {
-        await service.start();
-        setLastBgTestDuration(BackgroundTestService.formatDuration(0));
-        showMessage('已启用后台服务测试', 'success');
-      } else {
-        await service.stop();
-        const ms = await BackgroundTestService.getLastDuration();
-        setLastBgTestDuration(BackgroundTestService.formatDuration(ms));
-        showMessage('已停止后台服务测试', 'success');
-      }
-    } catch (error: unknown) {
-      setLocalDebugBgTestEnabled(!enabled);
-      showMessage(error instanceof Error ? error.message : '操作失败', 'error');
     }
   };
 
@@ -1678,27 +1647,6 @@ export const SettingsScreen = () => {
                 }
               />
             </View>
-
-            {localDebugModeEnabled && (
-              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    测试后台服务稳定性
-                  </Text>
-                  <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                    上次持续时长：{lastBgTestDuration}
-                  </Text>
-                </View>
-                <Switch
-                  value={localDebugBgTestEnabled}
-                  onValueChange={handleToggleDebugBgTest}
-                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                  thumbColor={
-                    localDebugBgTestEnabled ? theme.colors.surface : theme.colors.textTertiary
-                  }
-                />
-              </View>
-            )}
 
             {localDebugModeEnabled && Platform.OS === 'android' && (
               <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
