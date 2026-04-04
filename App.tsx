@@ -139,7 +139,8 @@ export default function App() {
           <ShareReceiveScreen
             onComplete={() => {
               setAppMode('home');
-              BackHandler.exitApp();
+              // 使用 moveTaskToBack 而非 exitApp，保持 Activity 存活以维持后台任务
+              moveTaskToBack();
             }}
           />
         ) : (
