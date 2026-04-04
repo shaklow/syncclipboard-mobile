@@ -328,7 +328,7 @@ export const SettingsScreen = () => {
     if (enabled) {
       Alert.alert(
         '开启后台任务',
-        '启用后台任务后，应用将在后台持续运行相关服务，增加电量消耗。\n\n建议在系统设置中将 SyncClipboard 的电池优化设为「不受限制」，并在多任务界面锁定 SyncClipboard，以确保后台任务稳定运行。',
+        '启用后台任务后，应用将在后台持续运行相关服务，大幅增加电量消耗。\n\n建议在系统设置中将 SyncClipboard 的电池优化设为「不受限制」，并在多任务界面锁定 SyncClipboard，减少系统关闭后台任务的可能性。',
         [
           { text: '取消', style: 'cancel' },
           {

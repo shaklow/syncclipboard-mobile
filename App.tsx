@@ -1,5 +1,5 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet, Linking, BackHandler, ToastAndroid } from 'react-native';
+import { StyleSheet, Linking, BackHandler, ToastAndroid, StatusBar } from 'react-native';
 import { useEffect, useState } from 'react';
 import { ThemeProvider } from './src/contexts/ThemeContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
@@ -9,6 +9,7 @@ import { ShareReceiveScreen } from './src/screens/ShareReceiveScreen';
 import { SyncDirection } from './src/types/sync';
 import { useSettingsStore } from './src/stores';
 import { initLogger } from './src/services/Logger';
+import { useTheme } from './src/hooks/useTheme';
 import { setDynamicShortcuts } from 'shortcut';
 
 const QUICK_UPLOAD_URL = 'syncclipboard://quick-upload';
@@ -114,6 +115,7 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.container}>
       <ThemeProvider>
+        <ThemedStatusBar />
         {appMode === 'checking' ? null : appMode === 'share_receive' ? (
           <ShareReceiveScreen
             onComplete={() => {
@@ -145,6 +147,16 @@ export default function App() {
         )}
       </ThemeProvider>
     </GestureHandlerRootView>
+  );
+}
+
+function ThemedStatusBar() {
+  const { theme } = useTheme();
+  return (
+    <StatusBar
+      barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+      backgroundColor={theme.colors.surface}
+    />
   );
 }
 

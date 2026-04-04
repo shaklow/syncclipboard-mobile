@@ -78,7 +78,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
           },
         },
         {
-          label: fileContent.type === 'Image' ? '保存到相册' : '保存',
+          label: '保存',
           onPress: async () => {
             try {
               if (fileContent.type === 'Image') {
