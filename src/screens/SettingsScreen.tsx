@@ -1029,7 +1029,10 @@ export const SettingsScreen = () => {
           >
             <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
               <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>自动复制</Text>
+                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>自动同步</Text>
+                <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
+                  处于前台时自动同步剪贴板
+                </Text>
               </View>
               <Switch
                 value={localAutoSyncEnabled}
