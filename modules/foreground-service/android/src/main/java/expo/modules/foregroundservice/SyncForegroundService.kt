@@ -21,6 +21,7 @@ class SyncForegroundService : Service() {
         const val NOTIFY_ID = 0x2020
         const val ACTION_START = "START"
         const val ACTION_STOP = "STOP"
+        const val ACTION_TEMP_STOP = "TEMP_STOP"
         const val ACTION_UPDATE = "UPDATE"
         const val EXTRA_CONTENT = "content"
 
@@ -51,9 +52,8 @@ class SyncForegroundService : Service() {
                 isRunning = true
             }
             ACTION_STOP -> {
-                Log.d(TAG, "Stopping foreground service")
+                Log.d(TAG, "Stopping foreground service (permanent)")
                 if (!isRunning) {
-                    // Service wasn't fully started, call startForeground first to prevent crash
                     val notification = createNotification("正在停止...")
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                         startForeground(NOTIFY_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
@@ -64,8 +64,24 @@ class SyncForegroundService : Service() {
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 isRunning = false
-                // Send event to JS to disable background tasks
+                // Send event to JS to disable background tasks permanently
                 ForegroundServiceModule.sendStopEvent()
+            }
+            ACTION_TEMP_STOP -> {
+                Log.d(TAG, "Stopping foreground service (temporary)")
+                if (!isRunning) {
+                    val notification = createNotification("正在停止...")
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        startForeground(NOTIFY_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                    } else {
+                        startForeground(NOTIFY_ID, notification)
+                    }
+                }
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+                isRunning = false
+                // Send temp stop event to JS (no settings change, service restarts next time)
+                ForegroundServiceModule.sendTempStopEvent()
             }
             ACTION_UPDATE -> {
                 val content = intent.getStringExtra(EXTRA_CONTENT) ?: "后台任务运行中"
@@ -115,6 +131,15 @@ class SyncForegroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // Temp stop action
+        val tempStopIntent = Intent(this, SyncForegroundService::class.java).apply {
+            action = ACTION_TEMP_STOP
+        }
+        val tempStopPendingIntent = PendingIntent.getService(
+            this, 2, tempStopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         // Stop action
         val stopIntent = Intent(this, SyncForegroundService::class.java).apply {
             action = ACTION_STOP
@@ -141,7 +166,8 @@ class SyncForegroundService : Service() {
             .setContentIntent(pendingLaunchIntent)
             .setOngoing(true)
             .setSilent(true)
-            .addAction(0, "停止", stopPendingIntent)
+            .addAction(0, "临时停止", tempStopPendingIntent)
+            .addAction(0, "永久停止", stopPendingIntent)
             .setStyle(NotificationCompat.BigTextStyle().bigText(content))
             .build()
     }

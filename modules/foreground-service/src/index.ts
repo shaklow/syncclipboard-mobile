@@ -48,3 +48,10 @@ export function addStopListener(listener: () => void): EventSubscription | null 
   }
   return null;
 }
+
+export function addTempStopListener(listener: () => void): EventSubscription | null {
+  if (NativeModule) {
+    return NativeModule.addListener('onTempStopRequested', listener);
+  }
+  return null;
+}

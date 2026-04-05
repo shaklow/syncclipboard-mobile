@@ -66,6 +66,8 @@ export const SettingsScreen = () => {
     setEnableClipboardOverlay,
     setEnableBackgroundTasks,
     setEnableSmsForwarding,
+    isTempDisabledBackgroundTasks,
+    setTempDisabledBackgroundTasks,
   } = useSettingsStore();
 
   const [showServerModal, setShowServerModal] = useState(false);
@@ -92,7 +94,7 @@ export const SettingsScreen = () => {
     config?.enableBackgroundUpload ?? false
   );
   const [localBackgroundTasksEnabled, setLocalBackgroundTasksEnabled] = useState(
-    config?.enableBackgroundTasks ?? false
+    (config?.enableBackgroundTasks ?? false) && !isTempDisabledBackgroundTasks
   );
   const [localClipboardOverlayEnabled, setLocalClipboardOverlayEnabled] = useState(
     config?.enableClipboardOverlay ?? false
@@ -158,8 +160,10 @@ export const SettingsScreen = () => {
   }, [config?.enableBackgroundUpload]);
 
   useEffect(() => {
-    setLocalBackgroundTasksEnabled(config?.enableBackgroundTasks ?? false);
-  }, [config?.enableBackgroundTasks]);
+    setLocalBackgroundTasksEnabled(
+      (config?.enableBackgroundTasks ?? false) && !isTempDisabledBackgroundTasks
+    );
+  }, [config?.enableBackgroundTasks, isTempDisabledBackgroundTasks]);
 
   useEffect(() => {
     setLocalClipboardOverlayEnabled(config?.enableClipboardOverlay ?? false);
@@ -352,6 +356,13 @@ export const SettingsScreen = () => {
   // 处理切换后台任务总开关
   const handleToggleBackgroundTasks = async (enabled: boolean) => {
     if (enabled) {
+      // 如果是临时停止状态，直接清除标志，不需要弹窗确认
+      if (isTempDisabledBackgroundTasks) {
+        setLocalBackgroundTasksEnabled(true);
+        setTempDisabledBackgroundTasks(false);
+        showMessage('已恢复后台任务', 'success');
+        return;
+      }
       Alert.alert(
         '开启后台任务',
         '启用后台任务后，应用将在后台持续运行相关服务，大幅增加电量消耗。\n\n建议在系统设置中将 SyncClipboard 的电池优化设为「不受限制」，并在多任务界面锁定 SyncClipboard，减少系统关闭后台任务的概率。',
@@ -1157,7 +1168,9 @@ export const SettingsScreen = () => {
                 <View style={styles.settingInfo}>
                   <Text style={[styles.settingLabel, { color: theme.colors.text }]}>后台任务</Text>
                   <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                    关闭后将停止所有后台任务
+                    {isTempDisabledBackgroundTasks
+                      ? '已临时停止，重启 APP 后恢复开启状态'
+                      : '关闭后将停止所有后台任务'}
                   </Text>
                 </View>
                 <Switch

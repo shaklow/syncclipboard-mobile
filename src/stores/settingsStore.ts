@@ -118,6 +118,12 @@ interface SettingsState {
   /** 设置后台任务总开关 */
   setEnableBackgroundTasks: (enabled: boolean) => Promise<void>;
 
+  /** 是否被临时停止（不持久化，重启后自动恢复） */
+  isTempDisabledBackgroundTasks: boolean;
+
+  /** 临时禁用/恢复后台任务（不修改持久化配置） */
+  setTempDisabledBackgroundTasks: (disabled: boolean) => void;
+
   /** 设置后台下载远程 */
   setEnableBackgroundDownload: (enabled: boolean) => Promise<void>;
 
@@ -149,6 +155,7 @@ const initialState = {
   isLoaded: false,
   isSaving: false,
   error: null,
+  isTempDisabledBackgroundTasks: false,
 };
 
 /**
@@ -343,7 +350,15 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setEnableBackgroundTasks: async (enabled: boolean) => {
+    if (enabled) {
+      // 用户主动开启时清除临时停止标志
+      set({ isTempDisabledBackgroundTasks: false });
+    }
     await get().updateConfig({ enableBackgroundTasks: enabled });
+  },
+
+  setTempDisabledBackgroundTasks: (disabled: boolean) => {
+    set({ isTempDisabledBackgroundTasks: disabled });
   },
 
   setEnableBackgroundDownload: async (enabled: boolean) => {

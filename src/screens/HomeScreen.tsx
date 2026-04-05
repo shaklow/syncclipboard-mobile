@@ -82,7 +82,8 @@ export function HomeScreen() {
   const sync = useSyncStore((state) => state.sync);
   const initializeSync = useSyncStore((state) => state.initialize);
   const destroySync = useSyncStore((state) => state.destroy);
-  const { getActiveServer, loadConfig, isLoaded, config } = useSettingsStore();
+  const { getActiveServer, loadConfig, isLoaded, config, isTempDisabledBackgroundTasks } =
+    useSettingsStore();
   const { tasks: transferTasks, subscribe: subscribeTransferQueue } = useTransferQueueStore();
   const lastDeletedHashes = useHistoryStore((state) => state.lastDeletedHashes);
   const historyCleared = useHistoryStore((state) => state.historyCleared);
@@ -855,6 +856,7 @@ export function HomeScreen() {
     if (Platform.OS !== 'android') return;
 
     const shouldRun =
+      !isTempDisabledBackgroundTasks &&
       config?.enableBackgroundTasks &&
       config?.enableForegroundNotification &&
       (config?.enableBackgroundDownload ||
@@ -874,21 +876,28 @@ export function HomeScreen() {
 
     // 监听通知栏"停止"按钮
     let stopSub: { remove(): void } | null = null;
+    let tempStopSub: { remove(): void } | null = null;
     if (shouldRun) {
       import('foreground-service').then((ForegroundService) => {
         stopSub = ForegroundService.addStopListener(() => {
           // 关闭所有后台任务
           useSettingsStore.getState().setEnableBackgroundTasks(false);
         });
+        tempStopSub = ForegroundService.addTempStopListener(() => {
+          // 临时停止：不修改持久化配置，重启 APP 后自动恢复
+          useSettingsStore.getState().setTempDisabledBackgroundTasks(true);
+        });
       });
     }
 
     return () => {
       stopSub?.remove();
+      tempStopSub?.remove();
       // 注意：不在 unmount 时停止前台服务，避免快速操作导致后台任务中断
       // 前台服务的停止由 config 变化驱动（shouldRun 为 false 时调用 stopService）
     };
   }, [
+    isTempDisabledBackgroundTasks,
     config?.enableBackgroundTasks,
     config?.enableForegroundNotification,
     config?.enableBackgroundDownload,
@@ -905,9 +914,6 @@ export function HomeScreen() {
         // 当从后台切换到前台时
         if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
           console.log('[HomeScreen] App has come to the foreground');
-
-          // 重新获取本地剪贴板内容，检查在后台期间是否有变化
-          console.log('[HomeScreen] Checking local clipboard for changes while in background');
           await getContent();
 
           // 如果有配置服务器

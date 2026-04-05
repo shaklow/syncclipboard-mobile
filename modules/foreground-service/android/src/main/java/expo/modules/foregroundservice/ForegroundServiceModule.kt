@@ -14,12 +14,16 @@ class ForegroundServiceModule : Module() {
         fun sendStopEvent() {
             moduleInstance?.sendEvent("onStopRequested", emptyMap<String, Any>())
         }
+
+        fun sendTempStopEvent() {
+            moduleInstance?.sendEvent("onTempStopRequested", emptyMap<String, Any>())
+        }
     }
 
     override fun definition() = ModuleDefinition {
         Name("ForegroundServiceModule")
 
-        Events("onStopRequested")
+        Events("onStopRequested", "onTempStopRequested")
 
         OnCreate {
             moduleInstance = this@ForegroundServiceModule
