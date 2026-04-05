@@ -39,11 +39,12 @@ function isShareIntentUrl(url: string | null): boolean {
   }
 }
 
-type AppMode = 'checking' | 'home' | 'share_receive';
+type AppMode = 'checking' | 'home';
 
 export default function App() {
   const [appMode, setAppMode] = useState<AppMode>('checking');
   // 快速操作覆盖层：始终以 overlay 形式显示，不卸载 AppNavigator/HomeScreen
+  const [shareReceiveOverlay, setShareReceiveOverlay] = useState(false);
   const [quickActionOverlay, setQuickActionOverlay] = useState<{
     direction: SyncDirection;
     exitAfterSync: boolean;
@@ -95,7 +96,8 @@ export default function App() {
         ToastAndroid.show(`getInitialURL: ${url ?? 'null'}`, ToastAndroid.LONG);
       }
       if (isShareIntentUrl(url)) {
-        setAppMode('share_receive');
+        setAppMode('home');
+        setShareReceiveOverlay(true);
         return;
       }
       const { isQuickTile, fromForeground, direction } = parseQuickTileUrl(url);
@@ -113,7 +115,7 @@ export default function App() {
         ToastAndroid.show(`addEventListener url: ${url ?? 'null'}`, ToastAndroid.LONG);
       }
       if (isShareIntentUrl(url)) {
-        setAppMode('share_receive');
+        setShareReceiveOverlay(true);
         return;
       }
       const { isQuickTile, fromForeground, direction } = parseQuickTileUrl(url);
@@ -130,16 +132,17 @@ export default function App() {
     <GestureHandlerRootView style={styles.container}>
       <ThemeProvider>
         <ThemedStatusBar />
-        {appMode === 'checking' ? null : appMode === 'share_receive' ? (
-          <ShareReceiveScreen
-            onComplete={() => {
-              setAppMode('home');
-              // 使用 moveTaskToBack 而非 exitApp，保持 Activity 存活以维持后台任务
-              moveTaskToBack();
-            }}
-          />
-        ) : (
-          <AppNavigator />
+        {appMode === 'checking' ? null : <AppNavigator />}
+        {shareReceiveOverlay && (
+          <View style={StyleSheet.absoluteFill}>
+            <ShareReceiveScreen
+              onComplete={() => {
+                setShareReceiveOverlay(false);
+                // 使用 moveTaskToBack 而非 exitApp，保持 Activity 存活以维持后台任务
+                moveTaskToBack();
+              }}
+            />
+          </View>
         )}
         {quickActionOverlay && (
           <View style={StyleSheet.absoluteFill}>

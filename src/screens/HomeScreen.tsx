@@ -748,10 +748,6 @@ export function HomeScreen() {
           .then((result) => {
             console.log('[HomeScreen] Auto-sync upload completed');
             if (result.success && !result.skipped) {
-              // 更新远程 hash，避免 SignalR 推送时误判为远程新内容
-              if (result.profileHash) {
-                lastRemoteProfileHash.current = result.profileHash;
-              }
               if (Platform.OS === 'android' && currentContent) {
                 const preview =
                   currentContent.type === 'Text' && currentContent.text

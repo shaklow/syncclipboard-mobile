@@ -1213,9 +1213,6 @@ export const SettingsScreen = () => {
                   >
                     后台下载远程
                   </Text>
-                  <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                    保持远程轮询或 SignalR 在后台运行
-                  </Text>
                 </View>
                 <Switch
                   value={localBackgroundTasksEnabled && localBackgroundDownloadEnabled}
@@ -1243,9 +1240,6 @@ export const SettingsScreen = () => {
                     ]}
                   >
                     后台上传本地
-                  </Text>
-                  <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                    保持本地剪贴板监听在后台运行
                   </Text>
                 </View>
                 <Switch
