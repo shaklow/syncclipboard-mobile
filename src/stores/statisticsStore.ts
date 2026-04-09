@@ -100,6 +100,7 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
   },
 
   recordBackgroundTaskStart: async () => {
+    if (!get().isLoaded) await get().load();
     const now = new Date().toISOString();
     const newRecord: BackgroundTaskRecord = {
       startedAt: now,
@@ -112,6 +113,7 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
   },
 
   updateHeartbeat: async () => {
+    if (!get().isLoaded) await get().load();
     const records = [...get().data.backgroundTaskRecords];
     if (records.length === 0) return;
     records[0] = { ...records[0], lastHeartbeat: new Date().toISOString() };
