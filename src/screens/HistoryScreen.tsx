@@ -31,6 +31,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useHistoryStore } from '@/stores/historyStore';
 import { useClipboardStore } from '@/stores/clipboardStore';
 import { useSettingsStore } from '@/stores';
+import { historyStorage } from '@/services';
 import { useTransferQueueStore } from '@/stores/transferQueueStore';
 import { useHistoryDisplaySettings } from '@/hooks/useHistoryDisplaySettings';
 import { ClipboardItem, ClipboardContent, createDefaultClipboardItem } from '@/types/clipboard';
@@ -65,14 +66,11 @@ export function HistoryScreen() {
   const { theme } = useTheme();
   const {
     items,
-    totalCount,
-    isLoading,
     loadItems,
     searchItems,
     addItems,
     deleteItem,
     clearHistory,
-    currentPage,
     toggleStar,
     lastAddedTimestamp,
     handleStorageChange,
@@ -147,7 +145,7 @@ export function HistoryScreen() {
       } catch (error) {
         console.warn('[HistoryScreen] Failed to save sort setting:', error);
       }
-      loadItems(1);
+      loadItems();
     },
     [setSort, loadItems]
   );
@@ -325,6 +323,8 @@ export function HistoryScreen() {
     const result = await copyToLocalClipboard(content);
     if (result.success) {
       useClipboardStore.getState().setCurrentContentDisplay(content);
+      // 更新 lastAccessed，使按访问时间排序时记录移到顶部
+      historyStorage.updateLastAccessed(item.profileHash);
     }
     return result;
   }, []);
@@ -877,12 +877,10 @@ export function HistoryScreen() {
     }
   }, [addItems, showMessage, generateRandomDebugText]);
 
-  // 加载更多（防止重复加载和越界）
+  // 加载更多已移除：虚拟列表性能足够，不再需要分页
   const handleEndReached = useCallback(() => {
-    if (isLoading) return;
-    if (items.length >= totalCount) return;
-    loadItems(currentPage + 1);
-  }, [isLoading, items.length, totalCount, currentPage, loadItems]);
+    // no-op: 已移除分页，所有数据一次性加载
+  }, []);
 
   // 切换筛选类型
   const handleFilterChange = useCallback(

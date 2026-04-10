@@ -19,12 +19,6 @@ interface HistoryState {
   /** 总记录数 */
   totalCount: number;
 
-  /** 当前页码 */
-  currentPage: number;
-
-  /** 每页大小 */
-  pageSize: number;
-
   /** 当前过滤器 */
   filter: HistoryFilter | null;
 
@@ -51,7 +45,7 @@ interface HistoryState {
 
   // 动作
   /** 加载历史记录 */
-  loadItems: (page?: number) => Promise<void>;
+  loadItems: () => Promise<void>;
 
   /** 搜索历史记录 */
   searchItems: (filter?: HistoryFilter, sort?: HistorySort) => Promise<void>;
@@ -82,9 +76,6 @@ interface HistoryState {
 
   /** 清空历史记录 */
   clearHistory: () => Promise<void>;
-
-  /** 设置页面大小 */
-  setPageSize: (size: number) => void;
 
   /** 设置过滤器 */
   setFilter: (filter: HistoryFilter | null) => void;
@@ -126,8 +117,6 @@ interface HistoryState {
 const initialState = {
   items: [],
   totalCount: 0,
-  currentPage: 1,
-  pageSize: 20,
   filter: null,
   sort: null,
   isLoading: false,
@@ -144,26 +133,20 @@ const initialState = {
 export const useHistoryStore = create<HistoryState>((set, get) => ({
   ...initialState,
 
-  loadItems: async (page = 1) => {
+  loadItems: async () => {
     set({ isLoading: true, error: null });
 
     try {
-      const { pageSize, filter, sort } = get();
+      const { filter, sort } = get();
 
       const effectiveSort: HistorySort = sort || { field: 'timestamp', order: 'desc' };
 
-      const result = await historyStorage.searchItems(
-        filter || undefined,
-        effectiveSort,
-        page,
-        pageSize
-      );
-      set((state) => ({
-        items: page === 1 ? result.items : [...state.items, ...result.items],
+      const result = await historyStorage.searchItems(filter || undefined, effectiveSort);
+      set({
+        items: result.items,
         totalCount: result.total,
-        currentPage: page,
         isLoading: false,
-      }));
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to load history';
       set({ error: errorMessage, isLoading: false });
@@ -171,11 +154,12 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
   },
 
   searchItems: async (filter, sort) => {
-    set({ isLoading: true, error: null, filter, sort, currentPage: 1 });
+    // 不传 sort 时保留当前 sort 配置，避免覆盖 loadSortSetting 设置的值
+    const effectiveSort = sort !== undefined ? sort : get().sort;
+    set({ isLoading: true, error: null, filter, sort: effectiveSort });
 
     try {
-      const { pageSize } = get();
-      const result = await historyStorage.searchItems(filter, sort, 1, pageSize);
+      const result = await historyStorage.searchItems(filter, effectiveSort || undefined);
 
       set({
         items: result.items,
@@ -317,7 +301,6 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
       set({
         items: [],
         totalCount: 0,
-        currentPage: 1,
         selectedIds: new Set(),
         isLoading: false,
         historyCleared: true,
@@ -328,17 +311,15 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     }
   },
 
-  setPageSize: (size: number) => {
-    set({ pageSize: size, currentPage: 1 });
-    get().loadItems(1);
-  },
-
   setFilter: (filter: HistoryFilter | null) => {
     set({ filter });
   },
 
   setSort: (sort: HistorySort | null) => {
     set({ sort });
+    if (sort) {
+      historyStorage.setSortConfig(sort);
+    }
   },
 
   toggleSelection: (id: string) => {
@@ -379,7 +360,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
   },
 
   refresh: async () => {
-    await get().loadItems(1);
+    await get().loadItems();
   },
 
   handleStorageChange: (changedItems: ClipboardItem[], action: 'add' | 'update' | 'delete') => {
@@ -437,27 +418,111 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
         });
       }
     } else if (action === 'update') {
-      // 更新记录：检查是否有软删除的项
+      // 获取排序配置
+      const sortField = get().sort?.field || 'timestamp';
+      const sortOrder = get().sort?.order || 'desc';
+      const isDesc = sortOrder === 'desc';
+
+      /**
+       * 获取排序字段的值
+       */
+      const getSortValue = (item: ClipboardItem): number => {
+        switch (sortField) {
+          case 'timestamp':
+            return item.timestamp;
+          case 'lastAccessed':
+            return item.lastAccessed || item.timestamp;
+          case 'useCount':
+            return item.useCount || 0;
+          case 'size':
+            return item.size || 0;
+          default:
+            return item.timestamp;
+        }
+      };
+
+      /**
+       * 二分查找插入位置（参照桌面端 InsertHistoryInOrder）
+       */
+      const findInsertIndex = (arr: ClipboardItem[], item: ClipboardItem): number => {
+        // 先确定 pinned 区域的边界
+        const isPinned = item.pinned;
+        let searchStart = 0;
+        let searchEnd = arr.length;
+
+        if (isPinned) {
+          // pinned 只在 pinned 区域内查找
+          searchEnd = arr.findIndex((i) => !i.pinned);
+          if (searchEnd === -1) searchEnd = arr.length;
+        } else {
+          // 非 pinned 从第一个非 pinned 开始
+          searchStart = arr.findIndex((i) => !i.pinned);
+          if (searchStart === -1) searchStart = arr.length;
+        }
+
+        const targetVal = getSortValue(item);
+        let low = searchStart;
+        let high = searchEnd;
+
+        while (low < high) {
+          const mid = (low + high) >> 1;
+          const midVal = getSortValue(arr[mid]);
+          const shouldGoLeft = isDesc ? midVal <= targetVal : midVal >= targetVal;
+          if (shouldGoLeft) {
+            high = mid;
+          } else {
+            low = mid + 1;
+          }
+        }
+
+        return low;
+      };
+
+      // 检查是否有软删除的项
       const softDeletedHashes = new Set(
         changedItems.filter((item) => item.isDeleted).map((item) => item.profileHash.toLowerCase())
       );
       const updatedItems = changedItems.filter((item) => !item.isDeleted);
 
+      // 创建新数组（移除软删除的项）
       const newItems = items.filter(
         (item) => !softDeletedHashes.has(item.profileHash.toLowerCase())
       );
       let addedCount = 0;
+
       for (const changedItem of updatedItems) {
         const existingIndex = newItems.findIndex(
           (i) => i.profileHash.toLowerCase() === changedItem.profileHash.toLowerCase()
         );
+
         if (existingIndex >= 0) {
+          const oldItem = newItems[existingIndex];
           const filteredUpdates = Object.fromEntries(
             Object.entries(changedItem).filter(([, value]) => value !== undefined)
           );
-          newItems[existingIndex] = { ...newItems[existingIndex], ...filteredUpdates };
+          const updatedItem = { ...oldItem, ...filteredUpdates };
+
+          // 检查是否需要重新定位
+          const sortFieldChanged =
+            (sortField === 'lastAccessed' && changedItem.lastAccessed !== oldItem.lastAccessed) ||
+            (sortField === 'timestamp' && changedItem.timestamp !== oldItem.timestamp) ||
+            (sortField === 'useCount' && changedItem.useCount !== oldItem.useCount) ||
+            (sortField === 'size' && changedItem.size !== oldItem.size);
+          const pinnedChanged = changedItem.pinned !== oldItem.pinned;
+
+          if (sortFieldChanged || pinnedChanged) {
+            // 删除后重新按序插入（参照桌面端 RemoveInsert）
+            newItems.splice(existingIndex, 1);
+            const insertIdx = findInsertIndex(newItems, updatedItem);
+            newItems.splice(insertIdx, 0, updatedItem);
+          } else {
+            // 只更新数据，不移动位置
+            newItems[existingIndex] = updatedItem;
+          }
         } else if (matchesFilter(changedItem)) {
-          newItems.unshift(changedItem);
+          // 新项按序插入
+          const insertIdx = findInsertIndex(newItems, changedItem);
+          newItems.splice(insertIdx, 0, changedItem);
           addedCount++;
         }
       }
@@ -465,7 +530,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
       const removedCount = softDeletedHashes.size;
       if (removedCount > 0 || addedCount > 0) {
         set({
-          items: newItems,
+          items: [...newItems],
           totalCount: Math.max(0, get().totalCount - removedCount + addedCount),
           selectedIds: new Set(
             [...get().selectedIds].filter((id) => !softDeletedHashes.has(id.toLowerCase()))
@@ -473,7 +538,8 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
           ...(addedCount > 0 ? { lastAddedTimestamp: Date.now() } : {}),
         });
       } else {
-        set({ items: newItems });
+        // 即使只有位置变化也需要创建新数组引用，否则 React 不会重渲染
+        set({ items: [...newItems] });
       }
     } else if (action === 'delete') {
       // 删除记录：批量从列表中移除

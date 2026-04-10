@@ -103,6 +103,7 @@ export class HistoryStorage {
   private static readonly NOTIFY_BATCH_SIZE = 50;
   private static readonly NOTIFY_DELAY_MS = 100;
   private silentMode = false;
+  private sortConfig: HistorySort = { field: 'timestamp', order: 'desc' };
 
   private constructor() {}
 
@@ -114,6 +115,140 @@ export class HistoryStorage {
       HistoryStorage.instance = new HistoryStorage();
     }
     return HistoryStorage.instance;
+  }
+
+  /**
+   * 设置排序配置，内部数组将立即重排
+   */
+  public setSortConfig(sort: HistorySort): void {
+    this.sortConfig = sort;
+    this.sortHistory();
+  }
+
+  /**
+   * 获取当前排序配置
+   */
+  public getSortConfig(): HistorySort {
+    return { ...this.sortConfig };
+  }
+
+  /**
+   * 获取排序字段的值
+   */
+  private getSortValue(item: ClipboardItem): number {
+    switch (this.sortConfig.field) {
+      case 'timestamp':
+        return item.timestamp;
+      case 'lastAccessed':
+        return item.lastAccessed || item.timestamp;
+      case 'useCount':
+        return item.useCount || 0;
+      case 'size':
+        return item.size || 0;
+      default:
+        return item.timestamp;
+    }
+  }
+
+  /**
+   * 二分查找插入位置（参照桌面端 InsertHistoryInOrder 实现）
+   * pinned 项始终排在非 pinned 项之前
+   */
+  private findInsertIndex(item: ClipboardItem): number {
+    const isDesc = this.sortConfig.order === 'desc';
+    const isPinned = item.pinned;
+    let searchStart = 0;
+    let searchEnd = this.history.length;
+
+    if (isPinned) {
+      // pinned 只在 pinned 区域内查找
+      searchEnd = this.history.findIndex((i) => !i.pinned);
+      if (searchEnd === -1) searchEnd = this.history.length;
+    } else {
+      // 非 pinned 从第一个非 pinned 开始
+      searchStart = this.history.findIndex((i) => !i.pinned);
+      if (searchStart === -1) searchStart = this.history.length;
+    }
+
+    const targetVal = this.getSortValue(item);
+    let low = searchStart;
+    let high = searchEnd;
+
+    while (low < high) {
+      const mid = (low + high) >> 1;
+      const midVal = this.getSortValue(this.history[mid]);
+      const shouldGoLeft = isDesc ? midVal <= targetVal : midVal >= targetVal;
+
+      if (shouldGoLeft) {
+        high = mid;
+      } else {
+        low = mid + 1;
+      }
+    }
+
+    return low;
+  }
+
+  /**
+   * 检查指定位置的元素是否需要重新定位
+   * 考虑 pinned 区域边界和排序字段值
+   */
+  private shouldReposition(index: number): boolean {
+    const item = this.history[index];
+    const val = this.getSortValue(item);
+    const isDesc = this.sortConfig.order === 'desc';
+
+    if (index > 0) {
+      const prev = this.history[index - 1];
+      // 检查 pinned 边界：非 pinned 不应在 pinned 前面
+      if (!item.pinned && prev.pinned) return false; // 这是正确的位置
+      if (item.pinned && !prev.pinned) return true; // pinned 应在前面
+      const prevVal = this.getSortValue(prev);
+      if (isDesc ? prevVal < val : prevVal > val) return true;
+    }
+
+    if (index < this.history.length - 1) {
+      const next = this.history[index + 1];
+      // 检查 pinned 边界
+      if (item.pinned && !next.pinned) return false; // 这是正确的位置
+      if (!item.pinned && next.pinned) return true; // 非 pinned 不应在 pinned 前面
+      const nextVal = this.getSortValue(next);
+      if (isDesc ? nextVal > val : nextVal < val) return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * 对内部数组执行全量排序（pinned 项始终在前）
+   */
+  private sortHistory(): void {
+    const { field, order } = this.sortConfig;
+    this.history.sort((a, b) => {
+      // pinned 优先
+      const aPinned = a.pinned ? 1 : 0;
+      const bPinned = b.pinned ? 1 : 0;
+      if (aPinned !== bPinned) {
+        return bPinned - aPinned;
+      }
+
+      let compareResult = 0;
+      switch (field) {
+        case 'timestamp':
+          compareResult = a.timestamp - b.timestamp;
+          break;
+        case 'lastAccessed':
+          compareResult = (a.lastAccessed || a.timestamp) - (b.lastAccessed || b.timestamp);
+          break;
+        case 'useCount':
+          compareResult = (a.useCount || 0) - (b.useCount || 0);
+          break;
+        case 'size':
+          compareResult = (a.size || 0) - (b.size || 0);
+          break;
+      }
+      return order === 'desc' ? -compareResult : compareResult;
+    });
   }
 
   /**
@@ -143,7 +278,8 @@ export class HistoryStorage {
       return;
     }
 
-    this.pendingChanges.push({ items: [item], action });
+    // 浅拷贝，避免 store 中的旧引用和新通知指向同一对象导致比较失效
+    this.pendingChanges.push({ items: [{ ...item }], action });
 
     if (this.pendingChanges.length >= HistoryStorage.NOTIFY_BATCH_SIZE) {
       this.flushPendingChanges();
@@ -161,9 +297,11 @@ export class HistoryStorage {
    * 立即批量通知变更
    */
   private notifyChangeBatch(items: ClipboardItem[], action: 'add' | 'update' | 'delete'): void {
+    // 浅拷贝，避免 store 中的旧引用和新通知指向同一对象导致比较失效
+    const copied = items.map((item) => ({ ...item }));
     for (const callback of this.changeCallbacks) {
       try {
-        callback(items, action);
+        callback(copied, action);
       } catch (error) {
         console.error('[HistoryStorage] Error in change callback:', error);
       }
@@ -224,6 +362,7 @@ export class HistoryStorage {
       }
 
       await this.loadHistory();
+      this.sortHistory();
       this.initialized = true;
 
       // 启动时清理孤儿数据
@@ -394,15 +533,19 @@ export class HistoryStorage {
         syncStatus: wasDeleted ? HistorySyncStatus.LocalOnly : HistorySyncStatus.NeedSync,
       };
 
-      this.history[existingIndex] = resultItem;
+      // 从旧位置移除，重新插入到正确位置
+      this.history.splice(existingIndex, 1);
+      const updateIdx = this.findInsertIndex(resultItem);
+      this.history.splice(updateIdx, 0, resultItem);
       action = 'update';
     } else {
-      // 添加新记录
+      // 添加新记录，二分插入到正确位置
       resultItem = {
         ...processedItem,
         timestamp: processedItem.timestamp || Date.now(),
       };
-      this.history.unshift(resultItem);
+      const insertIdx = this.findInsertIndex(resultItem);
+      this.history.splice(insertIdx, 0, resultItem);
       action = 'add';
 
       // 清理超出数量的记录（仅清理 LocalOnly 状态的记录）
@@ -438,7 +581,7 @@ export class HistoryStorage {
         // 如果记录之前是软删除状态，需要恢复并触发同步
         const wasDeleted = existing.isDeleted === true;
 
-        this.history[existingIndex] = {
+        const updatedItem = {
           ...existing,
           text,
           fileUri: item.fileUri ?? existing.fileUri,
@@ -446,17 +589,21 @@ export class HistoryStorage {
           isDeleted: false,
           lastModified: Date.now(),
           lastAccessed: Date.now(),
-          // 如果之前是删除状态，需要增加版本号并标记为需要同步
           version: wasDeleted ? existing.version + 1 : existing.version,
           syncStatus: wasDeleted ? HistorySyncStatus.NeedSync : existing.syncStatus,
         };
-        updatedItems.push(this.history[existingIndex]);
+        // 从旧位置移除，重新插入到正确位置
+        this.history.splice(existingIndex, 1);
+        const updateIdx = this.findInsertIndex(updatedItem);
+        this.history.splice(updateIdx, 0, updatedItem);
+        updatedItems.push(updatedItem);
       } else {
         const newItem = {
           ...item,
           timestamp: item.timestamp || Date.now(),
         };
-        this.history.unshift(newItem);
+        const insertIdx = this.findInsertIndex(newItem);
+        this.history.splice(insertIdx, 0, newItem);
         addedItems.push(newItem);
       }
     }
@@ -539,12 +686,11 @@ export class HistoryStorage {
 
   /**
    * 搜索和过滤历史记录（排除软删除）
+   * 注意：已移除分页参数，返回全部符合条件的记录，由虚拟列表处理性能
    */
   public async searchItems(
     filter?: HistoryFilter,
-    sort?: HistorySort,
-    page: number = 1,
-    pageSize: number = 20
+    sort?: HistorySort
   ): Promise<{ items: ClipboardItem[]; total: number }> {
     if (!this.initialized) {
       await this.initialize();
@@ -634,12 +780,9 @@ export class HistoryStorage {
       return b.timestamp - a.timestamp;
     });
 
-    // 分页
-    const start = (page - 1) * pageSize;
-    const end = start + pageSize;
-
+    // 分页已移除，返回全部符合条件的记录（浅拷贝，避免外部持有内部数组的对象引用）
     return {
-      items: filtered.slice(start, end),
+      items: filtered.map((item) => ({ ...item })),
       total: filtered.length,
     };
   }
@@ -664,8 +807,20 @@ export class HistoryStorage {
         ...this.history[index],
         ...filteredUpdates,
       };
+
+      // 检查是否需要重新定位（排序字段变更时）
+      if (this.shouldReposition(index)) {
+        const item = this.history[index];
+        this.history.splice(index, 1);
+        const newIdx = this.findInsertIndex(item);
+        this.history.splice(newIdx, 0, item);
+      }
+
       await this.saveHistory();
-      this.notifyChange(this.history[index], 'update');
+      this.notifyChange(
+        this.history.find((item) => item.profileHash.toLowerCase() === profileHash.toLowerCase())!,
+        'update'
+      );
     } else {
       throw new Error(`History item not found: ${profileHash}`);
     }
@@ -995,7 +1150,8 @@ export class HistoryStorage {
   }
 
   /**
-   * 更新最后访问时间
+   * 更新最后访问时间（复制记录时调用）
+   * 同时检查是否需要重新定位，并触发变更通知
    */
   public async updateLastAccessed(profileHash: string): Promise<void> {
     if (!this.initialized) {
@@ -1008,7 +1164,20 @@ export class HistoryStorage {
 
     if (index >= 0) {
       this.history[index].lastAccessed = Date.now();
+
+      // 检查是否需要重新定位（当按 lastAccessed 排序时）
+      if (this.shouldReposition(index)) {
+        const item = this.history[index];
+        this.history.splice(index, 1);
+        const newIdx = this.findInsertIndex(item);
+        this.history.splice(newIdx, 0, item);
+      }
+
       await this.saveHistory();
+      this.notifyChange(
+        this.history.find((item) => item.profileHash.toLowerCase() === profileHash.toLowerCase())!,
+        'update'
+      );
     }
   }
 
