@@ -12,11 +12,11 @@ import {
   TouchableOpacity,
   Alert,
   Share,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
   Animated,
   Easing,
   ActivityIndicator,
+  useWindowDimensions,
+  BackHandler,
 } from 'react-native';
 import { Check, RefreshCw, List } from 'react-native-feather';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -24,6 +24,7 @@ import { FlashList, FlashListRef } from '@shopify/flash-list';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
+import { TabView, TabBar, type Route } from 'react-native-tab-view';
 import { useTheme } from '@/hooks/useTheme';
 import { useHistoryStore } from '@/stores/historyStore';
 import { useClipboardStore } from '@/stores/clipboardStore';
@@ -33,7 +34,7 @@ import { useTransferQueueStore } from '@/stores/transferQueueStore';
 import { useHistoryDisplaySettings } from '@/hooks/useHistoryDisplaySettings';
 import { ClipboardItem, ClipboardContent, createDefaultClipboardItem } from '@/types/clipboard';
 import { HistoryFilter } from '@/types/storage';
-import { HistoryListItem, type HistoryListItemHandle } from '@/components/HistoryListItem';
+import { HistoryListItem } from '@/components/HistoryListItem';
 import { MessageToast } from '@/components/MessageToast';
 import { TopRightMenu, type MenuItemConfig } from '@/components/TopRightMenu';
 import { TransferQueueModal } from '@/components/TransferQueueModal';
@@ -47,16 +48,13 @@ import { calculateTextHash } from '@/utils/hash';
 import { importFileToHistory } from '@/utils/uploadFile';
 import { isHistorySyncEnabled } from '@/utils/config';
 
-type FilterType = 'all' | 'Text' | 'Image' | 'File' | 'starred' | 'transferring';
-
-const FILTER_LABELS: Record<FilterType, string> = {
-  all: '全部',
-  Text: '文本',
-  Image: '图片',
-  File: '文件',
-  starred: '收藏',
-  transferring: '传输中',
-};
+const TAB_ROUTES: Route[] = [
+  { key: 'all', title: '全部' },
+  { key: 'Text', title: '文本' },
+  { key: 'Image', title: '图片' },
+  { key: 'File', title: '文件' },
+  { key: 'starred', title: '收藏' },
+];
 
 export function HistoryScreen() {
   const navigation = useNavigation();
@@ -66,7 +64,6 @@ export function HistoryScreen() {
     loadItems,
     searchItems,
     addItems,
-    deleteItem,
     clearHistory,
     toggleStar,
     lastAddedTimestamp,
@@ -80,10 +77,12 @@ export function HistoryScreen() {
   } = useHistoryStore();
   const { config } = useSettingsStore();
 
-  const { showFullImage, setShowFullImage } = useHistoryDisplaySettings();
+  const { showFullImage, setShowFullImage, showHistoryDebugInfo, setShowHistoryDebugInfo } =
+    useHistoryDisplaySettings();
+  const layout = useWindowDimensions();
 
   const [searchText, setSearchText] = useState('');
-  const [filterType, setFilterType] = useState<FilterType>('all');
+  const [tabIndex, setTabIndex] = useState(0);
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [sortField, setSortField] = useState<'timestamp' | 'lastAccessed'>('timestamp');
   const { message, showMessage, clearMessage } = useMessageStore();
@@ -151,7 +150,6 @@ export function HistoryScreen() {
   );
 
   const listRef = useRef<FlashListRef<ClipboardItem>>(null);
-  const isScrolledRef = useRef(false);
 
   // 已在历史记录页面时，再次点击导航栏按钮回到顶部
   useEffect(() => {
@@ -164,85 +162,24 @@ export function HistoryScreen() {
     });
     return unsubscribe;
   }, [navigation]);
-  const itemRefsMap = useRef<Map<string, React.RefObject<HistoryListItemHandle | null>>>(
-    new Map()
-  ).current;
 
-  // 清理不在列表中的 ref
-  useEffect(() => {
-    const currentHashes = new Set(items.map((item) => item.profileHash));
-    for (const hash of itemRefsMap.keys()) {
-      if (!currentHashes.has(hash)) {
-        itemRefsMap.delete(hash);
-      }
-    }
-  }, [items, itemRefsMap]);
-
-  // 获取或创建 ref
-  const getOrCreateItemRef = useCallback(
-    (profileHash: string) => {
-      let itemRef = itemRefsMap.get(profileHash);
-      if (!itemRef) {
-        itemRef = React.createRef<HistoryListItemHandle>();
-        itemRefsMap.set(profileHash, itemRef as React.RefObject<HistoryListItemHandle | null>);
-      }
-      return itemRef as React.RefObject<HistoryListItemHandle>;
-    },
-    [itemRefsMap]
-  );
-
-  // 搜索防抖（含初始加载）
+  // 搜索防抖（含初始加载）— 仅按关键词搜索，分类筛选由 TabView 在客户端完成
   useEffect(() => {
     if (isReorganizing) {
       return;
     }
 
     const timer = setTimeout(() => {
-      // 根据当前筛选类型构建 filter 参数
-      let filter: HistoryFilter | undefined;
-      if (searchText) {
-        filter = { keyword: searchText };
-        // 搜索时保持当前分类筛选
-        switch (filterType) {
-          case 'Text':
-          case 'Image':
-          case 'File':
-            filter.type = [filterType];
-            break;
-          case 'starred':
-            filter.starredOnly = true;
-            break;
-          case 'transferring':
-            filter.syncStatus = [2];
-            break;
-        }
-      } else {
-        // 无搜索关键词时，根据当前分类筛选
-        switch (filterType) {
-          case 'Text':
-          case 'Image':
-          case 'File':
-            filter = { type: [filterType] };
-            break;
-          case 'starred':
-            filter = { starredOnly: true };
-            break;
-          case 'transferring':
-            filter = { syncStatus: [2] };
-            break;
-          default:
-            filter = undefined;
-        }
-      }
+      const filter: HistoryFilter | undefined = searchText ? { keyword: searchText } : undefined;
       searchItems(filter);
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchText, searchItems, isReorganizing, filterType]);
+  }, [searchText, searchItems, isReorganizing]);
 
-  // 监听新项目添加，如果列表未滚动则滚动到顶部
+  // 监听新项目添加，滚动到顶部
   useEffect(() => {
-    if (lastAddedTimestamp > 0 && !isScrolledRef.current) {
+    if (lastAddedTimestamp > 0) {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
@@ -270,12 +207,6 @@ export function HistoryScreen() {
       storage.removeChangeCallback(handleChange);
     };
   }, [handleStorageChange]);
-
-  // 滚动事件处理
-  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const offsetY = event.nativeEvent.contentOffset.y;
-    isScrolledRef.current = offsetY > 10;
-  }, []);
 
   // 排序数据（排序已在 store 层面完成，这里直接返回）
   const sortedItems = useMemo(() => {
@@ -315,22 +246,6 @@ export function HistoryScreen() {
       }
     },
     [showMessage, copyItemWithSync]
-  );
-
-  // 复制项目
-  // 真正执行删除的函数 - 与存储交互
-  const performDelete = useCallback(
-    async (item: ClipboardItem) => {
-      try {
-        await deleteItem(item.profileHash);
-        showMessage('已删除', 'success');
-        // 同步由 HistorySyncService.handleLocalHistoryChanged 自动处理
-      } catch (error) {
-        console.error('[HistoryScreen] Failed to delete:', error);
-        showMessage('删除失败', 'error');
-      }
-    },
-    [deleteItem, showMessage]
   );
 
   // 分享项目
@@ -436,6 +351,17 @@ export function HistoryScreen() {
     setIsMultiSelectMode(false);
     clearSelection();
   }, [clearSelection]);
+
+  // 多选模式下拦截系统返回键，退出多选而不是返回上一页
+  useEffect(() => {
+    if (!isMultiSelectMode) return;
+
+    const handler = BackHandler.addEventListener('hardwareBackPress', () => {
+      exitMultiSelectMode();
+      return true;
+    });
+    return () => handler.remove();
+  }, [isMultiSelectMode, exitMultiSelectMode]);
 
   // 批量删除
   const handleBatchDelete = useCallback(() => {
@@ -815,35 +741,6 @@ export function HistoryScreen() {
     // no-op: 已移除分页，所有数据一次性加载
   }, []);
 
-  // 切换筛选类型
-  const handleFilterChange = useCallback(
-    (type: FilterType) => {
-      setFilterType(type);
-
-      // 根据筛选类型设置 filter 参数
-      let filter: HistoryFilter | undefined;
-      switch (type) {
-        case 'Text':
-        case 'Image':
-        case 'File':
-          filter = { type: [type] };
-          break;
-        case 'starred':
-          filter = { starredOnly: true };
-          break;
-        case 'transferring':
-          filter = { syncStatus: [2] };
-          break;
-        default:
-          filter = undefined;
-      }
-
-      // 使用 store 的 searchItems 进行异步过滤
-      searchItems(filter);
-    },
-    [searchItems]
-  );
-
   const handleClearSearch = useCallback(() => {
     setSearchText('');
   }, []);
@@ -852,6 +749,10 @@ export function HistoryScreen() {
   const handleToggleFullImage = useCallback(async () => {
     await setShowFullImage(!showFullImage);
   }, [showFullImage, setShowFullImage]);
+
+  const handleToggleHistoryDebugInfo = useCallback(async () => {
+    await setShowHistoryDebugInfo(!showHistoryDebugInfo);
+  }, [showHistoryDebugInfo, setShowHistoryDebugInfo]);
 
   const handleDownload = useCallback(
     async (item: ClipboardItem) => {
@@ -921,11 +822,8 @@ export function HistoryScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: ClipboardItem }) => {
-      const itemRef = getOrCreateItemRef(item.profileHash);
-
       return (
         <HistoryListItem
-          ref={itemRef}
           item={item}
           onCopy={handleItemPress}
           onShare={handleShare}
@@ -933,12 +831,12 @@ export function HistoryScreen() {
           onOpen={handleOpen}
           onLongPress={handleItemLongPress}
           onPress={handleMultiSelectPress}
-          onDelete={performDelete}
           onToggleStar={handleToggleStar}
           onDownload={historySyncEnabled ? handleDownload : undefined}
           onUpload={historySyncEnabled ? handleUpload : undefined}
           onWordPick={setWordPickerText}
           showFullImage={showFullImage}
+          showDebugInfo={isDebugMode && showHistoryDebugInfo}
           enableHistorySync={historySyncEnabled}
           isMultiSelectMode={isMultiSelectMode}
           isSelected={selectedIds.has(item.profileHash)}
@@ -946,17 +844,17 @@ export function HistoryScreen() {
       );
     },
     [
-      getOrCreateItemRef,
       handleItemPress,
       handleShare,
       handleOpen,
       handleItemLongPress,
       handleMultiSelectPress,
-      performDelete,
       handleToggleStar,
       handleDownload,
       handleUpload,
       showFullImage,
+      isDebugMode,
+      showHistoryDebugInfo,
       historySyncEnabled,
       isMultiSelectMode,
       selectedIds,
@@ -975,6 +873,64 @@ export function HistoryScreen() {
       </View>
     );
   }, [theme, searchText]);
+
+  // 客户端分类筛选
+  const filteredItemsByTab = useMemo(() => {
+    const result: Record<string, ClipboardItem[]> = {
+      all: sortedItems,
+      Text: sortedItems.filter((item) => item.type === 'Text'),
+      Image: sortedItems.filter((item) => item.type === 'Image'),
+      File: sortedItems.filter((item) => item.type === 'File'),
+      starred: sortedItems.filter((item) => item.starred),
+    };
+    return result;
+  }, [sortedItems]);
+
+  // 渲染每个 Tab 的内容
+  const renderScene = useCallback(
+    ({ route }: { route: Route }) => {
+      const tabItems = filteredItemsByTab[route.key] || [];
+      return (
+        <FlashList
+          ref={route.key === TAB_ROUTES[tabIndex]?.key ? listRef : undefined}
+          data={tabItems}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.profileHash}
+          onEndReached={handleEndReached}
+          onEndReachedThreshold={0.5}
+          ListEmptyComponent={renderEmptyComponent}
+          contentContainerStyle={styles.listContent}
+          refreshing={isRefreshing}
+          onRefresh={historySyncEnabled ? () => handleIncrementalSync(true) : undefined}
+        />
+      );
+    },
+    [
+      filteredItemsByTab,
+      tabIndex,
+      renderItem,
+      handleEndReached,
+      renderEmptyComponent,
+      isRefreshing,
+      historySyncEnabled,
+      handleIncrementalSync,
+    ]
+  );
+
+  // 自定义 TabBar
+  const renderTabBar = useCallback(
+    (props: Parameters<NonNullable<React.ComponentProps<typeof TabView>['renderTabBar']>>[0]) => (
+      <TabBar
+        {...props}
+        style={[styles.tabBar, { backgroundColor: theme.colors.surface }]}
+        indicatorStyle={[styles.tabIndicator, { backgroundColor: theme.colors.primary }]}
+        activeColor={theme.colors.primary}
+        inactiveColor={theme.colors.textSecondary}
+        pressColor={theme.colors.border}
+      />
+    ),
+    [theme]
+  );
 
   // 菜单项配置
   const menuItems = useMemo<MenuItemConfig[]>(() => {
@@ -1025,6 +981,11 @@ export function HistoryScreen() {
 
     if (isDebugMode) {
       items.push({
+        label: '显示历史记录调试信息',
+        onPress: handleToggleHistoryDebugInfo,
+        icon: showHistoryDebugInfo ? <Check color="#2196F3" width={18} height={18} /> : undefined,
+      });
+      items.push({
         label: '添加10条随机记录',
         onPress: handleAddRandomRecords,
       });
@@ -1041,11 +1002,13 @@ export function HistoryScreen() {
     showFullImage,
     sortField,
     isDebugMode,
+    showHistoryDebugInfo,
     isSyncing,
     historySyncEnabled,
     handleImportImage,
     handleImportFile,
     handleToggleFullImage,
+    handleToggleHistoryDebugInfo,
     handleSortChange,
     handleResyncHistory,
     handleAddRandomRecords,
@@ -1149,44 +1112,14 @@ export function HistoryScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 筛选按钮 */}
-      <View style={[styles.filterContainer, { backgroundColor: theme.colors.surface }]}>
-        {(['all', 'Text', 'Image', 'File', 'starred'] as FilterType[]).map((type) => (
-          <TouchableOpacity
-            key={type}
-            onPress={() => handleFilterChange(type)}
-            style={[
-              styles.filterButton,
-              filterType === type
-                ? { backgroundColor: theme.colors.primary }
-                : styles.filterButtonInactive,
-            ]}
-          >
-            <Text
-              style={[
-                styles.filterButtonText,
-                { color: filterType === type ? theme.colors.white : theme.colors.textSecondary },
-              ]}
-            >
-              {FILTER_LABELS[type]}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* 历史记录列表 */}
-      <FlashList
-        ref={listRef}
-        data={sortedItems}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.profileHash}
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={0.5}
-        onScroll={handleScroll}
-        ListEmptyComponent={renderEmptyComponent}
-        contentContainerStyle={styles.listContent}
-        refreshing={isRefreshing}
-        onRefresh={historySyncEnabled ? () => handleIncrementalSync(true) : undefined}
+      {/* 分类 TabView */}
+      <TabView
+        navigationState={{ index: tabIndex, routes: TAB_ROUTES }}
+        renderScene={renderScene}
+        onIndexChange={setTabIndex}
+        initialLayout={{ width: layout.width }}
+        renderTabBar={renderTabBar}
+        lazy
       />
 
       {/* 多选操作栏 */}
@@ -1349,29 +1282,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  filterContainer: {
-    flexDirection: 'row',
+  tabBar: {
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  tabIndicator: {
+    height: 3,
+    borderRadius: 1.5,
+    width: 24,
+    marginHorizontal: 'auto',
+  },
+  tab: {
+    width: 'auto',
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    gap: 8,
   },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  filterButtonActive: {
-    // backgroundColor will be set by theme dynamically
-  },
-  filterButtonInactive: {
-    // backgroundColor: transparent by default
-  },
-  filterButtonText: {
+  tabLabel: {
     fontSize: 14,
     fontWeight: '500',
-  },
-  filterButtonTextActive: {
-    // color will be set by theme dynamically
+    textTransform: 'none',
   },
   listContent: {
     paddingVertical: 8,

@@ -10,10 +10,12 @@ const STORAGE_KEY = '@syncclipboard:history_display_settings';
 
 interface HistoryDisplaySettings {
   showFullImage: boolean;
+  showHistoryDebugInfo: boolean;
 }
 
 const DEFAULT_SETTINGS: HistoryDisplaySettings = {
   showFullImage: false,
+  showHistoryDebugInfo: false,
 };
 
 export function useHistoryDisplaySettings() {
@@ -54,9 +56,25 @@ export function useHistoryDisplaySettings() {
     [settings]
   );
 
+  const setShowHistoryDebugInfo = useCallback(
+    async (showHistoryDebugInfo: boolean) => {
+      const newSettings = { ...settings, showHistoryDebugInfo };
+      setSettings(newSettings);
+
+      try {
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newSettings));
+      } catch (error) {
+        console.error('[HistoryDisplaySettings] Failed to save settings:', error);
+      }
+    },
+    [settings]
+  );
+
   return {
     showFullImage: settings.showFullImage,
     setShowFullImage,
+    showHistoryDebugInfo: settings.showHistoryDebugInfo,
+    setShowHistoryDebugInfo,
     isLoading,
   };
 }
