@@ -22,10 +22,17 @@ export const ThemeContext = createContext<ThemeContextValue | undefined>(undefin
 interface ThemeProviderProps {
   children: React.ReactNode;
   initialMode?: ThemeMode;
+  /** Override system color scheme (e.g. from native Activity's current configuration) */
+  systemColorSchemeOverride?: 'light' | 'dark';
 }
 
-export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children, initialMode = 'auto' }) => {
-  const systemColorScheme = (useColorScheme() ?? 'light') === 'dark' ? 'dark' : 'light';
+export const ThemeProvider: React.FC<ThemeProviderProps> = ({
+  children,
+  initialMode = 'auto',
+  systemColorSchemeOverride,
+}) => {
+  const rnColorScheme = (useColorScheme() ?? 'light') === 'dark' ? 'dark' : 'light';
+  const systemColorScheme = systemColorSchemeOverride ?? rnColorScheme;
   const [themeMode, setThemeModeState] = useState<ThemeMode>(initialMode);
   const [theme, setTheme] = useState<Theme>(() => createTheme(initialMode, systemColorScheme));
 

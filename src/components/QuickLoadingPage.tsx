@@ -111,8 +111,8 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
   useEffect(() => {
     if (state !== 'success') return;
     if (successContent !== undefined || (successButtons && successButtons.length > 0)) return;
-    const timer = setTimeout(onComplete, 500);
-    return () => clearTimeout(timer);
+    // 无需显示成功界面，直接退出
+    onComplete();
   }, [state, successContent, successButtons, onComplete]);
 
   // 返回键：loading 时允许取消；error / success-with-content/extra 时允许离开
@@ -154,10 +154,7 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
     <View
       style={[
         styles.content,
-        overlayMode && [
-          styles.overlayCard,
-          { backgroundColor: theme.colors.surface, shadowColor: theme.colors.text },
-        ],
+        overlayMode && [styles.overlayCard, { backgroundColor: theme.colors.surface }],
       ]}
     >
       {state === 'loading' && (
@@ -206,8 +203,12 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
       {state === 'success' && (
         <>
           {successContent && <ContentPreview content={successContent} />}
-          <Text style={[styles.successIcon, { color: theme.colors.success }]}>✓</Text>
-          <Text style={[styles.statusText, { color: theme.colors.text }]}>{successText}</Text>
+          {!(successButtons && successButtons.length > 0) && (
+            <>
+              <Text style={[styles.successIcon, { color: theme.colors.success }]}>✓</Text>
+              <Text style={[styles.statusText, { color: theme.colors.text }]}>{successText}</Text>
+            </>
+          )}
           {(successContent !== undefined || (successButtons && successButtons.length > 0)) && (
             <View style={styles.successButtonRow}>
               {successButtons?.map((btn, index) => (
@@ -509,6 +510,7 @@ const styles = StyleSheet.create({
   },
   overlayBackdrop: {
     flex: 1,
+    width: '100%',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -516,11 +518,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 28,
     paddingHorizontal: 24,
-    elevation: 8,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    width: 300,
+    width: '85%',
     alignSelf: 'center',
   },
 });

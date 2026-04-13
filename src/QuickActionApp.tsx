@@ -16,9 +16,13 @@ import { initLogger } from './services/Logger';
 
 interface QuickActionAppProps {
   direction?: string;
+  systemTheme?: 'light' | 'dark';
 }
 
-export default function QuickActionApp({ direction = 'download' }: QuickActionAppProps) {
+export default function QuickActionApp({
+  direction = 'download',
+  systemTheme,
+}: QuickActionAppProps) {
   const syncDirection = direction === 'upload' ? SyncDirection.Upload : SyncDirection.Download;
   const { config, loadConfig, isLoaded } = useSettingsStore();
 
@@ -65,7 +69,7 @@ export default function QuickActionApp({ direction = 'download' }: QuickActionAp
 
   return (
     <GestureHandlerRootView style={styles.container}>
-      <ThemeProvider initialMode="dark">
+      <ThemeProvider systemColorSchemeOverride={systemTheme}>
         <StatusBar backgroundColor="transparent" translucent barStyle="light-content" />
         <QuickTileLoadingScreen
           direction={syncDirection}

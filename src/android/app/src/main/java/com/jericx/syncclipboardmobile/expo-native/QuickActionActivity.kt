@@ -1,5 +1,6 @@
 package com.jericx.syncclipboardmobile.quickaction
 
+import android.content.res.Configuration
 import android.os.Bundle
 
 import com.facebook.react.ReactActivity
@@ -37,9 +38,11 @@ class QuickActionActivity : ReactActivity() {
                 fabricEnabled
             ) {
                 override fun getLaunchOptions(): Bundle? {
+                    val isDarkMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
                     return Bundle().apply {
                         val direction = intent?.getStringExtra(EXTRA_DIRECTION) ?: "download"
                         putString("direction", direction)
+                        putString("systemTheme", if (isDarkMode) "dark" else "light")
                     }
                 }
             }
