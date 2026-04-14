@@ -5,14 +5,16 @@
 
 import React, { useState, forwardRef, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, Image, TouchableOpacity, Linking } from 'react-native';
-import { Copy, Download, Share, ExternalLink, Link2, Scissors } from 'react-native-feather';
-import { Ionicons } from '@expo/vector-icons';
+import { Copy, Download, Share, Link2, Scissors } from 'react-native-feather';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { ClipboardItem } from '@/types/clipboard';
 import { useTransferQueueStore } from '@/stores/transferQueueStore';
 import { getHistoryTransferQueue } from '@/services/HistoryTransferQueue';
 import { getProfileId } from '@/services/HistoryAPI';
 import { formatSizeWithType, formatFileSize } from '@/utils';
+
+const ACTION_ICON_SIZE = 15;
 
 interface HistoryListItemProps {
   item: ClipboardItem;
@@ -396,9 +398,9 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                     onPress={() => onToggleStar(item)}
                     hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
                   >
-                    <Ionicons
+                    <MaterialCommunityIcons
                       name={item.starred ? 'star' : 'star-outline'}
-                      size={18}
+                      size={ACTION_ICON_SIZE}
                       color={theme.colors.primary}
                     />
                   </TouchableOpacity>
@@ -409,9 +411,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                     onPress={() => Linking.openURL(detectedUrl)}
                     hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
                   >
-                    <View style={{ transform: [{ scale: 0.6 }] }}>
-                      <Link2 color={theme.colors.primary} />
-                    </View>
+                    <Link2 width={ACTION_ICON_SIZE} height={ACTION_ICON_SIZE} color={theme.colors.primary} />
                   </TouchableOpacity>
                 )}
                 {item.type === 'Text' && onWordPick && item.text && (
@@ -420,9 +420,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                     onPress={() => onWordPick(item.text!)}
                     hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
                   >
-                    <View style={{ transform: [{ scale: 0.6 }] }}>
-                      <Scissors color={theme.colors.primary} />
-                    </View>
+                    <Scissors width={ACTION_ICON_SIZE} height={ACTION_ICON_SIZE} color={theme.colors.primary} />
                   </TouchableOpacity>
                 )}
                 {item.type === 'Text' && (
@@ -431,9 +429,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                     onPress={() => onCopy(item)}
                     hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
                   >
-                    <View style={{ transform: [{ scale: 0.6 }] }}>
-                      <Copy color={theme.colors.primary} />
-                    </View>
+                    <Copy width={ACTION_ICON_SIZE} height={ACTION_ICON_SIZE} color={theme.colors.primary} />
                   </TouchableOpacity>
                 )}
                 {item.type === 'Image' && (
@@ -444,9 +440,11 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                         onPress={() => onOpen(item)}
                         hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
                       >
-                        <View style={{ transform: [{ scale: 0.6 }] }}>
-                          <ExternalLink color={theme.colors.primary} />
-                        </View>
+                        <MaterialCommunityIcons
+                          name="image-search-outline"
+                          size={15}
+                          color={theme.colors.primary}
+                        />
                       </TouchableOpacity>
                     )}
                     {item.fileUri && onSave && (
@@ -455,9 +453,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                         onPress={() => onSave(item)}
                         hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
                       >
-                        <View style={{ transform: [{ scale: 0.6 }] }}>
-                          <Download color={theme.colors.primary} />
-                        </View>
+                        <Download width={15} height={15} color={theme.colors.primary} />
                       </TouchableOpacity>
                     )}
                     {item.isLocalFileReady !== false && (
@@ -466,9 +462,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                         onPress={() => onShare(item)}
                         hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
                       >
-                        <View style={{ transform: [{ scale: 0.6 }] }}>
-                          <Share color={theme.colors.primary} />
-                        </View>
+                        <Share width={15} height={15} color={theme.colors.primary} />
                       </TouchableOpacity>
                     )}
                   </>
@@ -481,9 +475,11 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                         onPress={() => onOpen(item)}
                         hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
                       >
-                        <View style={{ transform: [{ scale: 0.6 }] }}>
-                          <ExternalLink color={theme.colors.primary} />
-                        </View>
+                        <MaterialCommunityIcons
+                          name="file-eye-outline"
+                          size={15}
+                          color={theme.colors.primary}
+                        />
                       </TouchableOpacity>
                     )}
                     {item.fileUri && onSave && (
@@ -492,9 +488,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                         onPress={() => onSave(item)}
                         hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
                       >
-                        <View style={{ transform: [{ scale: 0.6 }] }}>
-                          <Download color={theme.colors.primary} />
-                        </View>
+                        <Download width={15} height={15} color={theme.colors.primary} />
                       </TouchableOpacity>
                     )}
                     {item.isLocalFileReady !== false && (
@@ -503,9 +497,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                         onPress={() => onShare(item)}
                         hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
                       >
-                        <View style={{ transform: [{ scale: 0.6 }] }}>
-                          <Share color={theme.colors.primary} />
-                        </View>
+                        <Share width={15} height={15} color={theme.colors.primary} />
                       </TouchableOpacity>
                     )}
                   </>
@@ -730,7 +722,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   actionButtonIcon: {
-    fontSize: 14,
+    fontSize: ACTION_ICON_SIZE,
   },
   debugRow: {
     flexDirection: 'row',
