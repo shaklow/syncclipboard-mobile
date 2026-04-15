@@ -49,6 +49,8 @@ export interface NativeUtilModuleType {
     fileUri: string | null
   ): string;
   startZipFiles(fileUris: string[], destUri: string): string;
+  isIgnoringBatteryOptimizations(): boolean;
+  requestIgnoreBatteryOptimizations(): boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   addListener(eventName: string, listener: (event: any) => void): EventSubscription;
 }
@@ -64,6 +66,22 @@ export const isNativeHashModuleAvailable = Platform.OS === 'android';
 export function moveTaskToBack(): boolean {
   if (Platform.OS !== 'android') return false;
   return NativeUtilModule.moveTaskToBack();
+}
+
+/**
+ * 检查应用是否已加入电池优化白名单
+ */
+export function isIgnoringBatteryOptimizations(): boolean {
+  if (Platform.OS !== 'android') return true;
+  return NativeUtilModule.isIgnoringBatteryOptimizations();
+}
+
+/**
+ * 请求加入电池优化白名单（弹出系统对话框）
+ */
+export function requestIgnoreBatteryOptimizations(): boolean {
+  if (Platform.OS !== 'android') return false;
+  return NativeUtilModule.requestIgnoreBatteryOptimizations();
 }
 
 export async function nativeCopyFile(srcUri: string, destUri: string): Promise<void> {

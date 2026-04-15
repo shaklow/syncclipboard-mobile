@@ -16,6 +16,10 @@ import type { ClipboardContent } from '@/types/clipboard';
 const VERIFICATION_CODE_REGEX =
   /(.*)((代|授权|验证|动态|校验)码|[【\[].*[】\]]|[Cc][Oo][Dd][Ee]|[Vv]erification\s?([Cc]ode)?)\s?(G-|<#>)?([:：\s是为]|[Ii][Ss]){0,3}[\(（\[【{「]?(([0-9\s]{4,6})|([A-Za-z\d]{5,6})(?!([Vv]erification)?([Cc][Oo][Dd][Ee])|:))[」}】\]）\)]?(?=([^0-9a-zA-Z]|$))(.*)/;
 
+// 重试配置
+const MAX_RETRIES = 3;
+const RETRY_DELAYS = [3_000, 10_000, 30_000]; // 3s, 10s, 30s
+
 class SmsCodeService {
   private static instance: SmsCodeService | null = null;
   private subscription: EventSubscription | null = null;
@@ -89,12 +93,17 @@ class SmsCodeService {
 
     console.log(`[SmsCodeService] Verification code extracted: ${code}`);
 
+    // 1. 复制验证码到本地剪贴板（锁屏时部分设备可能失败，不阻塞上传）
     try {
-      // 1. 复制验证码到本地剪贴板
       await Clipboard.setStringAsync(code);
       console.log(`[SmsCodeService] Copied verification code to clipboard: ${code}`);
+    } catch (clipError) {
+      console.warn('[SmsCodeService] Failed to copy to clipboard (screen locked?):', clipError);
+    }
 
-      // 2. 构建内容并通过同步流程上传（复用 hash 去重逻辑）
+    // 2. 构建内容并通过同步流程上传（复用 hash 去重逻辑）
+    const syncManager = SyncManager.getInstance();
+    try {
       const profileHash = await calculateTextHash(code);
 
       const content: ClipboardContent = {
@@ -105,27 +114,67 @@ class SmsCodeService {
         timestamp: Date.now(),
       };
 
-      const syncManager = SyncManager.getInstance();
       if (!syncManager.getAPIClient()) {
         console.warn('[SmsCodeService] No API client available, cannot upload verification code');
         return;
       }
 
+      await this.uploadWithRetry(syncManager, content, code);
+    } catch (error) {
+      console.error('[SmsCodeService] Failed to upload verification code:', error);
+    } finally {
+      syncManager.setPendingUploadContent(null);
+    }
+  }
+
+  /**
+   * 带重试的上传（应对 Doze 模式下网络限制）
+   */
+  private async uploadWithRetry(
+    syncManager: SyncManager,
+    content: ClipboardContent,
+    code: string
+  ): Promise<void> {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       syncManager.setPendingUploadContent(content);
       const result = await syncManager.sync(SyncDirection.Upload, false);
-      syncManager.setPendingUploadContent(null);
 
       if (result.success && !result.skipped) {
         console.log(`[SmsCodeService] Verification code uploaded: ${code}`);
         ToastAndroid.show(`已上传验证码: ${code}`, ToastAndroid.SHORT);
         syncManager.updateForegroundNotification(`已上传验证码: ${code}`);
-      } else if (result.skipped) {
-        console.log(`[SmsCodeService] Upload skipped (already synced): ${code}`);
-      } else {
-        console.warn(`[SmsCodeService] Upload failed: ${result.error}`);
+        return;
       }
-    } catch (error) {
-      console.error('[SmsCodeService] Failed to upload verification code:', error);
+
+      if (result.skipped) {
+        console.log(`[SmsCodeService] Upload skipped (already synced): ${code}`);
+        return;
+      }
+
+      // 上传失败 — 如果还有重试次数，等待后重试
+      if (attempt < MAX_RETRIES) {
+        const delay = RETRY_DELAYS[attempt] ?? RETRY_DELAYS[RETRY_DELAYS.length - 1];
+        console.warn(
+          `[SmsCodeService] Upload failed (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${result.error}, retrying in ${delay}ms`
+        );
+        syncManager.updateForegroundNotification(
+          `验证码上传重试中: ${code}\n第${attempt + 1}次失败，${Math.round(delay / 1000)}秒后重试…`
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+
+        // 重试前检查服务是否仍然启用
+        if (!this.enabled) {
+          console.log('[SmsCodeService] Service disabled during retry, aborting');
+          return;
+        }
+      } else {
+        console.warn(
+          `[SmsCodeService] Upload failed after ${MAX_RETRIES + 1} attempts: ${result.error}`
+        );
+        syncManager.updateForegroundNotification(
+          `验证码上传失败: ${code}\n已重试${MAX_RETRIES}次，${result.error ?? '未知错误'}`
+        );
+      }
     }
   }
 }

@@ -204,6 +204,8 @@ export const SettingsScreen = () => {
       setPermNotification(notif);
       setPermOverlay(hasOverlayPermission());
       setPermSms(sms);
+      const { isIgnoringBatteryOptimizations } = await import('native-util');
+      setPermBattery(isIgnoringBatteryOptimizations());
     } catch (e) {
       console.warn('[Settings] Failed to check permissions:', e);
     } finally {
@@ -262,7 +264,9 @@ export const SettingsScreen = () => {
   const [permNotification, setPermNotification] = useState<boolean>(false);
   const [permOverlay, setPermOverlay] = useState<boolean>(false);
   const [permSms, setPermSms] = useState<boolean>(false);
+  const [permBattery, setPermBattery] = useState<boolean>(false);
   const [isRefreshingPermissions, setIsRefreshingPermissions] = useState<boolean>(false);
+  const hasBatteryOptRequested = useRef<boolean>(false);
 
   // 目录对象
   const cacheDir = CLIPBOARD_TEMP_DIR;
@@ -1442,7 +1446,7 @@ export const SettingsScreen = () => {
                 />
               </View>
 
-              <View style={styles.settingRowNoBorder}>
+              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
                 <View style={styles.settingInfo}>
                   <Text style={[styles.settingLabel, { color: theme.colors.text }]}>短信权限</Text>
                   <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
@@ -1454,6 +1458,41 @@ export const SettingsScreen = () => {
                   onValueChange={() => Linking.openSettings()}
                   trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
                   thumbColor={permSms ? theme.colors.surface : theme.colors.textTertiary}
+                />
+              </View>
+
+              <View style={styles.settingRowNoBorder}>
+                <View style={styles.settingInfo}>
+                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                    忽略电池优化
+                  </Text>
+                  <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
+                    防止省电模式中断后台同步
+                  </Text>
+                </View>
+                <Switch
+                  value={permBattery}
+                  onValueChange={async () => {
+                    const { requestIgnoreBatteryOptimizations } = await import('native-util');
+                    if (hasBatteryOptRequested.current) {
+                      Alert.alert(
+                        '无法唤起系统弹窗',
+                        '系统限制每次安装仅允许弹出一次电池优化请求，请前往系统设置手动关闭电池优化。',
+                        [
+                          {
+                            text: '前往设置',
+                            onPress: () => Linking.openSettings(),
+                          },
+                          { text: '取消', style: 'cancel' },
+                        ]
+                      );
+                      return;
+                    }
+                    requestIgnoreBatteryOptimizations();
+                    hasBatteryOptRequested.current = true;
+                  }}
+                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
+                  thumbColor={permBattery ? theme.colors.surface : theme.colors.textTertiary}
                 />
               </View>
             </View>

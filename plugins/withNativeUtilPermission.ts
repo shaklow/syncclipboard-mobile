@@ -18,7 +18,10 @@ function addNativeUtilPermission(
     manifest['uses-permission'] = [];
   }
 
-  const requiredPermissions = ['android.permission.POST_NOTIFICATIONS'];
+  const requiredPermissions = [
+    'android.permission.POST_NOTIFICATIONS',
+    'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
+  ];
 
   for (const perm of requiredPermissions) {
     const exists = manifest['uses-permission'].some((p) => p.$?.['android:name'] === perm);

@@ -2,6 +2,10 @@ package expo.modules.nativeutil
 
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
+import android.content.Context
+import android.content.Intent
+import android.provider.Settings
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
@@ -600,6 +604,27 @@ class NativeUtilModule : Module() {
             }
 
             return@Function jobId
+        }
+
+        Function("isIgnoringBatteryOptimizations") {
+            val context = appContext.reactContext ?: return@Function false
+            val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                ?: return@Function false
+            pm.isIgnoringBatteryOptimizations(context.packageName)
+        }
+
+        Function("requestIgnoreBatteryOptimizations") {
+            val context = appContext.reactContext ?: return@Function false
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:${context.packageName}")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            try {
+                context.startActivity(intent)
+                true
+            } catch (_: Exception) {
+                false
+            }
         }
 
     }
