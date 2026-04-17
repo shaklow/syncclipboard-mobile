@@ -1,21 +1,15 @@
 import { Platform } from 'react-native';
-import { requireNativeModule, type EventSubscription } from 'expo-modules-core';
+import { requireNativeModule } from 'expo-modules-core';
 
 const MODULE_NAME = 'SmsForwarderModule';
 
 interface SmsForwarderModuleType {
-  startListening(): void;
-  stopListening(): void;
-  isListening(): boolean;
   readRecentSms(count: number): SmsMessage[];
   setStaticReceiverEnabled(enabled: boolean): boolean;
   isStaticReceiverEnabled(): boolean;
-  addListener(eventName: string, listener: (event: SmsReceivedEvent) => void): EventSubscription;
-}
-
-export interface SmsReceivedEvent {
-  from: string;
-  body: string;
+  updateSmsUploadNotification(text: string): boolean;
+  startSmsUploadCountdown(code: string): boolean;
+  extractVerificationCode(body: string): string | null;
 }
 
 export interface SmsMessage {
@@ -25,34 +19,6 @@ export interface SmsMessage {
 
 const NativeModule: SmsForwarderModuleType | null =
   Platform.OS === 'android' ? requireNativeModule(MODULE_NAME) : null;
-
-export function startListening(): void {
-  if (NativeModule) {
-    NativeModule.startListening();
-  }
-}
-
-export function stopListening(): void {
-  if (NativeModule) {
-    NativeModule.stopListening();
-  }
-}
-
-export function isListening(): boolean {
-  if (NativeModule) {
-    return NativeModule.isListening();
-  }
-  return false;
-}
-
-export function addSmsListener(
-  listener: (event: SmsReceivedEvent) => void
-): EventSubscription | null {
-  if (NativeModule) {
-    return NativeModule.addListener('onSmsReceived', listener);
-  }
-  return null;
-}
 
 export function readRecentSms(count: number): SmsMessage[] {
   if (NativeModule) {
@@ -73,4 +39,25 @@ export function isStaticReceiverEnabled(): boolean {
     return NativeModule.isStaticReceiverEnabled();
   }
   return false;
+}
+
+export function updateSmsUploadNotification(text: string): boolean {
+  if (NativeModule) {
+    return NativeModule.updateSmsUploadNotification(text);
+  }
+  return false;
+}
+
+export function startSmsUploadCountdown(code: string): boolean {
+  if (NativeModule) {
+    return NativeModule.startSmsUploadCountdown(code);
+  }
+  return false;
+}
+
+export function extractVerificationCode(body: string): string | null {
+  if (NativeModule) {
+    return NativeModule.extractVerificationCode(body);
+  }
+  return null;
 }

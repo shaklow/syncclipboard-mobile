@@ -63,13 +63,23 @@ class BackgroundServiceManager {
     return (
       !tempDisabled &&
       !!config?.enableBackgroundTasks &&
-      !!config?.enableForegroundNotification &&
-      !!(
-        config?.enableBackgroundDownload ||
-        config?.enableBackgroundUpload ||
-        config?.enableSmsForwarding
-      )
+      !!(config?.enableBackgroundDownload || config?.enableBackgroundUpload)
     );
+  }
+
+  /**
+   * 更新静态短信接收器状态。
+   * SMS 转发不受后台任务总开关控制，仅由 enableSmsForwarding 决定。
+   */
+  private _updateSmsReceiver(): void {
+    try {
+      const { useSettingsStore } = require('../stores/settingsStore');
+      const config = useSettingsStore.getState().config;
+      const { setStaticReceiverEnabled } = require('sms-forwarder');
+      setStaticReceiverEnabled(!!config?.enableSmsForwarding);
+    } catch (e) {
+      console.error('[BackgroundServiceManager] Failed to toggle SMS receiver:', e);
+    }
   }
 
   // ─── 公开 API ─────────────────────────────────────────────
@@ -91,6 +101,9 @@ class BackgroundServiceManager {
     if (!useSettingsStore.getState().isLoaded) {
       await useSettingsStore.getState().loadConfig();
     }
+
+    // SMS 转发不受后台任务总开关控制，始终根据 enableSmsForwarding 独立管理
+    this._updateSmsReceiver();
 
     if (!this.getShouldRun()) {
       await this.stop();
@@ -134,12 +147,6 @@ class BackgroundServiceManager {
       this.heartbeatTag = null;
     }
 
-    // 停止 SMS 服务
-    try {
-      const { getSmsCodeService } = require('./SmsCodeService');
-      await getSmsCodeService().disable();
-    } catch {}
-
     // 停止前台服务
     try {
       const ForegroundService = require('foreground-service');
@@ -152,6 +159,9 @@ class BackgroundServiceManager {
    * 可以从 HomeScreen 或 settings 变化处调用，也可以靠订阅自动触发。
    */
   async refresh(): Promise<void> {
+    // SMS 转发不受后台任务总开关控制，始终独立更新
+    this._updateSmsReceiver();
+
     if (this.getShouldRun()) {
       if (!this.running) {
         this.running = true;
@@ -171,30 +181,35 @@ class BackgroundServiceManager {
     const { useSettingsStore } = require('../stores/settingsStore');
     const config = useSettingsStore.getState().config;
 
-    // 1. 启动前台服务
-    try {
-      const ForegroundService = require('foreground-service');
-      ForegroundService.startService();
+    // 1. 按需启动前台服务（仅在 enableForegroundNotification 开启时显示常驻通知）
+    if (config?.enableForegroundNotification) {
+      try {
+        const ForegroundService = require('foreground-service');
+        ForegroundService.startService();
 
-      // 记录后台任务启动时间
+        // 监听通知栏"停止"和"临时停止"按钮
+        this.stopSub = ForegroundService.addStopListener(() => {
+          useSettingsStore.getState().setEnableBackgroundTasks(false);
+        });
+        this.tempStopSub = ForegroundService.addTempStopListener(() => {
+          useSettingsStore.getState().setTempDisabledBackgroundTasks(true);
+        });
+      } catch (e) {
+        console.error('[BackgroundServiceManager] Failed to start foreground service:', e);
+      }
+    }
+
+    // 无论是否显示前台通知，都记录后台任务启动时间和启动心跳
+    try {
       const { useStatisticsStore } = require('../stores/statisticsStore');
       await useStatisticsStore.getState().recordBackgroundTaskStart();
 
-      // 启动心跳（每 60s 更新持续时间统计）
       const { setTimer: st } = require('native-timer');
       this.heartbeatTag = st(() => {
         useStatisticsStore.getState().updateHeartbeat();
       }, 60_000);
-
-      // 监听通知栏"停止"和"临时停止"按钮
-      this.stopSub = ForegroundService.addStopListener(() => {
-        useSettingsStore.getState().setEnableBackgroundTasks(false);
-      });
-      this.tempStopSub = ForegroundService.addTempStopListener(() => {
-        useSettingsStore.getState().setTempDisabledBackgroundTasks(true);
-      });
     } catch (e) {
-      console.error('[BackgroundServiceManager] Failed to start foreground service:', e);
+      console.error('[BackgroundServiceManager] Failed to start statistics/heartbeat:', e);
     }
 
     // 2. 初始化 SyncManager（提供 API 客户端，支持后台上传/下载）
@@ -224,16 +239,6 @@ class BackgroundServiceManager {
       }
     }
 
-    // 5. 启动 SMS 验证码服务（含 emitPendingSms，处理堆积的验证码）
-    if (config?.enableSmsForwarding) {
-      try {
-        const { getSmsCodeService } = require('./SmsCodeService');
-        await getSmsCodeService().enable();
-      } catch (e) {
-        console.error('[BackgroundServiceManager] Failed to enable SMS service:', e);
-      }
-    }
-
     console.log('[BackgroundServiceManager] All background services started');
   }
 
@@ -241,16 +246,8 @@ class BackgroundServiceManager {
     const { useSettingsStore } = require('../stores/settingsStore');
     const config = useSettingsStore.getState().config;
 
-    // 更新 SMS 服务状态
-    try {
-      const { getSmsCodeService } = require('./SmsCodeService');
-      const smsService = getSmsCodeService();
-      if (config?.enableBackgroundTasks && config?.enableSmsForwarding) {
-        await smsService.enable();
-      } else {
-        await smsService.disable();
-      }
-    } catch {}
+    // SMS 转发不受后台任务总开关控制
+    this._updateSmsReceiver();
 
     // 更新后台下载（SignalR vs 轮询）
     const shouldDownload = config?.enableBackgroundTasks && config?.enableBackgroundDownload;

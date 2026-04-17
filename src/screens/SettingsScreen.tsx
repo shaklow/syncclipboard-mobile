@@ -39,7 +39,7 @@ import {
 } from '@/services';
 import { Plus, RefreshCw, Check, ChevronDown, ChevronUp } from 'react-native-feather';
 import { hasOverlayPermission, requestOverlayPermission } from 'clipboard-overlay';
-import { getSmsCodeService } from '@/services/SmsCodeService';
+import { extractVerificationCode } from '@/tasks/SmsUploadTask';
 
 export const SettingsScreen = () => {
   const { theme, themeMode, setThemeMode } = useTheme();
@@ -716,8 +716,7 @@ export const SettingsScreen = () => {
 
   // 测试验证码短信提取
   const handleTestSmsCode = () => {
-    const smsService = getSmsCodeService();
-    const code = smsService.extractVerificationCode(smsTestInput);
+    const code = extractVerificationCode(smsTestInput);
     if (code) {
       Alert.alert('提取成功', `验证码: ${code}`);
     } else {
@@ -1343,7 +1342,7 @@ export const SettingsScreen = () => {
                 />
               </View>
 
-              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
+              <View style={styles.settingRowNoBorder}>
                 <View style={styles.settingInfo}>
                   <Text
                     style={[
@@ -1370,32 +1369,36 @@ export const SettingsScreen = () => {
                   disabled={!localBackgroundTasksEnabled}
                 />
               </View>
+            </View>
+          </View>
+        )}
 
+        {/* 短信自动化部分 */}
+        {Platform.OS === 'android' && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderBase}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>短信自动化</Text>
+            </View>
+
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider },
+              ]}
+            >
               <View style={styles.settingRowNoBorder}>
                 <View style={styles.settingInfo}>
-                  <Text
-                    style={[
-                      styles.settingLabel,
-                      {
-                        color: localBackgroundTasksEnabled
-                          ? theme.colors.text
-                          : theme.colors.textTertiary,
-                      },
-                    ]}
-                  >
+                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
                     自动上传短信验证码
                   </Text>
                 </View>
                 <Switch
-                  value={localBackgroundTasksEnabled && localSmsForwardingEnabled}
+                  value={localSmsForwardingEnabled}
                   onValueChange={handleToggleSmsForwarding}
                   trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
                   thumbColor={
-                    localBackgroundTasksEnabled && localSmsForwardingEnabled
-                      ? theme.colors.surface
-                      : theme.colors.textTertiary
+                    localSmsForwardingEnabled ? theme.colors.surface : theme.colors.textTertiary
                   }
-                  disabled={!localBackgroundTasksEnabled}
                 />
               </View>
             </View>
