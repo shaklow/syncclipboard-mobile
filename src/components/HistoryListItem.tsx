@@ -80,12 +80,13 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
       if (imageAutoDownload === 'off') return;
 
       const doAutoDownload = async () => {
-        const netInfo = await (await import('@react-native-community/netinfo')).default.fetch();
-        const isWifiNow = netInfo.type === 'wifi';
-        if (imageAutoDownload === 'wifi' && !isWifiNow) return;
-
         autoDownloadTriggered.current = true;
+
         try {
+          const netInfo = await (await import('@react-native-community/netinfo')).default.fetch();
+          const isWifiNow = netInfo.type === 'wifi';
+          if (imageAutoDownload === 'wifi' && !isWifiNow) return;
+
           const pid = getProfileId(item.type, item.profileHash);
           const queue = getHistoryTransferQueue();
           queue.start();
