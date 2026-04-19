@@ -7,7 +7,7 @@ import android.content.Intent
 import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
-import android.util.Log
+import expo.modules.nativeutil.NativeLogger
 
 @SuppressLint("StartActivityAndCollapseDeprecated")
 class UploadTileService : TileService() {
@@ -30,7 +30,7 @@ class UploadTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
-        Log.d(TAG, "Quick Settings Tile clicked")
+        NativeLogger.d(TAG, "Quick Settings Tile clicked")
         try {
             val intent = Intent().apply {
                 component = ComponentName(
@@ -56,7 +56,7 @@ class UploadTileService : TileService() {
                 startActivityAndCollapse(intent)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error handling tile click", e)
+            NativeLogger.e(TAG, "Error handling tile click", e)
         }
     }
 

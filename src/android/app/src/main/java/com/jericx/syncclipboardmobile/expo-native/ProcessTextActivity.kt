@@ -4,7 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.util.Log
+import expo.modules.nativeutil.NativeLogger
 
 /**
  * Trampoline Activity for Android "Process Text" floating toolbar action.
@@ -22,12 +22,12 @@ class ProcessTextActivity : Activity() {
 
         val text = intent?.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()
         if (text.isNullOrEmpty()) {
-            Log.w(TAG, "No text received in PROCESS_TEXT intent")
+            NativeLogger.w(TAG, "No text received in PROCESS_TEXT intent")
             finish()
             return
         }
 
-        Log.d(TAG, "Received process text: ${text.take(50)}")
+        NativeLogger.d(TAG, "Received process text: ${text.take(50)}")
 
         val encodedText = Uri.encode(text)
         val url = "syncclipboard://process-text?text=$encodedText"
@@ -41,7 +41,7 @@ class ProcessTextActivity : Activity() {
         try {
             startActivity(mainIntent)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to start main activity", e)
+            NativeLogger.e(TAG, "Failed to start main activity", e)
         }
 
         finish()

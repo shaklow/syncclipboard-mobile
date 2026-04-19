@@ -7,6 +7,7 @@ import android.os.IBinder
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.Promise
+import expo.modules.nativeutil.NativeLogger
 import rikka.shizuku.Shizuku
 
 /**
@@ -45,18 +46,18 @@ class ShizukuClipboardModule : Module() {
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            android.util.Log.i(TAG, "UserService connected: ${name?.className}")
+            NativeLogger.i(TAG, "UserService connected: ${name?.className}")
             if (service != null && service.pingBinder()) {
                 clipboardService = IClipboardUserService.Stub.asInterface(service)
                 serviceConnected = true
-                android.util.Log.i(TAG, "UserService bound successfully")
+                NativeLogger.i(TAG, "UserService bound successfully")
             } else {
-                android.util.Log.e(TAG, "UserService binder is null or dead")
+                NativeLogger.e(TAG, "UserService binder is null or dead")
             }
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
-            android.util.Log.w(TAG, "UserService disconnected")
+            NativeLogger.w(TAG, "UserService disconnected")
             clipboardService = null
             serviceConnected = false
         }
@@ -73,7 +74,7 @@ class ShizukuClipboardModule : Module() {
         }
 
     private val binderReceivedListener = Shizuku.OnBinderReceivedListener {
-        android.util.Log.i(TAG, "Shizuku binder received")
+        NativeLogger.i(TAG, "Shizuku binder received")
         // 当 Shizuku 连接时，如果已有权限，自动绑定 UserService
         if (hasPermission()) {
             bindUserService()
@@ -81,7 +82,7 @@ class ShizukuClipboardModule : Module() {
     }
 
     private val binderDeadListener = Shizuku.OnBinderDeadListener {
-        android.util.Log.w(TAG, "Shizuku binder dead")
+        NativeLogger.w(TAG, "Shizuku binder dead")
         permissionGranted = false
         clipboardService = null
         serviceConnected = false
@@ -105,10 +106,10 @@ class ShizukuClipboardModule : Module() {
     private fun bindUserService() {
         if (serviceConnected) return
         try {
-            android.util.Log.i(TAG, "Binding UserService...")
+            NativeLogger.i(TAG, "Binding UserService...")
             Shizuku.bindUserService(userServiceArgs, serviceConnection)
         } catch (e: Exception) {
-            android.util.Log.e(TAG, "Failed to bind UserService", e)
+            NativeLogger.e(TAG, "Failed to bind UserService", e)
         }
     }
 
@@ -117,7 +118,7 @@ class ShizukuClipboardModule : Module() {
         try {
             Shizuku.unbindUserService(userServiceArgs, serviceConnection, true)
         } catch (e: Exception) {
-            android.util.Log.e(TAG, "Failed to unbind UserService", e)
+            NativeLogger.e(TAG, "Failed to unbind UserService", e)
         }
         clipboardService = null
         serviceConnected = false
@@ -146,7 +147,7 @@ class ShizukuClipboardModule : Module() {
                 Shizuku.addBinderReceivedListenerSticky(binderReceivedListener)
                 Shizuku.addBinderDeadListener(binderDeadListener)
             } catch (e: Exception) {
-                android.util.Log.e(TAG, "Failed to register Shizuku listeners", e)
+                NativeLogger.e(TAG, "Failed to register Shizuku listeners", e)
             }
         }
 
@@ -157,7 +158,7 @@ class ShizukuClipboardModule : Module() {
                 Shizuku.removeBinderReceivedListener(binderReceivedListener)
                 Shizuku.removeBinderDeadListener(binderDeadListener)
             } catch (e: Exception) {
-                android.util.Log.e(TAG, "Failed to cleanup Shizuku listeners", e)
+                NativeLogger.e(TAG, "Failed to cleanup Shizuku listeners", e)
             }
         }
 
@@ -180,25 +181,25 @@ class ShizukuClipboardModule : Module() {
                 Shizuku.requestPermission(REQUEST_CODE_PERMISSION)
                 return@Function true
             } catch (e: Exception) {
-                android.util.Log.e(TAG, "Failed to request Shizuku permission", e)
+                NativeLogger.e(TAG, "Failed to request Shizuku permission", e)
                 return@Function false
             }
         }
 
         AsyncFunction("getStringViaShizuku") { promise: Promise ->
             try {
-                android.util.Log.i(TAG, "getStringViaShizuku: called")
+                NativeLogger.i(TAG, "getStringViaShizuku: called")
                 val service = ensureServiceConnected()
                 if (service == null) {
-                    android.util.Log.e(TAG, "getStringViaShizuku: UserService not connected")
+                    NativeLogger.e(TAG, "getStringViaShizuku: UserService not connected")
                     promise.resolve("")
                     return@AsyncFunction
                 }
                 val text = service.primaryClipText ?: ""
-                android.util.Log.i(TAG, "getStringViaShizuku: result length=${text.length}")
+                NativeLogger.i(TAG, "getStringViaShizuku: result length=${text.length}")
                 promise.resolve(text)
             } catch (e: Exception) {
-                android.util.Log.e(TAG, "getStringViaShizuku failed", e)
+                NativeLogger.e(TAG, "getStringViaShizuku failed", e)
                 promise.resolve("")
             }
         }
@@ -212,7 +213,7 @@ class ShizukuClipboardModule : Module() {
                 }
                 promise.resolve(service.hasPrimaryClipText())
             } catch (e: Exception) {
-                android.util.Log.e(TAG, "hasStringViaShizuku failed", e)
+                NativeLogger.e(TAG, "hasStringViaShizuku failed", e)
                 promise.resolve(false)
             }
         }
@@ -226,7 +227,7 @@ class ShizukuClipboardModule : Module() {
                 }
                 promise.resolve(service.hasPrimaryClipImage())
             } catch (e: Exception) {
-                android.util.Log.e(TAG, "hasImageViaShizuku failed", e)
+                NativeLogger.e(TAG, "hasImageViaShizuku failed", e)
                 promise.resolve(false)
             }
         }
@@ -241,7 +242,7 @@ class ShizukuClipboardModule : Module() {
                 val uri = service.primaryClipImageUri
                 promise.resolve(if (uri.isNullOrEmpty()) null else uri)
             } catch (e: Exception) {
-                android.util.Log.e(TAG, "getImageUriViaShizuku failed", e)
+                NativeLogger.e(TAG, "getImageUriViaShizuku failed", e)
                 promise.resolve(null)
             }
         }

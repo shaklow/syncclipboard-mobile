@@ -11,7 +11,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.util.Log
+import expo.modules.nativeutil.NativeLogger
 import androidx.core.app.NotificationCompat
 
 class SyncForegroundService : Service() {
@@ -42,39 +42,39 @@ class SyncForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "Service onCreate")
+        NativeLogger.d(TAG, "Service onCreate")
         createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "onStartCommand action=${intent?.action} flags=$flags startId=$startId")
+        NativeLogger.d(TAG, "onStartCommand action=${intent?.action} flags=$flags startId=$startId")
         when (intent?.action) {
             ACTION_START, null -> {
-                Log.d(TAG, "Starting foreground, intent action=${intent?.action}")
+                NativeLogger.d(TAG, "Starting foreground, intent action=${intent?.action}")
                 val notification = createNotification("后台任务运行中")
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     startForeground(NOTIFY_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
                 } else {
                     startForeground(NOTIFY_ID, notification)
                 }
-                Log.d(TAG, "startForeground called successfully")
+                NativeLogger.d(TAG, "startForeground called successfully")
                 isRunning = true
 
                 // 系统 START_STICKY 重启时 intent 为 null，延迟检查 JS 线程是否存活
                 if (intent == null) {
-                    Log.w(TAG, "Service restarted by system (intent=null), checking JS runtime...")
+                    NativeLogger.w(TAG, "Service restarted by system (intent=null), checking JS runtime...")
                     Handler(Looper.getMainLooper()).postDelayed({
                         if (!ForegroundServiceModule.isJsRuntimeAlive()) {
-                            Log.w(TAG, "JS runtime not available, showing restart notification")
+                            NativeLogger.w(TAG, "JS runtime not available, showing restart notification")
                             showRestartNotification()
                         } else {
-                            Log.d(TAG, "JS runtime is alive after system restart")
+                            NativeLogger.d(TAG, "JS runtime is alive after system restart")
                         }
                     }, 3000)
                 }
             }
             ACTION_STOP -> {
-                Log.d(TAG, "Stopping foreground service (permanent)")
+                NativeLogger.d(TAG, "Stopping foreground service (permanent)")
                 stoppedByUser = true
                 if (!isRunning) {
                     val notification = createNotification("正在停止...")
@@ -91,7 +91,7 @@ class SyncForegroundService : Service() {
                 ForegroundServiceModule.sendStopEvent()
             }
             ACTION_TEMP_STOP -> {
-                Log.d(TAG, "Stopping foreground service (temporary)")
+                NativeLogger.d(TAG, "Stopping foreground service (temporary)")
                 stoppedByUser = true
                 if (!isRunning) {
                     val notification = createNotification("正在停止...")
@@ -128,12 +128,12 @@ class SyncForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        Log.d(TAG, "onDestroy called, stoppedByUser=$stoppedByUser, isRunning=$isRunning")
+        NativeLogger.d(TAG, "onDestroy called, stoppedByUser=$stoppedByUser, isRunning=$isRunning")
         val wasRunning = isRunning
         isRunning = false
         // 非用户主动停止且之前确实在运行 → 可能被系统杀死，发通知引导重启
         if (!stoppedByUser && wasRunning) {
-            Log.w(TAG, "Service destroyed unexpectedly, showing restart notification")
+            NativeLogger.w(TAG, "Service destroyed unexpectedly, showing restart notification")
             showRestartNotification()
         }
         stoppedByUser = false
@@ -189,7 +189,7 @@ class SyncForegroundService : Service() {
             ).takeIf { it != 0 }
             ?: android.R.drawable.ic_menu_info_details
 
-        Log.d(TAG, "Notification icon resId=$iconResId")
+        NativeLogger.d(TAG, "Notification icon resId=$iconResId")
 
         // 内容以 \n 分割为标题和正文
         val lines = content.split("\n", limit = 2)

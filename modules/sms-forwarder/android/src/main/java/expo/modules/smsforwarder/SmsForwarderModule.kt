@@ -3,7 +3,7 @@ package expo.modules.smsforwarder
 import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.util.Log
+import expo.modules.nativeutil.NativeLogger
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
@@ -67,7 +67,7 @@ class SmsForwarderModule : Module() {
                 newState,
                 PackageManager.DONT_KILL_APP
             )
-            Log.d(TAG, "StaticSmsReceiver enabled=$enabled")
+            NativeLogger.d(TAG, "StaticSmsReceiver enabled=$enabled")
             true
         }
 

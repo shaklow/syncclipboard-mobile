@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.provider.Telephony
-import android.util.Log
+import expo.modules.nativeutil.NativeLogger
 import com.facebook.react.HeadlessJsTaskService
 
 /**
@@ -30,11 +30,11 @@ class StaticSmsReceiver : BroadcastReceiver() {
         val from = messages[0].displayOriginatingAddress ?: ""
         val body = messages.joinToString("") { it.messageBody ?: "" }
 
-        Log.d(TAG, "Static receiver got SMS from=$from")
+        NativeLogger.d(TAG, "Static receiver got SMS from=$from")
 
         // 仅含验证码的短信才启动前台服务
         if (!VerificationCodeExtractor.contains(body)) {
-            Log.d(TAG, "SMS does not contain verification code, skipping")
+            NativeLogger.d(TAG, "SMS does not contain verification code, skipping")
             return
         }
 
@@ -57,9 +57,9 @@ class StaticSmsReceiver : BroadcastReceiver() {
                 context.startService(serviceIntent)
             }
             HeadlessJsTaskService.acquireWakeLockNow(context)
-            Log.d(TAG, "Headless task service started for SMS from=$from")
+            NativeLogger.d(TAG, "Headless task service started for SMS from=$from")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to start headless task service", e)
+            NativeLogger.e(TAG, "Failed to start headless task service", e)
         }
     }
 }

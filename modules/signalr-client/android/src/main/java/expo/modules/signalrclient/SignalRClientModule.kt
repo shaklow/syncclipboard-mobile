@@ -3,7 +3,7 @@ package expo.modules.signalrclient
 import android.os.Handler
 import android.os.Looper
 import android.util.Base64
-import android.util.Log
+import expo.modules.nativeutil.NativeLogger
 import com.google.gson.JsonObject
 import com.microsoft.signalr.HubConnection
 import com.microsoft.signalr.HubConnectionBuilder
@@ -60,7 +60,7 @@ class SignalRClientModule : Module() {
         if (isConnecting) return
         if (hubConnection?.connectionState == HubConnectionState.CONNECTED &&
             currentUrl == url && currentUsername == username) {
-            Log.d(TAG, "Already connected to $url")
+            NativeLogger.d(TAG, "Already connected to $url")
             return
         }
 
@@ -75,7 +75,7 @@ class SignalRClientModule : Module() {
         val credentials = "$username:$password"
         val encodedCredentials = Base64.encodeToString(credentials.toByteArray(), Base64.NO_WRAP)
 
-        Log.d(TAG, "Connecting to SignalR hub: $hubUrl")
+        NativeLogger.d(TAG, "Connecting to SignalR hub: $hubUrl")
 
         try {
             val connection = HubConnectionBuilder
@@ -86,7 +86,7 @@ class SignalRClientModule : Module() {
                 .build()
 
             connection.on("RemoteProfileChanged", { profileJson: JsonObject ->
-                Log.d(TAG, "RemoteProfileChanged received")
+                NativeLogger.d(TAG, "RemoteProfileChanged received")
                 handler.post {
                     sendEvent("onProfileChanged", mapOf(
                         "type" to getJsonString(profileJson, "Type", "Text"),
@@ -100,7 +100,7 @@ class SignalRClientModule : Module() {
             }, JsonObject::class.java)
 
             connection.on("RemoteHistoryChanged", { historyJson: JsonObject ->
-                Log.d(TAG, "RemoteHistoryChanged received")
+                NativeLogger.d(TAG, "RemoteHistoryChanged received")
                 handler.post {
                     sendEvent("onHistoryChanged", mapOf(
                         "hash" to getJsonString(historyJson, "Hash", ""),
@@ -120,7 +120,7 @@ class SignalRClientModule : Module() {
             }, JsonObject::class.java)
 
             connection.onClosed { error ->
-                Log.d(TAG, "SignalR connection closed: ${error?.message}")
+                NativeLogger.d(TAG, "SignalR connection closed: ${error?.message}")
                 handler.post {
                     sendEvent("onStateChanged", mapOf("state" to "DISCONNECTED"))
                 }
@@ -136,13 +136,13 @@ class SignalRClientModule : Module() {
                     connection.start().blockingAwait()
                     reconnectAttempt = 0
                     isConnecting = false
-                    Log.d(TAG, "SignalR connected successfully")
+                    NativeLogger.d(TAG, "SignalR connected successfully")
                     handler.post {
                         sendEvent("onStateChanged", mapOf("state" to "CONNECTED"))
                     }
                 } catch (e: Exception) {
                     isConnecting = false
-                    Log.e(TAG, "SignalR connection failed", e)
+                    NativeLogger.e(TAG, "SignalR connection failed", e)
                     handler.post {
                         sendEvent("onStateChanged", mapOf("state" to "DISCONNECTED"))
                     }
@@ -152,7 +152,7 @@ class SignalRClientModule : Module() {
 
         } catch (e: Exception) {
             isConnecting = false
-            Log.e(TAG, "Failed to create SignalR connection", e)
+            NativeLogger.e(TAG, "Failed to create SignalR connection", e)
         }
     }
 
@@ -172,12 +172,12 @@ class SignalRClientModule : Module() {
                         try {
                             conn.stop().blockingAwait()
                         } catch (e: Exception) {
-                            Log.e(TAG, "Error stopping SignalR", e)
+                            NativeLogger.e(TAG, "Error stopping SignalR", e)
                         }
                     }.start()
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error during SignalR disconnect", e)
+                NativeLogger.e(TAG, "Error during SignalR disconnect", e)
             }
         }
         hubConnection = null
@@ -187,14 +187,14 @@ class SignalRClientModule : Module() {
     private fun scheduleReconnect() {
         if (currentUrl == null) return
         if (reconnectAttempt >= maxReconnectAttempts) {
-            Log.d(TAG, "Max reconnect attempts reached")
+            NativeLogger.d(TAG, "Max reconnect attempts reached")
             return
         }
 
         cancelReconnect()
         val delayMs = minOf(2000L * (1L shl reconnectAttempt), 60000L)
         reconnectAttempt++
-        Log.d(TAG, "Scheduling SignalR reconnect attempt $reconnectAttempt in ${delayMs}ms")
+        NativeLogger.d(TAG, "Scheduling SignalR reconnect attempt $reconnectAttempt in ${delayMs}ms")
 
         val runnable = Runnable {
             val url = currentUrl ?: return@Runnable

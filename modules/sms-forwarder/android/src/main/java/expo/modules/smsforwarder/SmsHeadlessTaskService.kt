@@ -8,7 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
+import expo.modules.nativeutil.NativeLogger
 import androidx.core.app.NotificationCompat
 import com.facebook.react.HeadlessJsTaskService
 import com.facebook.react.bridge.Arguments
@@ -70,7 +70,7 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
          * 由 [onHeadlessJsTaskFinish] 兆底处理。
          */
         fun startCountdown(code: String) {
-            Log.d(TAG, "startCountdown called with code=$code")
+            NativeLogger.d(TAG, "startCountdown called with code=$code")
             pendingSuccessCode = code
             // 主路径：直接通过服务实例发送成功通知
             instance?.let { service ->
@@ -142,13 +142,13 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
         instance = this
         pendingSuccessCode = null
         startForeground(NOTIFICATION_ID, buildStaticNotification(this, "SyncClipboard", "正在处理短信验证码…"))
-        Log.d(TAG, "SmsHeadlessTaskService created, foreground notification posted")
+        NativeLogger.d(TAG, "SmsHeadlessTaskService created, foreground notification posted")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // "取消"按钮触发
         if (intent?.action == ACTION_DISMISS) {
-            Log.d(TAG, "Dismiss action received, stopping service")
+            NativeLogger.d(TAG, "Dismiss action received, stopping service")
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
@@ -156,7 +156,7 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
         // 新 SMS 到来 → 重置成功状态
         if (isSuccessPosted) {
             isSuccessPosted = false
-            Log.d(TAG, "New SMS arrived, resetting success state")
+            NativeLogger.d(TAG, "New SMS arrived, resetting success state")
         }
         return super.onStartCommand(intent, flags, startId)
     }
@@ -167,7 +167,7 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
         val body = extras.getString("body", "")
         if (body.isNullOrEmpty()) return null
 
-        Log.d(TAG, "Creating headless task config for SMS from=$from")
+        NativeLogger.d(TAG, "Creating headless task config for SMS from=$from")
 
         return HeadlessJsTaskConfig(
             TASK_NAME,
@@ -180,17 +180,17 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
     override fun onHeadlessJsTaskFinish(taskId: Int) {
         if (isSuccessPosted) {
             // 主路径已发送成功通知，不需要额外操作
-            Log.d(TAG, "Headless task finished, success notification already posted")
+            NativeLogger.d(TAG, "Headless task finished, success notification already posted")
             return
         }
         // 兆底：检查 pendingSuccessCode（处理桥接异步调用延迟的情况）
         val code = pendingSuccessCode
         if (code != null) {
             pendingSuccessCode = null
-            Log.d(TAG, "Headless task finished, fallback: posting success notification for code=$code")
+            NativeLogger.d(TAG, "Headless task finished, fallback: posting success notification for code=$code")
             postSuccessNotification(code)
         } else {
-            Log.d(TAG, "Headless task finished, no success, stopping service")
+            NativeLogger.d(TAG, "Headless task finished, no success, stopping service")
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
@@ -202,7 +202,7 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
     }
 
     private fun postSuccessNotification(code: String) {
-        Log.d(TAG, "Posting success notification for code=$code, stopping service")
+        NativeLogger.d(TAG, "Posting success notification for code=$code, stopping service")
         isSuccessPosted = true
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
         ensureNotificationChannel(this, nm)
