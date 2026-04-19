@@ -6,7 +6,13 @@
 
 import axios, { AxiosInstance } from 'axios';
 import { sha256 } from 'js-sha256';
-import { nativeUploadFile, nativeDownloadFile, type ProgressInfo } from 'native-util';
+import {
+  nativeUploadFile,
+  nativeDownloadFile,
+  nativeCalculateStringMD5Base64,
+  nativeCalculateFileMD5Base64,
+  type ProgressInfo,
+} from 'native-util';
 import { ISyncClipboardAPI, PutContentOptions, DownloadProgressCallback } from './APIClient';
 import { ProfileDto, ServerInfo } from '../types/api';
 import type { ClipboardContent } from '../types/clipboard';
@@ -128,8 +134,10 @@ export class S3Client implements ISyncClipboardAPI {
     const body = JSON.stringify(profile);
 
     try {
+      const contentMD5 = nativeCalculateStringMD5Base64(body);
       const extraHeaders: Record<string, string> = {
         'Content-Type': 'application/json; charset=utf-8',
+        'Content-MD5': contentMD5,
       };
       const headers = this.signRequest('PUT', path, extraHeaders, body, signal);
       await this.client.put(`/${key}`, body, { headers, signal });
@@ -184,8 +192,10 @@ export class S3Client implements ISyncClipboardAPI {
     const url = `${this.endpoint.baseURL}/${key}`;
 
     try {
+      const contentMD5 = await nativeCalculateFileMD5Base64(fileUri, signal);
       const extraHeaders: Record<string, string> = {
         'Content-Type': 'application/octet-stream',
+        'Content-MD5': contentMD5,
       };
       const headers = this.signRequest('PUT', path, extraHeaders, '', signal);
       console.log(`[S3Client] Uploading file: ${fileName}`);
@@ -335,8 +345,10 @@ export class S3Client implements ISyncClipboardAPI {
     } catch {
       // 不存在则创建
       try {
+        const contentMD5 = nativeCalculateStringMD5Base64('');
         const extraHeaders: Record<string, string> = {
           'Content-Type': 'application/x-directory',
+          'Content-MD5': contentMD5,
         };
         const headers = this.signRequest('PUT', path, extraHeaders, '', signal);
         await this.client.put(`/${markerKey}`, '', { headers, signal });

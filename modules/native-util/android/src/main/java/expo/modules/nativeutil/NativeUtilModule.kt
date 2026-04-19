@@ -16,6 +16,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.channels.Channels
 import java.security.MessageDigest
+import java.util.Base64
 import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -46,6 +47,64 @@ class NativeUtilModule : Module() {
         Function("moveTaskToBack") {
             appContext.currentActivity?.moveTaskToBack(true) ?: false
             true
+        }
+
+        Function("calculateStringMD5Base64") { data: String ->
+            val digest = MessageDigest.getInstance("MD5")
+            val hashBytes = digest.digest(data.toByteArray(Charsets.UTF_8))
+            Base64.getEncoder().encodeToString(hashBytes)
+        }
+
+        Function("startCalculateFileMD5Base64") { fileUri: String ->
+            val jobId = UUID.randomUUID().toString()
+            val cancelFlag = AtomicBoolean(false)
+            cancelFlags[jobId] = cancelFlag
+            val future = CompletableFuture<Any>()
+            pendingJobs[jobId] = future
+
+            executor.submit {
+                try {
+                    val path = resolveFilePath(fileUri)
+                    val file = File(path)
+
+                    if (!file.exists()) {
+                        cancelFlags.remove(jobId)
+                        future.complete(FileNotFoundException(path))
+                        return@submit
+                    }
+
+                    val digest = MessageDigest.getInstance("MD5")
+                    val buffer = ByteArray(CHUNK_SIZE)
+
+                    FileInputStream(file).use { stream ->
+                        var read: Int
+                        while (stream.read(buffer).also { read = it } != -1) {
+                            if (cancelFlag.get()) {
+                                cancelFlags.remove(jobId)
+                                future.complete(CancelledException())
+                                return@submit
+                            }
+                            digest.update(buffer, 0, read)
+                        }
+                    }
+
+                    cancelFlags.remove(jobId)
+
+                    if (cancelFlag.get()) {
+                        future.complete(CancelledException())
+                        return@submit
+                    }
+
+                    val hashBytes = digest.digest()
+                    val base64 = Base64.getEncoder().encodeToString(hashBytes)
+                    future.complete(base64)
+                } catch (e: Exception) {
+                    cancelFlags.remove(jobId)
+                    future.complete(HashErrorException(e.message ?: "Unknown error", e))
+                }
+            }
+
+            return@Function jobId
         }
 
         Function("startCalculateFileHash") { fileUri: String ->

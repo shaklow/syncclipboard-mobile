@@ -36,6 +36,8 @@ export interface ProgressInfo {
 
 export interface NativeUtilModuleType {
   moveTaskToBack(): boolean;
+  calculateStringMD5Base64(data: string): string;
+  startCalculateFileMD5Base64(fileUri: string): string;
   startCalculateFileHash(fileUri: string): string;
   waitForJob(jobId: string): Promise<string>;
   cancelJob(jobId: string): Promise<void>;
@@ -138,6 +140,52 @@ export async function nativeCalculateFileHash(
   } finally {
     signal?.removeEventListener('abort', abortHandler);
     progressSub?.remove();
+  }
+}
+
+/**
+ * 计算字符串内容的 MD5 并返回 Base64 编码（用于 Content-MD5 header）
+ */
+export function nativeCalculateStringMD5Base64(data: string): string {
+  if (Platform.OS !== 'android') {
+    throw new Error('NativeUtilModule is not available on this platform');
+  }
+  return NativeUtilModule.calculateStringMD5Base64(data);
+}
+
+/**
+ * 计算文件的 MD5 并返回 Base64 编码（用于 Content-MD5 header）
+ * 使用原生异步计算，支持取消
+ */
+export async function nativeCalculateFileMD5Base64(
+  fileUri: string,
+  signal?: AbortSignal
+): Promise<string> {
+  if (Platform.OS !== 'android') {
+    throw new Error('NativeUtilModule is not available on this platform');
+  }
+
+  const jobId = NativeUtilModule.startCalculateFileMD5Base64(fileUri);
+
+  const abortHandler = () => NativeUtilModule.cancelJob(jobId);
+  signal?.addEventListener('abort', abortHandler);
+
+  try {
+    const result = await NativeUtilModule.waitForJob(jobId);
+    return result;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      ((error as { code?: string }).code === 'CANCELLED' ||
+        error.message === 'Operation was cancelled')
+    ) {
+      const abortError = new Error('Operation was aborted');
+      abortError.name = 'AbortError';
+      throw abortError;
+    }
+    throw error;
+  } finally {
+    signal?.removeEventListener('abort', abortHandler);
   }
 }
 
