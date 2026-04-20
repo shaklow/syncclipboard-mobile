@@ -845,6 +845,7 @@ export function HistoryScreen() {
           enableHistorySync={historySyncEnabled}
           isMultiSelectMode={isMultiSelectMode}
           isSelected={selectedIds.has(item.profileHash)}
+          showImageCopyButton={config?.showImageCopyButton ?? false}
         />
       );
     },
@@ -863,6 +864,7 @@ export function HistoryScreen() {
       historySyncEnabled,
       isMultiSelectMode,
       selectedIds,
+      config?.showImageCopyButton,
     ]
   );
 

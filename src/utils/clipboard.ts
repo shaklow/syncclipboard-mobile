@@ -278,6 +278,11 @@ export async function copyClipboardItem(
       return { success: true, message: '已复制到剪贴板' };
     }
 
+    if (item.type === 'Image' && item.fileUri) {
+      await clipboardManager.setImageContent(item.fileUri);
+      return { success: true, message: '已复制图片到剪贴板' };
+    }
+
     return { success: false, message: '暂不支持此类型的快速复制' };
   } catch (error) {
     console.error('[copyClipboardItem] Failed to copy:', error);

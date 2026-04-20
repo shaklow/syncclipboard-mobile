@@ -35,6 +35,7 @@ interface HistoryListItemProps {
   enableHistorySync?: boolean;
   isSelected?: boolean;
   isMultiSelectMode?: boolean;
+  showImageCopyButton?: boolean;
 }
 
 export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
@@ -56,6 +57,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
       enableHistorySync = true,
       isSelected = false,
       isMultiSelectMode = false,
+      showImageCopyButton = false,
     },
     _ref
   ) => {
@@ -521,6 +523,19 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                         hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
                       >
                         <Share width={15} height={15} color={theme.colors.primary} />
+                      </TouchableOpacity>
+                    )}
+                    {item.fileUri && showImageCopyButton !== false && (
+                      <TouchableOpacity
+                        style={styles.actionButton}
+                        onPress={() => onCopy(item)}
+                        hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                      >
+                        <Copy
+                          width={ACTION_ICON_SIZE}
+                          height={ACTION_ICON_SIZE}
+                          color={theme.colors.primary}
+                        />
                       </TouchableOpacity>
                     )}
                   </>

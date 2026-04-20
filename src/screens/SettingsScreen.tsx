@@ -1423,6 +1423,32 @@ export const SettingsScreen = () => {
                 ))}
               </View>
             )}
+
+            <View
+              style={[
+                styles.settingRow,
+                { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.colors.divider },
+              ]}
+            >
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                  为图片显示复制按钮
+                </Text>
+                <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
+                  在历史记录的图片项显示复制到剪贴板按钮
+                </Text>
+              </View>
+              <Switch
+                value={config?.showImageCopyButton ?? false}
+                onValueChange={(enabled) => updateConfig({ showImageCopyButton: enabled })}
+                trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
+                thumbColor={
+                  (config?.showImageCopyButton ?? false)
+                    ? theme.colors.surface
+                    : theme.colors.textTertiary
+                }
+              />
+            </View>
           </View>
         </View>
 

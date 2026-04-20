@@ -559,6 +559,7 @@ const styles = StyleSheet.create({
   actionButtons: {
     flexDirection: 'row',
     marginBottom: 12,
+    gap: 12,
   },
   actionButton: {
     flex: 1,
@@ -567,12 +568,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
     overflow: 'hidden',
   },
-  actionButtonLast: {
-    marginRight: 0,
-  },
+  actionButtonLast: {},
   secondaryButton: {
     borderWidth: 1,
   },

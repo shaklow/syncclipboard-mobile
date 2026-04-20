@@ -124,6 +124,9 @@ export interface AppConfig {
 
   /** 历史记录图片自动下载策略 */
   historyImageAutoDownload: 'wifi' | 'always' | 'off';
+
+  /** 是否在历史记录的图片项显示复制按钮 */
+  showImageCopyButton: boolean;
 }
 
 /**
@@ -305,6 +308,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   syncToastEnabled: true, // 默认开启同步 Toast 通知
   hideFromRecents: false, // 默认不隐藏最近任务
   historyImageAutoDownload: 'wifi', // 默认 Wi-Fi 网络自动下载
+  showImageCopyButton: false, // 默认不显示图片复制按钮
 };
 
 /**
