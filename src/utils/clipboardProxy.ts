@@ -13,6 +13,7 @@ import * as Clipboard from 'expo-clipboard';
 import { AppState, Platform } from 'react-native';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { setTimer, clearTimer } from 'native-timer';
+import { nativeSaveClipboardImageToFile } from 'native-util';
 
 /** 悬浮窗空闲超时时间（毫秒） */
 const OVERLAY_IDLE_TIMEOUT_MS = 10_000;
@@ -208,7 +209,7 @@ export async function hasImageAsync(): Promise<boolean> {
 }
 
 /**
- * 获取剪贴板图片
+ * 获取剪贴板图片（旧接口，返回 base64）
  */
 export async function getImageAsync(
   options: Clipboard.GetImageOptions
@@ -228,6 +229,31 @@ export async function getImageAsync(
     }
   }
   return Clipboard.getImageAsync(options);
+}
+
+/**
+ * 获取剪贴板图片并直接保存到文件（不经过 JS 内存）
+ * @param destFileUri 目标文件 URI（file:// 格式）
+ * @returns 成功返回 true，剪贴板无图片或失败返回 false
+ */
+export async function saveImageToFileAsync(
+  destDirPath: string
+): Promise<{ filePath: string; mimeType: string } | null> {
+  if (await shouldUseOverlay()) {
+    try {
+      const result = await overlayModule!.saveImageToFileViaOverlay(destDirPath);
+      if (result) return { filePath: result.filePath, mimeType: result.mimeType };
+      // fallback if overlay failed
+    } catch (e) {
+      console.warn('[ClipboardProxy] Overlay saveImageToFileAsync failed, falling back:', e);
+    }
+  }
+  // 前台模式：使用 native-util 直接读取系统剪贴板并写入文件
+  if (Platform.OS === 'android') {
+    const result = await nativeSaveClipboardImageToFile(destDirPath);
+    return result ? { filePath: result.filePath, mimeType: result.mimeType } : null;
+  }
+  return null;
 }
 
 /**

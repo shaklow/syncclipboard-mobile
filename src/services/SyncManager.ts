@@ -399,11 +399,11 @@ export class SyncManager {
     try {
       // 优先使用已缓存的内容（来自 ClipboardMonitor 回调，避免后台时重新创建悬浮窗）
       let localContent =
-        this.pendingUploadContent || (await this.clipboardManager.getClipboardContent(false));
+        this.pendingUploadContent || (await this.clipboardManager.getClipboardContent());
 
       if (!localContent) {
         await new Promise((resolve) => setTimeout(resolve, 500));
-        localContent = await this.clipboardManager.getClipboardContent(false);
+        localContent = await this.clipboardManager.getClipboardContent();
       }
 
       if (!localContent) {
@@ -518,7 +518,7 @@ export class SyncManager {
 
       // 如果启用离线队列且是网络错误，添加到队列
       if (this.config.enableOfflineQueue && isNetworkError) {
-        const content = await this.clipboardManager.getClipboardContent(false);
+        const content = await this.clipboardManager.getClipboardContent();
         if (content) {
           const task: SyncTask = {
             id: `upload-${Date.now()}`,
@@ -596,7 +596,7 @@ export class SyncManager {
       }
 
       // 获取本地剪贴板内容（用于冲突检测）
-      const localContent = await this.clipboardManager.getClipboardContent(false);
+      const localContent = await this.clipboardManager.getClipboardContent();
 
       // 检测冲突
       if (localContent && localContent.profileHash) {

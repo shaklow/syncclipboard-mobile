@@ -20,6 +20,8 @@ import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
 
 class ClipboardOverlayModule : Module() {
 
@@ -236,6 +238,73 @@ class ClipboardOverlayModule : Module() {
                             "width" to width,
                             "height" to height
                         )
+                    )
+                    promise.resolve(result)
+                } catch (e: Exception) {
+                    promise.resolve(null)
+                }
+            }
+        }
+
+        AsyncFunction("saveImageToFileViaOverlay") { destDirPath: String, promise: Promise ->
+            withOverlayClipboard("saveImageToFileViaOverlay", promise) { context, clip ->
+                if (clip == null || clip.itemCount == 0) {
+                    promise.resolve(null)
+                    return@withOverlayClipboard
+                }
+
+                val item = clip.getItemAt(0)
+                val uri = item.uri
+                if (uri == null) {
+                    promise.resolve(null)
+                    return@withOverlayClipboard
+                }
+
+                try {
+                    val mimeType = context.contentResolver.getType(uri)
+                    if (mimeType == null || !mimeType.startsWith("image/")) {
+                        promise.resolve(null)
+                        return@withOverlayClipboard
+                    }
+
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                    if (inputStream == null) {
+                        promise.resolve(null)
+                        return@withOverlayClipboard
+                    }
+
+                    // 根据 mimeType 确定扩展名
+                    val ext = when {
+                        mimeType.contains("png") -> "png"
+                        mimeType.contains("jpeg") || mimeType.contains("jpg") -> "jpg"
+                        mimeType.contains("gif") -> "gif"
+                        mimeType.contains("webp") -> "webp"
+                        mimeType.contains("bmp") -> "bmp"
+                        else -> "png"
+                    }
+                    val path = if (destDirPath.startsWith("file://", ignoreCase = true)) {
+                        Uri.parse(destDirPath).path ?: destDirPath.removePrefix("file://")
+                    } else {
+                        destDirPath
+                    }
+                    val dir = File(path)
+                    dir.mkdirs()
+                    val fileName = "tmp_${System.currentTimeMillis()}_${(Math.random() * 100000).toInt()}.$ext"
+                    val file = File(dir, fileName)
+                    FileOutputStream(file).use { fos ->
+                        inputStream.copyTo(fos, bufferSize = 8192)
+                    }
+                    inputStream.close()
+
+                    // 仅读取尺寸（不分配像素内存）
+                    val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(file.absolutePath, opts)
+
+                    val result = mapOf(
+                        "width" to (opts.outWidth),
+                        "height" to (opts.outHeight),
+                        "filePath" to "file://" + file.absolutePath,
+                        "mimeType" to mimeType
                     )
                     promise.resolve(result)
                 } catch (e: Exception) {

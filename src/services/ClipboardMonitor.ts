@@ -37,6 +37,8 @@ export class ClipboardMonitor {
 
   private debounceTimerTag: string | null = null;
   private static readonly DEBOUNCE_TIMER_TAG = 'clipboard_monitor_debounce';
+  private isChecking: boolean = false;
+  private checkGeneration: number = 0;
 
   constructor(clipboardManager: ClipboardManager, options?: ClipboardMonitorOptions) {
     this.clipboardManager = clipboardManager;
@@ -196,8 +198,15 @@ export class ClipboardMonitor {
    * 检查剪贴板内容
    */
   private async checkClipboard(): Promise<void> {
+    // 互斥锁：如果上一次检查还在进行中（大图片 hash 计算耗时），跳过本次
+    if (this.isChecking) return;
+    this.isChecking = true;
+    const gen = this.checkGeneration;
     try {
       const content = await this.clipboardManager.getClipboardContent();
+
+      // 如果在 getClipboardContent 期间 setLastContent 被调用，丢弃本次结果
+      if (gen !== this.checkGeneration) return;
 
       if (!content) {
         // console.log('[ClipboardMonitor] Poll: clipboard is empty');
@@ -213,6 +222,8 @@ export class ClipboardMonitor {
       }
     } catch (error) {
       console.error('[ClipboardMonitor] Failed to check clipboard:', error);
+    } finally {
+      this.isChecking = false;
     }
   }
 
@@ -330,6 +341,7 @@ export class ClipboardMonitor {
    * 手动更新上次已知内容，防止监听器将外部设置的剪贴板内容误判为用户新复制
    */
   async setLastContent(content: ClipboardContent): Promise<void> {
+    this.checkGeneration++; // 使正在进行的 checkClipboard 结果失效
     this.lastContent = content;
     await this.persistHash(content);
   }

@@ -8,10 +8,11 @@ import * as ClipboardProxy from '@/utils/clipboardProxy';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { ClipboardContent } from '@/types';
-import { calculateTextHash, calculateBase64Hash, calculateBase64ContentHash } from '@/utils/hash';
+import { calculateTextHash, calculateFileHash } from '@/utils/hash';
 import { isTextInvalid } from '@/utils/index';
 import { historyStorage } from './HistoryStorage';
-import { prepareTempFilePath } from '@/utils/fileStorage';
+import { prepareTempFilePath, CLIPBOARD_TEMP_DIR } from '@/utils/fileStorage';
+import { nativeSetClipboardImageFromFile } from 'native-util';
 
 /**
  * 剪贴板管理器类
@@ -21,9 +22,8 @@ export class ClipboardManager {
 
   /**
    * 获取当前剪贴板内容
-   * @param createTempFile 是否创建临时文件
    */
-  async getClipboardContent(createTempFile: boolean = true): Promise<ClipboardContent | null> {
+  async getClipboardContent(): Promise<ClipboardContent | null> {
     try {
       // Directly try getting text first (avoids extra overlay windows for type checks)
       const text = await ClipboardProxy.getStringAsync();
@@ -34,7 +34,7 @@ export class ClipboardManager {
       // If no text, check for image
       const hasImage = await ClipboardProxy.hasImageAsync();
       if (hasImage) {
-        return await this.getImageContent(createTempFile);
+        return await this.getImageContent();
       }
 
       // 没有内容
@@ -167,49 +167,61 @@ export class ClipboardManager {
    * 获取图片内容
    * @param createTempFile 是否创建临时文件
    */
-  private async getImageContent(createTempFile: boolean): Promise<ClipboardContent> {
+  private async getImageContent(): Promise<ClipboardContent> {
     try {
-      // 使用 getImageAsync 获取图片数据
-      const imageData = await ClipboardProxy.getImageAsync({ format: 'png' });
-
-      if (!imageData || !imageData.data) {
-        throw new Error('No image data in clipboard');
-      }
-
       const timestamp = Date.now();
-
-      // 使用 File API 创建文件
       const { File } = FileSystem;
 
-      // 清理 base64 字符串：移除可能的 data URI 前缀和空白字符
-      let base64String = imageData.data;
+      // ========== 阶段1: Native 侧直接将剪贴板图片写入临时目录（不经过 JS 内存） ==========
+      // Native 侧根据 mimeType 自动确定文件扩展名
+      if (!CLIPBOARD_TEMP_DIR.exists) {
+        CLIPBOARD_TEMP_DIR.create();
+      }
+      const saved = await ClipboardProxy.saveImageToFileAsync(CLIPBOARD_TEMP_DIR.uri);
+      if (!saved) {
+        throw new Error('No image data in clipboard');
+      }
+      const randomTempFilePath = saved.filePath;
+      const imageExt = saved.mimeType.includes('png')
+        ? 'png'
+        : saved.mimeType.includes('jpeg') || saved.mimeType.includes('jpg')
+          ? 'jpg'
+          : saved.mimeType.includes('gif')
+            ? 'gif'
+            : saved.mimeType.includes('webp')
+              ? 'webp'
+              : 'png';
 
-      // 移除 data:image/png;base64, 等前缀
-      if (base64String.includes(',')) {
-        base64String = base64String.split(',')[1];
+      // ========== 阶段2: 从文件计算 localClipboardHash ==========
+      const localClipboardHash = await calculateFileHash(randomTempFilePath);
+
+      // 将随机命名的临时文件重命名为基于 hash 的确定性名称（便于去重）
+      const hashTempFileName = `${localClipboardHash.substring(0, 16)}.${imageExt}`;
+      const hashTempFilePath = prepareTempFilePath(hashTempFileName);
+      let tempFilePath: string;
+      const hashTempFile = new File(hashTempFilePath);
+      if (hashTempFile.exists) {
+        // 已有同内容文件，删除随机临时文件
+        try {
+          new File(randomTempFilePath).delete();
+        } catch {}
+        tempFilePath = hashTempFilePath;
+      } else {
+        // 重命名为 hash 命名
+        try {
+          new File(randomTempFilePath).move(hashTempFile);
+          tempFilePath = hashTempFilePath;
+        } catch {
+          tempFilePath = randomTempFilePath;
+        }
       }
 
-      // 移除所有空白字符
-      base64String = base64String.replace(/\s/g, '');
+      // ========== 阶段3: 基于文件进行后续操作 ==========
 
-      // 步骤1: 计算本地变化检测用的 hash（快速比较）
-      const localClipboardHash = await calculateBase64Hash(base64String);
-
-      // 步骤2: 根据 localClipboardHash 查询历史记录
-      let historyItem = await historyStorage.getItemByLocalHash(localClipboardHash);
-
-      let fileUri: string;
-      let fileSize: number | undefined;
-      let fileHash: string;
-      let fileHashName: string;
-      let profileHash: string;
+      // 根据 localClipboardHash 查询历史记录
+      const historyItem = await historyStorage.getItemByLocalHash(localClipboardHash);
 
       if (historyItem && historyItem.hasData && historyItem.dataName) {
-        // console.log('[ClipboardManager] Found image in history:', {
-        //   localClipboardHash: localClipboardHash.substring(0, 16) + '...',
-        //   dataName: historyItem.dataName,
-        // });
-
         // 从历史记录中获取文件路径
         const { getHistoryFileUri } = await import('@/utils/fileStorage');
         const historyFileUri = await getHistoryFileUri(
@@ -219,114 +231,55 @@ export class ClipboardManager {
         );
 
         if (historyFileUri) {
-          // console.log('[ClipboardManager] Using history file:', historyFileUri);
-          // 使用历史记录中的文件
-          const { File } = FileSystem;
           const historyFile = new File(historyFileUri);
 
           if (historyFile.exists) {
-            fileUri = historyFile.uri;
-            fileSize = historyFile.size;
-            fileHashName = historyItem.dataName;
+            const fileHashName = historyItem.dataName;
 
-            // 读取文件计算正确的 fileHash（文件二进制内容的 SHA256）
-            const savedBase64 = await historyFile.base64();
-            fileHash = await calculateBase64ContentHash(savedBase64);
+            // 从文件计算 fileHash
+            const fileHash = await calculateFileHash(historyFile.uri);
 
-            // 步骤3: 根据服务器规则计算 profileHash = SHA256(fileName + "|" + fileHash.ToUpper())
+            // 根据服务器规则计算 profileHash
             const combinedString = `${fileHashName}|${fileHash.toUpperCase()}`;
-            profileHash = await calculateTextHash(combinedString);
+            const profileHash = await calculateTextHash(combinedString);
 
             return {
               type: 'Image',
               text: '[图片]',
-              fileUri: fileUri,
+              fileUri: historyFile.uri,
               fileName: fileHashName,
-              fileSize,
-              profileHash, // 用于服务器上传
-              localClipboardHash, // 用于本地变化检测
-              hasData: true, // 图片有外部文件
+              fileSize: historyFile.size,
+              profileHash,
+              localClipboardHash,
+              hasData: true,
               timestamp,
             };
           }
         }
       }
 
-      // 历史记录中没有找到，继续处理
-      // 将 base64 转换为二进制数据用于保存文件
-      const binaryString = atob(base64String);
-      const len = binaryString.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
+      // 历史记录中没有找到，使用临时文件
+      const tempFile = new File(tempFilePath);
+      const fileUri = tempFile.uri;
+      const fileSize = tempFile.size;
 
-      if (createTempFile) {
-        // 步骤2: 先用本地 hash 创建临时文件名
-        const tempFileName = `${localClipboardHash.substring(0, 16)}.png`;
+      // 从文件计算 fileHash
+      const fileHash = await calculateFileHash(fileUri);
+      const fileHashName = `${fileHash.substring(0, 16)}.${imageExt}`;
 
-        const tempFile = new File(prepareTempFilePath(tempFileName));
-
-        // 检查文件是否已存在
-        if (tempFile.exists) {
-          // 文件已存在，直接使用
-          fileUri = tempFile.uri;
-          fileSize = tempFile.size;
-
-          // 读取文件计算正确的 fileHash（文件二进制内容的 SHA256）
-          const savedBase64 = await tempFile.base64();
-          fileHash = await calculateBase64ContentHash(savedBase64);
-          fileHashName = `${fileHash.substring(0, 16)}.png`;
-        } else {
-          // 文件不存在，写入新文件
-          console.log('[ClipboardManager] Saving new image:', {
-            fileName: tempFileName,
-            binaryLength: bytes.length,
-          });
-
-          try {
-            // 写入二进制数据
-            tempFile.write(bytes);
-            fileUri = tempFile.uri;
-            fileSize = tempFile.size;
-
-            // 保存后读回计算正确的 fileHash（用于服务器）
-            const savedBase64 = await tempFile.base64();
-            fileHash = await calculateBase64ContentHash(savedBase64);
-            fileHashName = `${fileHash.substring(0, 16)}.png`;
-
-            console.log('[ClipboardManager] Image saved successfully:', {
-              fileHash: fileHash.substring(0, 16) + '...',
-              fileName: fileHashName,
-              size: fileSize,
-            });
-          } catch (writeError) {
-            console.error('[ClipboardManager] Failed to write file:', writeError);
-            console.error('[ClipboardManager] File path:', tempFile.uri);
-            throw writeError;
-          }
-        }
-      } else {
-        // 不创建临时文件，直接计算 hash
-        fileHash = await calculateBase64ContentHash(base64String);
-        fileHashName = `${fileHash.substring(0, 16)}.png`;
-        fileUri = '';
-        fileSize = bytes.length;
-      }
-
-      // 步骤3: 根据服务器规则计算 profileHash = SHA256(fileName + "|" + fileHash.ToUpper())
+      // 根据服务器规则计算 profileHash
       const combinedString = `${fileHashName}|${fileHash.toUpperCase()}`;
-      profileHash = await calculateTextHash(combinedString);
+      const profileHash = await calculateTextHash(combinedString);
 
       return {
         type: 'Image',
         text: '[图片]',
-        fileUri: fileUri,
+        fileUri,
         fileName: fileHashName,
         fileSize,
-        profileHash, // 用于服务器上传
-        localClipboardHash, // 用于本地变化检测
-        hasData: true, // 图片有外部文件
+        profileHash,
+        localClipboardHash,
+        hasData: true,
         timestamp,
       };
     } catch (error) {
@@ -361,17 +314,14 @@ export class ClipboardManager {
    */
   async setImageContent(imageUri: string): Promise<void> {
     try {
-      // expo-clipboard 需要纯 base64 格式的图片数据（不带 MIME 类型前缀）
-      // 使用新的 File API 读取图片文件并转换为 base64
-      const { File } = FileSystem;
-      const file = new File(imageUri);
-      const base64 = await file.base64();
+      // 直接通过 native 将文件设置到系统剪贴板（不经过 JS 内存/base64）
+      const success = await nativeSetClipboardImageFromFile(imageUri);
+      if (!success) {
+        throw new Error('Native setClipboardImageFromFile returned false');
+      }
 
-      // 直接传递纯 base64 字符串（Clipboard.setImageAsync 不需要 data URI 前缀）
-      await Clipboard.setImageAsync(base64);
-
-      // 计算并更新 localClipboardHash（用于本地变化检测）
-      const localClipboardHash = await calculateBase64Hash(base64);
+      // 计算并更新 localClipboardHash（用于本地变化检测，与 getImageContent 保持一致使用文件内容 hash）
+      const localClipboardHash = await calculateFileHash(imageUri);
       this.lastProfileHash = localClipboardHash;
     } catch (error) {
       console.error('[ClipboardManager] Failed to set image content:', error);

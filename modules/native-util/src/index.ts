@@ -54,6 +54,10 @@ export interface NativeUtilModuleType {
   isIgnoringBatteryOptimizations(): boolean;
   requestIgnoreBatteryOptimizations(): boolean;
   setExcludeFromRecents(exclude: boolean): boolean;
+  saveClipboardImageToFile(
+    destDirPath: string
+  ): Promise<{ width: number; height: number; filePath: string; mimeType: string } | null>;
+  setClipboardImageFromFile(fileUri: string): Promise<boolean>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   addListener(eventName: string, listener: (event: any) => void): EventSubscription;
 }
@@ -93,6 +97,29 @@ export function requestIgnoreBatteryOptimizations(): boolean {
 export function setExcludeFromRecents(exclude: boolean): boolean {
   if (Platform.OS !== 'android') return false;
   return NativeUtilModule.setExcludeFromRecents(exclude);
+}
+
+/**
+ * 读取系统剪贴板中的图片，直接保存到指定目录（不经过 JS 内存）
+ * 文件名由 native 侧根据 mimeType 自动确定扩展名
+ * @param destDirPath 目标目录路径（file:// 格式）
+ * @returns 图片信息（含完整文件路径），如果剪贴板中没有图片则返回 null
+ */
+export async function nativeSaveClipboardImageToFile(
+  destDirPath: string
+): Promise<{ width: number; height: number; filePath: string; mimeType: string } | null> {
+  if (Platform.OS !== 'android') return null;
+  return NativeUtilModule.saveClipboardImageToFile(destDirPath);
+}
+
+/**
+ * 将图片文件设置到系统剪贴板（不经过 JS 内存/base64）
+ * @param fileUri 图片文件 URI（file:// 格式）
+ * @returns 是否成功
+ */
+export async function nativeSetClipboardImageFromFile(fileUri: string): Promise<boolean> {
+  if (Platform.OS !== 'android') return false;
+  return NativeUtilModule.setClipboardImageFromFile(fileUri);
 }
 
 export async function nativeCopyFile(srcUri: string, destUri: string): Promise<void> {

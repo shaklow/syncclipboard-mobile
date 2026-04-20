@@ -3,8 +3,12 @@ package expo.modules.nativeutil
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
+import android.graphics.Bitmap
 import android.provider.Settings
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
@@ -12,6 +16,8 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
+import androidx.core.content.FileProvider
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.channels.Channels
@@ -695,6 +701,133 @@ class NativeUtilModule : Module() {
                 true
             } else {
                 false
+            }
+        }
+
+        AsyncFunction("saveClipboardImageToFile") { destDirPath: String, promise: Promise ->
+            executor.submit {
+                try {
+                    val context = appContext.reactContext
+                    if (context == null) {
+                        promise.resolve(null)
+                        return@submit
+                    }
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                    if (clipboard == null) {
+                        promise.resolve(null)
+                        return@submit
+                    }
+                    val clip = clipboard.primaryClip
+                    if (clip == null || clip.itemCount == 0) {
+                        promise.resolve(null)
+                        return@submit
+                    }
+                    val item = clip.getItemAt(0)
+                    val uri = item.uri
+                    if (uri == null) {
+                        promise.resolve(null)
+                        return@submit
+                    }
+                    val mimeType = context.contentResolver.getType(uri)
+                    if (mimeType == null || !mimeType.startsWith("image/")) {
+                        promise.resolve(null)
+                        return@submit
+                    }
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                    if (inputStream == null) {
+                        promise.resolve(null)
+                        return@submit
+                    }
+                    // 根据 mimeType 确定扩展名
+                    val ext = when {
+                        mimeType.contains("png") -> "png"
+                        mimeType.contains("jpeg") || mimeType.contains("jpg") -> "jpg"
+                        mimeType.contains("gif") -> "gif"
+                        mimeType.contains("webp") -> "webp"
+                        mimeType.contains("bmp") -> "bmp"
+                        else -> "png"
+                    }
+                    val dirPath = resolveFilePath(destDirPath)
+                    val dir = File(dirPath)
+                    dir.mkdirs()
+                    val fileName = "tmp_${System.currentTimeMillis()}_${(Math.random() * 100000).toInt()}.$ext"
+                    val file = File(dir, fileName)
+                    FileOutputStream(file).use { fos ->
+                        inputStream.copyTo(fos, bufferSize = 8192)
+                    }
+                    inputStream.close()
+                    // 仅读取尺寸（不分配像素内存）
+                    val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(file.absolutePath, opts)
+                    promise.resolve(mapOf(
+                        "width" to (opts.outWidth),
+                        "height" to (opts.outHeight),
+                        "filePath" to "file://" + file.absolutePath,
+                        "mimeType" to mimeType
+                    ))
+                } catch (e: Exception) {
+                    NativeLogger.e("NativeUtilModule", "saveClipboardImageToFile failed", e)
+                    promise.resolve(null)
+                }
+            }
+        }
+
+        AsyncFunction("setClipboardImageFromFile") { fileUri: String, promise: Promise ->
+            executor.submit {
+                try {
+                    val context = appContext.reactContext
+                    if (context == null) {
+                        NativeLogger.e("NativeUtilModule", "setClipboardImageFromFile: context is null")
+                        promise.resolve(false)
+                        return@submit
+                    }
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                    if (clipboard == null) {
+                        NativeLogger.e("NativeUtilModule", "setClipboardImageFromFile: clipboard is null")
+                        promise.resolve(false)
+                        return@submit
+                    }
+                    val srcPath = resolveFilePath(fileUri)
+                    val srcFile = File(srcPath)
+                    NativeLogger.d("NativeUtilModule", "setClipboardImageFromFile: srcPath=$srcPath exists=${srcFile.exists()} size=${srcFile.length()}")
+                    if (!srcFile.exists()) {
+                        NativeLogger.e("NativeUtilModule", "setClipboardImageFromFile: src file not found: $srcPath")
+                        promise.resolve(false)
+                        return@submit
+                    }
+                    // 推断 mimeType
+                    val ext = srcFile.extension.lowercase()
+                    val mimeType = when (ext) {
+                        "png" -> "image/png"
+                        "jpg", "jpeg" -> "image/jpeg"
+                        "gif" -> "image/gif"
+                        "webp" -> "image/webp"
+                        "bmp" -> "image/bmp"
+                        else -> "image/png"
+                    }
+                    // 复制文件到 NativeUtilFileProvider 缓存目录
+                    val cacheDir = File(context.cacheDir, ".native_util_clipboard")
+                    cacheDir.mkdirs()
+                    // 清除旧缓存
+                    cacheDir.listFiles()?.forEach { it.delete() }
+                    val destFile = File(cacheDir, srcFile.name)
+                    srcFile.copyTo(destFile, overwrite = true)
+                    NativeLogger.d("NativeUtilModule", "setClipboardImageFromFile: copied to ${destFile.absolutePath} size=${destFile.length()}")
+                    // 通过 NativeUtilFileProvider 获取 content:// URI
+                    val authority = context.applicationInfo.packageName + ".NativeUtilFileProvider"
+                    NativeLogger.d("NativeUtilModule", "setClipboardImageFromFile: authority=$authority")
+                    val contentUri = FileProvider.getUriForFile(context, authority, destFile)
+                    NativeLogger.d("NativeUtilModule", "setClipboardImageFromFile: contentUri=$contentUri")
+                    val clip = ClipData.newUri(context.contentResolver, "image", contentUri)
+                    clip.description.extras = android.os.PersistableBundle().apply {
+                        putStringArray("android.content.extra.MIME_TYPES", arrayOf(mimeType))
+                    }
+                    clipboard.setPrimaryClip(clip)
+                    promise.resolve(true)
+                } catch (e: Exception) {
+                    NativeLogger.e("NativeUtilModule", "setClipboardImageFromFile failed", e)
+                    promise.resolve(false)
+                }
             }
         }
 

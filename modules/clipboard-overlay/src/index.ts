@@ -20,6 +20,9 @@ interface ClipboardOverlayModuleInterface {
   hasStringViaOverlay(): Promise<boolean>;
   hasImageViaOverlay(): Promise<boolean>;
   getImageViaOverlay(): Promise<ClipboardOverlayImage | null>;
+  saveImageToFileViaOverlay(
+    destDirPath: string
+  ): Promise<{ width: number; height: number; filePath: string; mimeType: string } | null>;
 }
 
 const NativeModule: ClipboardOverlayModuleInterface | null =
@@ -95,6 +98,15 @@ export async function hasImageViaOverlay(): Promise<boolean> {
 export async function getImageViaOverlay(): Promise<ClipboardOverlayImage | null> {
   if (NativeModule) {
     return NativeModule.getImageViaOverlay();
+  }
+  return null;
+}
+
+export async function saveImageToFileViaOverlay(
+  destDirPath: string
+): Promise<{ width: number; height: number; filePath: string; mimeType: string } | null> {
+  if (NativeModule) {
+    return NativeModule.saveImageToFileViaOverlay(destDirPath);
   }
   return null;
 }
