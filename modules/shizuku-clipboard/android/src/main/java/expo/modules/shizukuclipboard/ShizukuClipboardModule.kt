@@ -28,6 +28,7 @@ class ShizukuClipboardModule : Module() {
     private var permissionGranted = false
     private var clipboardService: IClipboardUserService? = null
     private var serviceConnected = false
+    private var isBinding = false
 
     // 用于 linkToDeath：UserService 进程监听此 token，当主进程死亡时自动退出
     private val callerToken = Binder()
@@ -48,6 +49,7 @@ class ShizukuClipboardModule : Module() {
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             NativeLogger.i(TAG, "UserService connected: ${name?.className}")
+            isBinding = false
             if (service != null && service.pingBinder()) {
                 clipboardService = IClipboardUserService.Stub.asInterface(service)
                 serviceConnected = true
@@ -65,6 +67,7 @@ class ShizukuClipboardModule : Module() {
 
         override fun onServiceDisconnected(name: ComponentName?) {
             NativeLogger.w(TAG, "UserService disconnected")
+            isBinding = false
             clipboardService = null
             serviceConnected = false
         }
@@ -111,11 +114,13 @@ class ShizukuClipboardModule : Module() {
     }
 
     private fun bindUserService() {
-        if (serviceConnected) return
+        if (serviceConnected || isBinding) return
+        isBinding = true
         try {
             NativeLogger.i(TAG, "Binding UserService...")
             Shizuku.bindUserService(userServiceArgs, serviceConnection)
         } catch (e: Exception) {
+            isBinding = false
             NativeLogger.e(TAG, "Failed to bind UserService", e)
         }
     }
