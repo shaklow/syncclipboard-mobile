@@ -3,7 +3,7 @@
     "name": "SyncClipboard",
     "slug": "syncclipboard-mobile",
     "scheme": "syncclipboard",
-    "version": "1.0.10-beta2",
+    "version": "1.0.10",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -16,7 +16,7 @@
       "supportsTablet": true
     },
     "android": {
-      "versionCode": 13,
+      "versionCode": 150,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"

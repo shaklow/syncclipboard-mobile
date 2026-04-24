@@ -4,11 +4,7 @@ import { ConfigPlugin, withAppBuildGradle, createRunOncePlugin } from 'expo/conf
  * Configures Android ABI splits so that separate APKs are built for
  * each CPU architecture (arm64-v8a, armeabi-v7a, x86_64).
  *
- * Each variant gets a unique versionCode by prepending an ABI-specific
- * digit so the Play Store can distinguish them:
- *   armeabi-v7a → versionCode * 10 + 1
- *   arm64-v8a   → versionCode * 10 + 2
- *   x86_64      → versionCode * 10 + 4
+ * All variants share the same versionCode (no per-ABI offset).
  */
 const withAbiSplits: ConfigPlugin = (config) => {
   return withAppBuildGradle(config, (config) => {
@@ -36,29 +32,6 @@ const withAbiSplits: ConfigPlugin = (config) => {
       }
     } else {
       console.log('ℹ splits already configured in build.gradle');
-    }
-
-    // --- 2. per-ABI versionCode override ---
-    const versionCodeOverride = `
-
-// Assign unique versionCodes per ABI split
-import com.android.build.OutputFile
-
-ext.abiCodes = ["armeabi-v7a": 1, "arm64-v8a": 2, "x86_64": 4]
-
-android.applicationVariants.all { variant ->
-    variant.outputs.each { output ->
-        def abiCode = project.ext.abiCodes.get(output.getFilter(OutputFile.ABI))
-        if (abiCode != null) {
-            output.versionCodeOverride = variant.versionCode * 10 + abiCode
-        }
-    }
-}
-`;
-
-    if (!config.modResults.contents.includes('abiCodes')) {
-      config.modResults.contents += versionCodeOverride;
-      console.log('✓ Added per-ABI versionCode override to build.gradle');
     }
 
     return config;
