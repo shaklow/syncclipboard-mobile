@@ -298,9 +298,13 @@ export class ClipboardMonitor {
     }
 
     if (nextAppState === 'active') {
-      // 应用进入前台，开始监听
-      if (this.isMonitoring && !this.pollingTimerTag) {
-        this.startPolling();
+      // 应用进入前台，立即检查一次剪贴板（减少等待第一次轮询的延迟）
+      // 再重启轮询计时器
+      if (this.isMonitoring) {
+        void this.checkClipboard();
+        if (!this.pollingTimerTag) {
+          this.startPolling();
+        }
       }
     } else if (nextAppState === 'background' || nextAppState === 'inactive') {
       // 后台上传启用时不停止轮询

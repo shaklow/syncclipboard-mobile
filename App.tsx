@@ -75,14 +75,14 @@ export default function App() {
     }
   }, [isLoaded, loadConfig]);
 
-  // 启动所有后台服务（冷启动时保证后台任务正常运行，后续由 BackgroundServiceManager 维护）
+  // 启动所有服务（冷启动时保证剪贴板监控、远程同步、后台任务正常运行，后续由 BackgroundServiceManager 维护）
   useEffect(() => {
-    if (!isLoaded || Platform.OS !== 'android') return;
+    if (!isLoaded) return;
     getBackgroundServiceManager()
       .start()
       .catch(() => {});
-    // 应用启动时恢复「最近任务隐藏」设置
-    if (config?.hideFromRecents) {
+    // 应用启动时恢复「最近任务隐藏」设置（仅 Android）
+    if (Platform.OS === 'android' && config?.hideFromRecents) {
       setExcludeFromRecents(true);
     }
   }, [isLoaded]);

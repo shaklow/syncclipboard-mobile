@@ -30,6 +30,9 @@ export type {
 // Sync Manager
 export { SyncManager } from './SyncManager';
 
+// Remote Clipboard Sync Service
+export { getClipboardSyncService as getClipboardSyncService } from './ClipboardSyncService';
+
 // Shortcut Service
 export { ShortcutService } from './ShortcutService';
 
