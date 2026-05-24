@@ -29,7 +29,7 @@ import { ServerConfigModal, ServerListItem, MessageToast } from '@/components';
 import { ServerConfig } from '@/types/api';
 import { useMessageToast } from '@/hooks/useMessageToast';
 import {
-  ShortcutService,
+  shortcut,
   checkForUpdate,
   calculateLogSize,
   clearLogs,
@@ -44,7 +44,8 @@ import {
   cleanOldApkCache,
   type ReleaseAssetInfo,
   type ApkSource,
-} from '@/services';
+  formatFileSize,
+} from '@/utils';
 import { Plus, RefreshCw, Check, ChevronDown, ChevronUp } from 'react-native-feather';
 import { hasOverlayPermission, requestOverlayPermission } from 'clipboard-overlay';
 import {
@@ -396,7 +397,7 @@ export const SettingsScreen = () => {
     }
 
     try {
-      const { getHistorySyncService } = await import('@/services/HistorySyncService');
+      const { getHistorySyncService } = await import('@/services/history/HistorySyncService');
       const syncService = getHistorySyncService();
       syncService.cancelAll();
     } catch {
@@ -741,7 +742,7 @@ export const SettingsScreen = () => {
       showMessage(`已设置历史记录最大保留条数为 ${maxItems}条`, 'success');
 
       // 更新历史记录存储的最大大小
-      const { historyStorage } = await import('@/services');
+      const { historyStorage } = await import('@/storage');
       historyStorage.setMaxHistorySize(maxItems);
     } catch (error: unknown) {
       setMaxHistoryItemsInput((config?.maxHistoryItems ?? 1000).toString());
@@ -896,7 +897,7 @@ export const SettingsScreen = () => {
   // 处理切换历史记录同步
   const handleToggleHistorySync = async (enabled: boolean) => {
     try {
-      const { getHistorySyncService } = await import('@/services/HistorySyncService');
+      const { getHistorySyncService } = await import('@/services/history/HistorySyncService');
       const syncService = getHistorySyncService();
       syncService.cancelAll();
 
@@ -1070,7 +1071,9 @@ export const SettingsScreen = () => {
 
     const asset = findAssetForAbi(assets, preferredAbi as Parameters<typeof findAssetForAbi>[1]);
     console.log(
-      `[UpdateDownload] source=${source} version=${version} assets=${assets.map((a) => a.name).join(',')} selectedAsset=${asset?.name ?? 'none'}`
+      `[UpdateDownload] source=${source} version=${version} assets=${assets
+        .map((a) => a.name)
+        .join(',')} selectedAsset=${asset?.name ?? 'none'}`
     );
     if (!asset) {
       showMessage('找不到适合当前设备的 APK', 'error');
@@ -1246,7 +1249,7 @@ export const SettingsScreen = () => {
   // 处理添加下载快捷方式
   const handleAddDownloadShortcut = async () => {
     try {
-      await ShortcutService.addDownloadShortcut();
+      await shortcut.addDownloadShortcut();
     } catch (error: unknown) {
       showMessage(error instanceof Error ? error.message : '添加失败', 'error');
     }
@@ -1255,19 +1258,10 @@ export const SettingsScreen = () => {
   // 处理添加上传快捷方式
   const handleAddUploadShortcut = async () => {
     try {
-      await ShortcutService.addUploadShortcut();
+      await shortcut.addUploadShortcut();
     } catch (error: unknown) {
       showMessage(error instanceof Error ? error.message : '添加失败', 'error');
     }
-  };
-
-  // 格式化文件大小
-  const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   return (

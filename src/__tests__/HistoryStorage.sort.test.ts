@@ -3,8 +3,8 @@
  * 验证历史记录插入、更新后排序行为符合预期
  */
 
-import { HistoryStorage } from '../services/HistoryStorage';
-import { ClipboardItem, HistorySyncStatus } from '../types/clipboard';
+import { HistoryStorage } from '../storage/HistoryStorage';
+import { HistoryItem, HistorySyncStatus } from '../types/clipboard';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn().mockResolvedValue(null),
@@ -33,7 +33,7 @@ jest.mock('../utils/fileStorage', () => ({
   }),
 }));
 
-jest.mock('../services/ConfigStorage', () => ({
+jest.mock('../storage/ConfigStorage', () => ({
   configStorage: {
     getConfig: jest.fn().mockResolvedValue({ maxHistoryItems: 1000 }),
   },
@@ -51,8 +51,8 @@ jest.mock('../types/clipboard', () => {
 function createItem(
   profileHash: string,
   timestamp: number,
-  overrides?: Partial<ClipboardItem>
-): ClipboardItem {
+  overrides?: Partial<HistoryItem>
+): HistoryItem {
   return {
     type: 'Text',
     text: `item-${profileHash}`,
@@ -75,7 +75,7 @@ function createItem(
 /**
  * 提取 profileHash 列表，方便断言比对顺序
  */
-function hashes(items: ClipboardItem[]): string[] {
+function hashes(items: HistoryItem[]): string[] {
   return items.map((i) => i.profileHash);
 }
 
@@ -288,7 +288,7 @@ describe('HistoryStorage 排序', () => {
       await storage.addItem(createItem('x', 100, { lastAccessed: 100 }));
 
       const callback = jest.fn();
-      storage.addChangeCallback(callback);
+      storage.setOnChangeCallback(callback);
 
       await storage.updateLastAccessed('x');
 
@@ -300,7 +300,7 @@ describe('HistoryStorage 排序', () => {
         'update'
       );
 
-      storage.removeChangeCallback(callback);
+      storage.setOnChangeCallback(null);
     });
 
     it('按 timestamp 排序时，updateLastAccessed 不改变顺序', async () => {

@@ -9,26 +9,25 @@ import { Copy, Download, Share, Link2, Scissors } from 'react-native-feather';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { StarIcon } from './StarIcon';
 import { useTheme } from '@/hooks/useTheme';
-import { ClipboardItem } from '@/types/clipboard';
+import { HistoryItem } from '@/types/clipboard';
 import { useTransferQueueStore } from '@/stores/transferQueueStore';
-import { getHistoryTransferQueue } from '@/services/HistoryTransferQueue';
-import { getProfileId } from '@/services/HistoryAPI';
-import { formatSizeWithType, formatFileSize } from '@/utils';
+import { getHistoryTransferQueue } from '@/services/history/HistoryTransferQueue';
+import { getProfileId, formatSizeWithType, formatFileSize } from '@/utils';
 import { useSettingsStore } from '@/stores';
 
 const ACTION_ICON_SIZE = 15;
 
 interface HistoryListItemProps {
-  item: ClipboardItem;
-  onCopy: (item: ClipboardItem) => void;
-  onShare: (item: ClipboardItem) => void;
-  onSave?: (item: ClipboardItem) => void;
-  onOpen?: (item: ClipboardItem) => void;
-  onLongPress: (item: ClipboardItem) => void;
-  onPress?: (item: ClipboardItem) => void;
-  onToggleStar?: (item: ClipboardItem) => void;
-  onDownload?: (item: ClipboardItem) => void;
-  onUpload?: (item: ClipboardItem) => void;
+  item: HistoryItem;
+  onCopy: (item: HistoryItem) => void;
+  onShare: (item: HistoryItem) => void;
+  onSave?: (item: HistoryItem) => void;
+  onOpen?: (item: HistoryItem) => void;
+  onLongPress: (item: HistoryItem) => void;
+  onPress?: (item: HistoryItem) => void;
+  onToggleStar?: (item: HistoryItem) => void;
+  onDownload?: (item: HistoryItem) => void;
+  onUpload?: (item: HistoryItem) => void;
   onWordPick?: (text: string) => void;
   showFullImage?: boolean;
   showDebugInfo?: boolean;
@@ -92,7 +91,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
           const pid = getProfileId(item.type, item.profileHash);
           const queue = getHistoryTransferQueue();
           queue.start();
-          await queue.addDownloadTask(pid, true);
+          await queue.addDownloadTask(pid);
         } catch {
           autoDownloadTriggered.current = false;
         }

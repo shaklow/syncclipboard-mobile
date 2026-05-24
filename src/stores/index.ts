@@ -3,8 +3,7 @@
  * Exports all Zustand stores
  */
 
-export { useClipboardStore } from './clipboardStore';
-export { useSyncStore } from './syncStore';
+export { useLocalClipboardStore as uselocalClipboardStore } from './localClipboardStore';
 export { useHistoryStore } from './historyStore';
 export { useSettingsStore } from './settingsStore';
-export { useClipboardSyncServiceStore as useClipboardSyncServiceStore } from './ClipboardSyncServiceStore';
+export { useClipboardSyncServiceStore as useClipboardSyncServiceStore } from '../serviceState/ClipboardSyncState';

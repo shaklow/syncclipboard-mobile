@@ -8,12 +8,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { STORAGE_KEYS } from '../types/storage';
 import type { AppConfig } from '../types/storage';
-import type { ServerConfig, ProfileDto } from '../types/api';
-import { SyncClipboardClient } from '../services/SyncClipboardClient';
-import { WebDAVClient } from '../services/WebDAVClient';
-import { S3Client } from '../services/S3Client';
-import { AuthService } from '../services/AuthService';
-import type { ISyncClipboardAPI } from '../services/APIClient';
+import type { ProfileDto } from '../types/api';
+import { getAPIClient } from '../services/ClientFactory';
+import type { ISyncClipboardAPI } from '../api/clients/APIClient';
 import { sha256 } from 'js-sha256';
 
 // 重试配置
@@ -50,33 +47,6 @@ async function loadConfig(): Promise<AppConfig | null> {
     console.error('[SmsUploadTask] Failed to load config:', e);
     return null;
   }
-}
-
-/**
- * 根据服务器配置创建 API 客户端
- */
-function createAPIClient(server: ServerConfig): ISyncClipboardAPI {
-  const { type, url, username, password } = server;
-
-  if (type === 'syncclipboard') {
-    const authService = username && password ? new AuthService(username, password) : undefined;
-    return new SyncClipboardClient({ baseURL: url, authService });
-  }
-
-  if (type === 's3') {
-    return new S3Client({
-      serviceURL: url || undefined,
-      region: server.region,
-      bucketName: server.bucketName!,
-      objectPrefix: server.objectPrefix,
-      forcePathStyle: server.forcePathStyle,
-      accessKeyId: username!,
-      secretAccessKey: password!,
-    });
-  }
-
-  // 非 SyncClipboard/S3 服务器，使用 WebDAV 客户端
-  return new WebDAVClient({ baseURL: url, username: username!, password: password! });
 }
 
 /**
@@ -137,7 +107,9 @@ async function uploadWithRetry(
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_DELAYS[attempt] ?? RETRY_DELAYS[RETRY_DELAYS.length - 1];
         console.warn(
-          `[SmsUploadTask] Upload failed (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${error}, retrying in ${delay}ms`
+          `[SmsUploadTask] Upload failed (attempt ${attempt + 1}/${
+            MAX_RETRIES + 1
+          }): ${error}, retrying in ${delay}ms`
         );
         await updateNotification(
           `验证码上传重试中: ${code}\n第${attempt + 1}次失败，${Math.round(delay / 1000)}秒后重试…`
@@ -204,7 +176,7 @@ export default async function SmsUploadTask(taskData?: SmsTaskData): Promise<voi
 
   // 5. 创建 API 客户端并上传
   try {
-    const client = createAPIClient(server);
+    const client = await getAPIClient();
     const profileHash = calculateHash(code);
     await updateNotification(`正在上传验证码：${code}`);
     await uploadWithRetry(client, code, profileHash);

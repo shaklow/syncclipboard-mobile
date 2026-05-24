@@ -6,8 +6,9 @@
 import { create } from 'zustand';
 import { AppConfig } from '../types/storage';
 import { ServerConfig } from '../types/api';
-import { SyncMode, ConflictResolution } from '../types/sync';
-import { configStorage } from '../services/ConfigStorage';
+import { ConflictResolution } from '../types/sync';
+import { configService } from '../services/ConfigService';
+import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
 
 /**
  * 设置状态接口
@@ -63,17 +64,11 @@ interface SettingsState {
   setTheme: (theme: 'light' | 'dark' | 'auto') => Promise<void>;
 
   // 同步设置
-  /** 设置同步模式 */
-  setSyncMode: (mode: string) => Promise<void>;
-
   /** 设置同步间隔 */
   setSyncInterval: (interval: number) => Promise<void>;
 
   /** 设置冲突解决策略 */
   setConflictResolution: (strategy: string) => Promise<void>;
-
-  /** 设置离线队列 */
-  setOfflineQueue: (enabled: boolean) => Promise<void>;
 
   /** 设置大文件同步 */
   setLargeFileSync: (enabled: boolean, threshold?: number) => Promise<void>;
@@ -169,7 +164,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   loadConfig: async () => {
     try {
-      const config = await configStorage.getConfig();
+      const config = await configService.getConfig();
       set({ config, isLoaded: true, error: null });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to load config';
@@ -185,8 +180,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     }));
 
     try {
-      await configStorage.updateConfig(updates);
-      set({ isSaving: false });
+      const config = await configService.updateConfig(updates);
+      set({ config, isSaving: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to update config';
       set({ error: errorMessage, isSaving: false });
@@ -197,8 +192,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ isSaving: true, error: null });
 
     try {
-      await configStorage.resetConfig();
-      const config = await configStorage.getConfig();
+      const config = await configService.resetConfig();
       set({ config, isSaving: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to reset config';
@@ -223,8 +217,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ isSaving: true, error: null });
 
     try {
-      await configStorage.addServer(server);
-      const config = await configStorage.getConfig();
+      const config = await configService.addServer(server);
       set({ config, isSaving: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to add server';
@@ -236,8 +229,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ isSaving: true, error: null });
 
     try {
-      await configStorage.updateServer(index, updates);
-      const config = await configStorage.getConfig();
+      const config = await configService.updateServer(index, updates);
       set({ config, isSaving: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to update server';
@@ -249,8 +241,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ isSaving: true, error: null });
 
     try {
-      await configStorage.deleteServer(index);
-      const config = await configStorage.getConfig();
+      const config = await configService.deleteServer(index);
       set({ config, isSaving: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete server';
@@ -262,8 +253,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ isSaving: true, error: null });
 
     try {
-      await configStorage.setActiveServer(index);
-      const config = await configStorage.getConfig();
+      const config = await configService.setActiveServer(index);
       set({ config, isSaving: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to set active server';
@@ -280,20 +270,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     await get().updateConfig({ theme });
   },
 
-  setSyncMode: async (mode: string) => {
-    await get().updateConfig({ syncMode: mode as SyncMode });
-  },
-
   setSyncInterval: async (interval: number) => {
     await get().updateConfig({ syncInterval: interval });
   },
 
   setConflictResolution: async (strategy: string) => {
     await get().updateConfig({ conflictResolution: strategy as ConflictResolution });
-  },
-
-  setOfflineQueue: async (enabled: boolean) => {
-    await get().updateConfig({ enableOfflineQueue: enabled });
   },
 
   setLargeFileSync: async (enabled: boolean, threshold?: number) => {
@@ -355,12 +337,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setEnableBackgroundTasks: async (enabled: boolean) => {
     if (enabled) {
       // 用户主动开启时清除临时停止标志
+      backgroundRuntimeState.setTempDisabled(false);
       set({ isTempDisabledBackgroundTasks: false });
     }
     await get().updateConfig({ enableBackgroundTasks: enabled });
   },
 
   setTempDisabledBackgroundTasks: (disabled: boolean) => {
+    backgroundRuntimeState.setTempDisabled(disabled);
     set({ isTempDisabledBackgroundTasks: disabled });
   },
 
@@ -386,7 +370,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   exportConfig: async () => {
     try {
-      return await configStorage.exportConfig();
+      return await configService.exportConfig();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to export config';
       set({ error: errorMessage });
@@ -398,8 +382,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ isSaving: true, error: null });
 
     try {
-      await configStorage.importConfig(json);
-      const config = await configStorage.getConfig();
+      const config = await configService.importConfig(json);
       set({ config, isSaving: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to import config';
@@ -412,3 +395,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ error: null });
   },
 }));
+
+/**
+ * 订阅 backgroundRuntimeState 变化，将临时禁用状态同步到 settingsStore。
+ *
+ * backgroundRuntimeState 是真正的写入源头（由 BackgroundServiceManager 的
+ * ForegroundService.addTempStopListener 驱动），settingsStore 只作镜像以驱动 UI。
+ * 模块加载时立即注册，生命周期与应用相同，无需取消订阅。
+ */
+backgroundRuntimeState.subscribe(() => {
+  useSettingsStore.setState({
+    isTempDisabledBackgroundTasks: backgroundRuntimeState.isTempDisabled(),
+  });
+});

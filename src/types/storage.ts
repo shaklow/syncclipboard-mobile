@@ -4,7 +4,7 @@
  */
 
 import { ServerConfig } from './api';
-import { SyncMode, ConflictResolution } from './sync';
+import { ConflictResolution } from './sync';
 import { HistorySyncStatus } from './clipboard';
 
 /**
@@ -17,20 +17,11 @@ export interface AppConfig {
   /** 当前激活的服务器索引 */
   activeServerIndex: number;
 
-  /** 同步模式 */
-  syncMode: SyncMode;
-
   /** 同步间隔（毫秒） */
   syncInterval: number;
 
   /** 冲突解决策略 */
   conflictResolution: ConflictResolution;
-
-  /** 是否启用离线队列 */
-  enableOfflineQueue: boolean;
-
-  /** 最大离线队列大小 */
-  maxOfflineQueueSize: number;
 
   /** 是否同步大文件 */
   syncLargeFiles: boolean;
@@ -268,6 +259,30 @@ export const STORAGE_KEYS = {
 
   /** 上次同步时间 */
   LAST_SYNC: '@syncclipboard:last_sync',
+
+  /** SyncManager 上次成功上传的 profileHash */
+  SYNC_LAST_HASH: '@syncclipboard:sync:last_hash',
+
+  /** HistorySyncService 上次完整同步时间（ms）*/
+  HISTORY_LAST_SYNC_TIME: '@syncclipboard:history:last_sync_time',
+
+  /** HistoryScreen 排序字段 */
+  HISTORY_SORT_FIELD: '@syncclipboard:history:sort_field',
+
+  /** 认证凭据（AuthService 缓存） */
+  AUTH_CREDENTIALS: '@syncclipboard:credentials',
+
+  /** 用户选择的主题模式 */
+  THEME_MODE: '@syncclipboard:theme_mode',
+
+  /** HistoryTracker 上次记录的 clipboard hash */
+  HISTORY_TRACKER_LAST_HASH: '@last_clipboard_hash',
+
+  /** SecureStorage 前缀 */
+  SECURE_PREFIX: '@syncclipboard:secure:',
+
+  /** useHistoryDisplaySettings 存储键 */
+  HISTORY_DISPLAY_SETTINGS: '@syncclipboard:history_display_settings',
 } as const;
 
 /**
@@ -276,11 +291,8 @@ export const STORAGE_KEYS = {
 export const DEFAULT_APP_CONFIG: AppConfig = {
   servers: [],
   activeServerIndex: -1,
-  syncMode: 'manual' as SyncMode,
   syncInterval: 5000,
   conflictResolution: 'newest' as ConflictResolution,
-  enableOfflineQueue: true,
-  maxOfflineQueueSize: 100,
   syncLargeFiles: true,
   largeFileThreshold: 10 * 1024 * 1024, // 10MB
   theme: 'auto',

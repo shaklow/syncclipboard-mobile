@@ -4,10 +4,10 @@
  */
 
 import { useHistoryStore } from '../stores/historyStore';
-import { ClipboardItem, HistorySyncStatus } from '../types/clipboard';
+import { HistoryItem, HistorySyncStatus } from '../types/clipboard';
 
 // Mock historyStorage，避免真实 AsyncStorage 依赖
-jest.mock('../services', () => ({
+jest.mock('../storage', () => ({
   historyStorage: {
     searchItems: jest.fn().mockResolvedValue({ items: [], total: 0 }),
     addItem: jest.fn(),
@@ -20,14 +20,15 @@ jest.mock('../services', () => ({
     incrementUseCount: jest.fn(),
     clear: jest.fn(),
     setSortConfig: jest.fn(),
+    setOnChangeCallback: jest.fn(),
   },
 }));
 
 function createItem(
   profileHash: string,
   timestamp: number,
-  overrides?: Partial<ClipboardItem>
-): ClipboardItem {
+  overrides?: Partial<HistoryItem>
+): HistoryItem {
   return {
     type: 'Text',
     text: `item-${profileHash}`,
@@ -47,7 +48,7 @@ function createItem(
   };
 }
 
-function hashes(items: ClipboardItem[]): string[] {
+function hashes(items: HistoryItem[]): string[] {
   return items.map((i) => i.profileHash);
 }
 

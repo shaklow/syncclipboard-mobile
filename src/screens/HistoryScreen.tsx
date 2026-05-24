@@ -27,26 +27,25 @@ import * as ImagePicker from 'expo-image-picker';
 import { TabView, TabBar, type Route } from 'react-native-tab-view';
 import { useTheme } from '@/hooks/useTheme';
 import { useHistoryStore } from '@/stores/historyStore';
-import { useClipboardStore } from '@/stores/clipboardStore';
 import { useSettingsStore } from '@/stores';
-import { historyStorage } from '@/services';
+import { historyStorage } from '@/storage';
 import { useTransferQueueStore } from '@/stores/transferQueueStore';
 import { useHistoryDisplaySettings } from '@/hooks/useHistoryDisplaySettings';
-import { ClipboardItem, ClipboardContent, createDefaultClipboardItem } from '@/types/clipboard';
+import { HistoryItem, ClipboardContent, createHistoryItem } from '@/types/clipboard';
 import { HistoryFilter } from '@/types/storage';
 import { HistoryListItem } from '@/components/HistoryListItem';
 import { MessageToast } from '@/components/MessageToast';
 import { TopRightMenu, type MenuItemConfig } from '@/components/TopRightMenu';
 import { TransferQueueModal } from '@/components/TransferQueueModal';
 import { WordPickerScreen } from '@/screens/WordPickerScreen';
-import { copyToLocalClipboard } from '@/utils/clipboard';
 import { openFile, saveFile, shareFile, saveToGallery } from '@/utils/fileActions';
 import { isTextInvalid } from '@/utils/index';
 import { useMessageStore } from '@/stores/messageStore';
 import { useErrorStore } from '@/stores/errorStore';
 import { calculateTextHash } from '@/utils/hash';
-import { importFileToHistory } from '@/utils/uploadFile';
+import { createContentFromFile } from '@/utils/clipboard/clipboardContentUtils';
 import { isHistorySyncEnabled } from '@/utils/config';
+import { getHistorySyncService } from '@/services/history/HistorySyncService';
 
 const TAB_ROUTES: Route[] = [
   { key: 'all', title: '全部' },
@@ -102,17 +101,6 @@ export function HistoryScreen() {
 
   const historySyncEnabled = useMemo(() => isHistorySyncEnabled(config), [config]);
 
-  const ensureSyncServiceInitialized = useCallback(async (): Promise<boolean> => {
-    if (!historySyncEnabled) {
-      return false;
-    }
-
-    const serverConfig = config!.servers[config!.activeServerIndex];
-    const { getHistorySyncService } = await import('@/services/HistorySyncService');
-    const syncService = getHistorySyncService();
-    return syncService.ensureInitialized(serverConfig);
-  }, [config, historySyncEnabled]);
-
   // 加载排序设置并同步到 store
   useEffect(() => {
     const loadSortSetting = async () => {
@@ -150,7 +138,7 @@ export function HistoryScreen() {
     [setSort, loadItems]
   );
 
-  const listRef = useRef<FlashListRef<ClipboardItem>>(null);
+  const listRef = useRef<FlashListRef<HistoryItem>>(null);
 
   // 已在历史记录页面时，再次点击导航栏按钮回到顶部
   useEffect(() => {
@@ -195,17 +183,19 @@ export function HistoryScreen() {
 
   // 监听 HistoryStorage 变更，实时更新 UI
   useEffect(() => {
-    const { HistoryStorage } = require('@/services/HistoryStorage');
-    const storage = HistoryStorage.getInstance();
+    const { historyService } = require('@/services/history');
 
-    const handleChange = (items: ClipboardItem[], action: 'add' | 'update' | 'delete') => {
+    const handleChange = (
+      items: HistoryItem[],
+      action: import('@/storage/HistoryStorage').HistoryChangeAction
+    ) => {
       handleStorageChange(items, action);
     };
 
-    storage.addChangeCallback(handleChange);
+    historyService.addChangeCallback(handleChange);
 
     return () => {
-      storage.removeChangeCallback(handleChange);
+      historyService.removeChangeCallback(handleChange);
     };
   }, [handleStorageChange]);
 
@@ -215,7 +205,7 @@ export function HistoryScreen() {
   }, [items]);
 
   // ClipboardItem 转换为 ClipboardContent 后调用公共复制函数
-  const copyItemWithSync = useCallback(async (item: ClipboardItem) => {
+  const copyItemWithSync = useCallback(async (item: HistoryItem) => {
     const content: ClipboardContent = {
       type: item.type,
       text: item.text,
@@ -227,23 +217,20 @@ export function HistoryScreen() {
       localClipboardHash: item.localClipboardHash,
       hasData: item.hasData,
     };
-    const result = await copyToLocalClipboard(content);
-    if (result.success) {
-      useClipboardStore.getState().setCurrentContentDisplay(content);
-      // 更新 lastAccessed，使按访问时间排序时记录移到顶部
-      historyStorage.updateLastAccessed(item.profileHash);
-    }
-    return result;
+    const { localClipboard } = await import('@/services');
+    await localClipboard.setClipboardContent(content);
+    // 更新 lastAccessed，使按访问时间排序时记录移到顶部
+    historyStorage.updateLastAccessed(item.profileHash);
   }, []);
 
   // 点击列表项 - 复制到剪贴板
   const handleItemPress = useCallback(
-    async (item: ClipboardItem) => {
-      const result = await copyItemWithSync(item);
-      if (result.success) {
-        showMessage(result.message, 'success');
-      } else {
-        showMessage(result.message || '复制失败', 'error');
+    async (item: HistoryItem) => {
+      try {
+        await copyItemWithSync(item);
+        showMessage(item.type === 'Image' ? '已复制图片到剪贴板' : '已复制到剪贴板', 'success');
+      } catch (error) {
+        showMessage(error instanceof Error ? error.message || '复制失败' : '复制失败', 'error');
       }
     },
     [showMessage, copyItemWithSync]
@@ -251,7 +238,7 @@ export function HistoryScreen() {
 
   // 分享项目
   const handleShare = useCallback(
-    async (item: ClipboardItem) => {
+    async (item: HistoryItem) => {
       try {
         if (item.type === 'Text' && !isTextInvalid(item.text)) {
           await Share.share({
@@ -273,7 +260,7 @@ export function HistoryScreen() {
 
   // 储存文件到设备（图片类型保存到相册）
   const handleSave = useCallback(
-    async (item: ClipboardItem) => {
+    async (item: HistoryItem) => {
       if (!item.fileUri) return;
       try {
         if (item.type === 'Image') {
@@ -301,7 +288,7 @@ export function HistoryScreen() {
 
   // 打开文件
   const handleOpen = useCallback(
-    async (item: ClipboardItem) => {
+    async (item: HistoryItem) => {
       if (!item.fileUri) return;
       try {
         await openFile(item.fileUri);
@@ -315,7 +302,7 @@ export function HistoryScreen() {
 
   // 切换收藏状态
   const handleToggleStar = useCallback(
-    async (item: ClipboardItem) => {
+    async (item: HistoryItem) => {
       try {
         await toggleStar(item.profileHash);
         // 同步由 HistorySyncService.handleLocalHistoryChanged 自动处理
@@ -329,7 +316,7 @@ export function HistoryScreen() {
 
   // 长按进入多选模式
   const handleItemLongPress = useCallback(
-    (item: ClipboardItem) => {
+    (item: HistoryItem) => {
       if (!isMultiSelectMode) {
         setIsMultiSelectMode(true);
         clearSelection();
@@ -341,7 +328,7 @@ export function HistoryScreen() {
 
   // 多选模式下点击 item 切换选中
   const handleMultiSelectPress = useCallback(
-    (item: ClipboardItem) => {
+    (item: HistoryItem) => {
       toggleSelection(item.profileHash);
     },
     [toggleSelection]
@@ -394,7 +381,6 @@ export function HistoryScreen() {
           onPress: async () => {
             try {
               await clearHistory();
-              const { getHistorySyncService } = await import('@/services/HistorySyncService');
               const syncService = getHistorySyncService();
               await syncService.resetSyncCursor();
               showMessage('已清空所有历史记录', 'success');
@@ -435,7 +421,9 @@ export function HistoryScreen() {
         });
       });
 
-      await importFileToHistory(asset.uri, fileName, asset.mimeType, asset.size);
+      const content = await createContentFromFile(asset.uri, fileName, asset.mimeType, asset.size);
+      const { historyService: hs } = await import('@/services/history');
+      await hs.addLocalContent(content);
 
       showMessage(`文件 ${fileName} 已添加到历史记录`, 'success');
     } catch (error) {
@@ -475,7 +463,14 @@ export function HistoryScreen() {
         });
       });
 
-      await importFileToHistory(asset.uri, fileName, asset.mimeType, asset.fileSize);
+      const content = await createContentFromFile(
+        asset.uri,
+        fileName,
+        asset.mimeType,
+        asset.fileSize
+      );
+      const { historyService: hs } = await import('@/services/history');
+      await hs.addLocalContent(content);
 
       showMessage(`图片 ${fileName} 已添加到历史记录`, 'success');
     } catch (error) {
@@ -523,14 +518,11 @@ export function HistoryScreen() {
   const handleResyncHistory = useCallback(async () => {
     if (isSyncing) return;
 
-    const initialized = await ensureSyncServiceInitialized();
-    if (!initialized) {
+    const syncService = getHistorySyncService();
+    if (!syncService.isInitialized()) {
       showMessage('请先配置服务器', 'error');
       return;
     }
-
-    const { getHistorySyncService } = await import('@/services/HistorySyncService');
-    const syncService = getHistorySyncService();
 
     setIsSyncing(true);
     showMessage('开始同步历史记录...', 'info');
@@ -553,19 +545,16 @@ export function HistoryScreen() {
     } finally {
       setIsSyncing(false);
     }
-  }, [isSyncing, showMessage, setError, ensureSyncServiceInitialized]);
+  }, [isSyncing, showMessage, setError]);
 
   const handleIncrementalSync = useCallback(
     async (isPullToRefresh = false) => {
       if (isSyncing) return;
 
-      const initialized = await ensureSyncServiceInitialized();
-      if (!initialized) {
+      const syncService = getHistorySyncService();
+      if (!syncService.isInitialized()) {
         return;
       }
-
-      const { getHistorySyncService } = await import('@/services/HistorySyncService');
-      const syncService = getHistorySyncService();
 
       setIsSyncing(true);
       if (isPullToRefresh) {
@@ -588,7 +577,7 @@ export function HistoryScreen() {
         }
       }
     },
-    [isSyncing, setError, ensureSyncServiceInitialized]
+    [isSyncing, setError]
   );
 
   useFocusEffect(
@@ -606,15 +595,15 @@ export function HistoryScreen() {
             setIsReorganizing(true);
             console.log('[HistoryScreen] Starting history reorganization...');
 
-            const { HistoryStorage } = await import('@/services/HistoryStorage');
-            const { getHistorySyncService } = await import('@/services/HistorySyncService');
+            const { HistoryStorage } = await import('@/storage/HistoryStorage');
+            const { historyService } = await import('@/services/history');
             const historyStorage = HistoryStorage.getInstance();
             const syncService = getHistorySyncService();
 
             const abortController = new AbortController();
             syncService.setReorganizeAbortController(abortController);
 
-            historyStorage.beginSilentMode();
+            historyService.beginSilentMode();
 
             try {
               await syncService.cleanupRemoteHistorys(abortController.signal);
@@ -630,7 +619,7 @@ export function HistoryScreen() {
             } finally {
               syncService.setReorganizeAbortController(null);
               setIsReorganizing(false);
-              historyStorage.endSilentMode();
+              historyService.endSilentMode();
               await useHistoryStore.getState().refresh();
             }
           }
@@ -638,36 +627,31 @@ export function HistoryScreen() {
 
         if (historySyncEnabled) {
           console.log('[HistoryScreen] Screen focused, starting incremental sync');
-          const { getHistorySyncService } = await import('@/services/HistorySyncService');
           const syncService = getHistorySyncService();
-          const serverConfig = currentConfig?.servers[currentConfig?.activeServerIndex];
-          if (serverConfig) {
-            const initialized = await syncService.ensureInitialized(serverConfig);
-            if (initialized) {
-              if (syncService.isSyncInProgress()) {
-                console.log('[HistoryScreen] Sync already in progress, showing indicator');
-                setIsSyncing(true);
-                const progressCallback = (progress: { phase: string }) => {
-                  if (progress.phase === 'completed' || progress.phase === 'error') {
-                    syncService.removeProgressCallback(progressCallback);
-                    setIsSyncing(false);
-                  }
-                };
-                syncService.addProgressCallback(progressCallback);
-              } else {
-                setIsSyncing(true);
-                try {
-                  await syncService.syncIncremental();
-                } catch (error) {
-                  console.error('[HistoryScreen] Failed to incremental sync:', error);
-                  const errorMessage = error instanceof Error ? error.message : '未知错误';
-                  setError({
-                    title: '历史记录增量同步失败',
-                    message: errorMessage,
-                  });
-                } finally {
+          if (syncService.isInitialized()) {
+            if (syncService.isSyncInProgress()) {
+              console.log('[HistoryScreen] Sync already in progress, showing indicator');
+              setIsSyncing(true);
+              const progressCallback = (progress: { phase: string }) => {
+                if (progress.phase === 'completed' || progress.phase === 'error') {
+                  syncService.removeProgressCallback(progressCallback);
                   setIsSyncing(false);
                 }
+              };
+              syncService.addProgressCallback(progressCallback);
+            } else {
+              setIsSyncing(true);
+              try {
+                await syncService.syncIncremental();
+              } catch (error) {
+                console.error('[HistoryScreen] Failed to incremental sync:', error);
+                const errorMessage = error instanceof Error ? error.message : '未知错误';
+                setError({
+                  title: '历史记录增量同步失败',
+                  message: errorMessage,
+                });
+              } finally {
+                setIsSyncing(false);
               }
             }
           }
@@ -722,7 +706,7 @@ export function HistoryScreen() {
           const seed = `debug-random-${now}-${index}-${Math.random().toString(36).slice(2, 10)}`;
           const profileHash = await calculateTextHash(seed);
 
-          return createDefaultClipboardItem({
+          return createHistoryItem({
             type: 'Text' as const,
             text: generateRandomDebugText(),
             profileHash,
@@ -760,7 +744,7 @@ export function HistoryScreen() {
   }, [showHistoryDebugInfo, setShowHistoryDebugInfo]);
 
   const handleDownload = useCallback(
-    async (item: ClipboardItem) => {
+    async (item: HistoryItem) => {
       console.log(`[HistoryScreen] ========== Download Button Clicked ==========`);
       console.log(`[HistoryScreen] Item profileHash: ${item.profileHash}`);
       console.log(`[HistoryScreen] Item type: ${item.type}`);
@@ -768,35 +752,33 @@ export function HistoryScreen() {
       console.log(`[HistoryScreen] Item hasRemoteData: ${item.hasRemoteData}`);
       console.log(`[HistoryScreen] Item isLocalFileReady: ${item.isLocalFileReady}`);
 
-      const initialized = await ensureSyncServiceInitialized();
-      if (!initialized) {
+      if (!getHistorySyncService().isInitialized()) {
         showMessage('历史同步未启用', 'error');
         return;
       }
 
-      const { getHistoryTransferQueue } = await import('@/services/HistoryTransferQueue');
-      const { getProfileId } = await import('@/services/HistoryAPI');
+      const { getHistoryTransferQueue } = await import('@/services/history/HistoryTransferQueue');
+      const { getProfileId } = await import('@/utils');
 
       const profileId = getProfileId(item.type, item.profileHash);
       console.log(`[HistoryScreen] Generated profileId: ${profileId}`);
 
       const queue = getHistoryTransferQueue();
       queue.start();
-      await queue.addDownloadTask(profileId, true);
+      await queue.addDownloadTask(profileId);
     },
-    [ensureSyncServiceInitialized, showMessage]
+    [showMessage]
   );
 
   const handleUpload = useCallback(
-    async (item: ClipboardItem) => {
+    async (item: HistoryItem) => {
       console.log(`[HistoryScreen] ========== Upload Button Clicked ==========`);
       console.log(`[HistoryScreen] Item profileHash: ${item.profileHash}`);
       console.log(`[HistoryScreen] Item type: ${item.type}`);
       console.log(`[HistoryScreen] Item isLocalFileReady: ${item.isLocalFileReady}`);
       console.log(`[HistoryScreen] Item syncStatus: ${item.syncStatus}`);
 
-      const initialized = await ensureSyncServiceInitialized();
-      if (!initialized) {
+      if (!getHistorySyncService().isInitialized()) {
         showMessage('历史同步未启用', 'error');
         return;
       }
@@ -812,21 +794,21 @@ export function HistoryScreen() {
         }
       }
 
-      const { getHistoryTransferQueue } = await import('@/services/HistoryTransferQueue');
-      const { getProfileId } = await import('@/services/HistoryAPI');
+      const { getHistoryTransferQueue } = await import('@/services/history/HistoryTransferQueue');
+      const { getProfileId } = await import('@/utils');
 
       const profileId = getProfileId(item.type, item.profileHash);
       console.log(`[HistoryScreen] Generated profileId: ${profileId}`);
 
       const queue = getHistoryTransferQueue();
       queue.start();
-      await queue.addUploadTask(profileId, true);
+      await queue.addUploadTask(profileId);
     },
-    [ensureSyncServiceInitialized, showMessage]
+    [showMessage]
   );
 
   const renderItem = useCallback(
-    ({ item }: { item: ClipboardItem }) => {
+    ({ item }: { item: HistoryItem }) => {
       return (
         <HistoryListItem
           item={item}
@@ -883,7 +865,7 @@ export function HistoryScreen() {
 
   // 客户端分类筛选
   const filteredItemsByTab = useMemo(() => {
-    const result: Record<string, ClipboardItem[]> = {
+    const result: Record<string, HistoryItem[]> = {
       all: sortedItems,
       Text: sortedItems.filter((item) => item.type === 'Text'),
       Image: sortedItems.filter((item) => item.type === 'Image'),

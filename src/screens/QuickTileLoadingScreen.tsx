@@ -2,8 +2,11 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { ToastAndroid, Linking } from 'react-native';
 import { SyncDirection } from '@/types/sync';
 import { ClipboardContent } from '@/types/clipboard';
-import { SyncManager } from '@/services/SyncManager';
-import { useSyncStore } from '@/stores/syncStore';
+import {
+  setRemoteClipboard,
+  setLocalClipboardFromRemote,
+} from '@/services/sync/ClipboardSyncActions';
+import { localClipboard } from '@/services/clipboard/LocalClipboard';
 import { openFile, shareFile, saveFile, saveToGallery } from '@/utils/fileActions';
 import { isTextInvalid } from '@/utils/index';
 import { QuickLoadingPage, SuccessButtonConfig } from '@/components/QuickLoadingPage';
@@ -34,25 +37,15 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
       setProgress(null);
       setPreviewText(undefined);
 
-      // 确保 SyncManager 已初始化（冷启动时尚未经过正常启动流程）
-      await useSyncStore.getState().initialize();
-      const initError = useSyncStore.getState().error;
-      if (initError) throw new Error(initError);
+      let content: ClipboardContent | null | undefined;
 
-      const syncMgr = SyncManager.getInstance();
-      const result = await syncMgr.sync(
-        direction,
-        false,
-        signal,
-        (info) => setProgress(info),
-        (preview) => setPreviewText(preview)
-      );
-
-      if (!result.success) {
-        throw new Error(result.error || (isUpload ? '上传失败' : '同步失败'));
+      if (isUpload) {
+        content = await localClipboard.getClipboardContent();
+        if (!content) throw new Error('剪贴板为空，无内容可上传');
+        await setRemoteClipboard(content, signal, (info) => setProgress(info));
+      } else {
+        content = await setLocalClipboardFromRemote((info) => setProgress(info), signal);
       }
-
-      const content = result.content;
 
       // 只有文本类型才显示 Toast 提示
       if (content && content.type === 'Text' && !isTextInvalid(content.text)) {

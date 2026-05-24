@@ -30,13 +30,10 @@ interface DownloadProgress {
 interface CurrentClipboardCardProps {
   clipboard: ClipboardContent | null;
   isRemote?: boolean;
-  onUpload?: () => void;
-  uploading?: boolean;
-  onCancelUpload?: () => void;
-  onDownload?: () => void;
-  downloading?: boolean;
-  downloadProgress?: DownloadProgress | null;
-  onCancelDownload?: () => void;
+  onAction?: () => void;
+  acting?: boolean;
+  actionProgress?: DownloadProgress | null;
+  onCancelAction?: () => void;
   onCopy: (content: ClipboardContent) => Promise<void>;
   onWordPick?: (text: string) => void;
 }
@@ -44,13 +41,10 @@ interface CurrentClipboardCardProps {
 export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   clipboard,
   isRemote = false,
-  onUpload,
-  uploading = false,
-  onCancelUpload,
-  onDownload,
-  downloading = false,
-  downloadProgress,
-  onCancelDownload,
+  onAction,
+  acting = false,
+  actionProgress,
+  onCancelAction,
   onCopy,
   onWordPick,
 }) => {
@@ -168,7 +162,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   // 获取预览文本
   const getPreviewText = (): string => {
     if (clipboard.type === 'Text') {
-      return clipboard.text || '';
+      return clipboard.text;
     }
     if (clipboard.type === 'Image') {
       return clipboard.fileName || '图片';
@@ -205,7 +199,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
     return false;
   };
 
-  const showDownloadButton = isRemote && onDownload && needsFileDownload();
+  const showActionButton = isRemote ? !!(onAction && needsFileDownload()) : !!onAction;
 
   // 可以"打开"的非文本类型（有 fileUri）
   const canOpenFile = clipboard.type !== 'Text' && !!clipboard.fileUri;
@@ -336,9 +330,6 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
                 <Text style={[styles.mediaLabel, { color: theme.colors.textSecondary }]}>
                   {clipboard.fileName || '图片文件'}
                 </Text>
-                <Text style={[styles.mediaHint, { color: theme.colors.textTertiary }]}>
-                  等待下载...
-                </Text>
               </View>
             )}
           </View>
@@ -349,11 +340,6 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             <Text style={[styles.mediaLabel, { color: theme.colors.textSecondary }]}>
               {clipboard.fileName || '文件'}
             </Text>
-            {clipboard.fileUri && (
-              <Text style={[styles.mediaHint, { color: theme.colors.textTertiary }]}>
-                包含文件数据
-              </Text>
-            )}
           </View>
         )}
       </View>
@@ -381,7 +367,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
         )}
 
         {/* 远程 Text 类型：只有在不需要下载时才显示复制按钮 */}
-        {isRemote && clipboard.type === 'Text' && !showDownloadButton && (
+        {isRemote && clipboard.type === 'Text' && !showActionButton && (
           <TouchableOpacity
             style={[
               styles.actionButton,
@@ -429,7 +415,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
         )}
 
         {/* 同步操作按钮 */}
-        {!isRemote && onUpload && (
+        {showActionButton && (
           <TouchableOpacity
             style={[
               styles.actionButton,
@@ -437,37 +423,15 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
               styles.actionButtonLast,
               { borderColor: theme.colors.primary },
             ]}
-            onPress={uploading ? onCancelUpload : onUpload}
+            onPress={acting ? onCancelAction : onAction}
           >
-            <Text
-              style={[
-                styles.actionButtonText,
-                styles.secondaryButtonText,
-                { color: theme.colors.primary },
-              ]}
-            >
-              {uploading ? '取消' : '上传'}
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {showDownloadButton && (
-          <TouchableOpacity
-            style={[
-              styles.actionButton,
-              styles.secondaryButton,
-              styles.actionButtonLast,
-              { borderColor: theme.colors.primary },
-            ]}
-            onPress={downloading ? onCancelDownload : onDownload}
-          >
-            {downloading && downloadProgress && (
+            {acting && actionProgress && (
               <View
                 style={[
                   styles.progressFill,
                   {
                     backgroundColor: theme.colors.primary,
-                    width: `${downloadProgress.progress * 100}%`,
+                    width: `${actionProgress.progress * 100}%`,
                   },
                 ]}
               />
@@ -479,11 +443,15 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
                 { color: theme.colors.primary },
               ]}
             >
-              {downloading && downloadProgress
-                ? `${(downloadProgress.progress * 100).toFixed(0)}%  ${formatFileSize(downloadProgress.bytesTransferred)} / ${formatFileSize(downloadProgress.totalBytes)}`
-                : downloading
+              {acting && actionProgress
+                ? `${(actionProgress.progress * 100).toFixed(0)}%  ${formatFileSize(
+                    actionProgress.bytesTransferred
+                  )} / ${formatFileSize(actionProgress.totalBytes)}`
+                : acting
                   ? '取消'
-                  : '下载'}
+                  : isRemote
+                    ? '下载'
+                    : '上传'}
             </Text>
           </TouchableOpacity>
         )}
@@ -596,9 +564,6 @@ const styles = StyleSheet.create({
   mediaLabel: {
     fontSize: 15,
     marginBottom: 4,
-  },
-  mediaHint: {
-    fontSize: 13,
   },
   footer: {
     paddingTop: 12,

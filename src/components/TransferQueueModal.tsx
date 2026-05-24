@@ -12,7 +12,7 @@ import {
 import { X, Upload, Download, AlertCircle, Clock, CheckCircle } from 'react-native-feather';
 import { useTheme } from '@/hooks/useTheme';
 import { useTransferQueueStore } from '@/stores/transferQueueStore';
-import { TransferTask, getHistoryTransferQueue } from '@/services/HistoryTransferQueue';
+import { TransferTask, getHistoryTransferQueue } from '@/services/history/HistoryTransferQueue';
 import { formatFileSize } from '@/utils';
 
 interface TransferQueueModalProps {
@@ -98,7 +98,9 @@ export const TransferQueueModal: React.FC<TransferQueueModalProps> = ({ visible,
                 <Text style={[styles.progressText, { color: theme.colors.textSecondary }]}>
                   {Math.round(task.progress)}%
                   {task.totalBytes
-                    ? ` (${formatFileSize(task.bytesTransferred)}/${formatFileSize(task.totalBytes)})`
+                    ? ` (${formatFileSize(task.bytesTransferred)}/${formatFileSize(
+                        task.totalBytes
+                      )})`
                     : ''}
                 </Text>
               )}

@@ -4,9 +4,10 @@
  */
 
 import { create } from 'zustand';
-import { ClipboardItem } from '../types/clipboard';
+import { HistoryItem } from '../types/clipboard';
 import { HistoryFilter, HistorySort } from '../types/storage';
-import { historyStorage } from '../services';
+import { historyService } from '../services/history/HistoryService';
+import type { HistoryChangeAction } from '../storage/HistoryStorage';
 
 /**
  * 历史记录状态接口
@@ -14,7 +15,7 @@ import { historyStorage } from '../services';
 interface HistoryState {
   // 状态
   /** 历史记录列表 */
-  items: ClipboardItem[];
+  items: HistoryItem[];
 
   /** 总记录数 */
   totalCount: number;
@@ -51,13 +52,13 @@ interface HistoryState {
   searchItems: (filter?: HistoryFilter, sort?: HistorySort) => Promise<void>;
 
   /** 添加历史记录 */
-  addItem: (item: ClipboardItem) => Promise<ClipboardItem>;
+  addItem: (item: HistoryItem) => Promise<HistoryItem>;
 
   /** 批量添加历史记录 */
-  addItems: (items: ClipboardItem[]) => Promise<void>;
+  addItems: (items: HistoryItem[]) => Promise<void>;
 
   /** 更新历史记录 */
-  updateItem: (id: string, updates: Partial<ClipboardItem>) => Promise<void>;
+  updateItem: (id: string, updates: Partial<HistoryItem>) => Promise<void>;
 
   /** 删除历史记录 */
   deleteItem: (id: string) => Promise<void>;
@@ -105,7 +106,7 @@ interface HistoryState {
   refresh: () => Promise<void>;
 
   /** 处理存储变更（实时更新） */
-  handleStorageChange: (items: ClipboardItem[], action: 'add' | 'update' | 'delete') => void;
+  handleStorageChange: (items: HistoryItem[], action: HistoryChangeAction) => void;
 
   /** 重置 */
   reset: () => void;
@@ -141,7 +142,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
       const effectiveSort: HistorySort = sort || { field: 'timestamp', order: 'desc' };
 
-      const result = await historyStorage.searchItems(filter || undefined, effectiveSort);
+      const result = await historyService.searchItems(filter || undefined, effectiveSort);
       set({
         items: result.items,
         totalCount: result.total,
@@ -159,7 +160,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ isLoading: true, error: null, filter, sort: effectiveSort });
 
     try {
-      const result = await historyStorage.searchItems(filter, effectiveSort || undefined);
+      const result = await historyService.searchItems(filter, effectiveSort || undefined);
 
       set({
         items: result.items,
@@ -172,11 +173,11 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     }
   },
 
-  addItem: async (item: ClipboardItem) => {
+  addItem: async (item: HistoryItem) => {
     set({ error: null });
 
     try {
-      const savedItem = await historyStorage.addItem(item);
+      const savedItem = await historyService.addItem(item);
 
       // 更新最后添加时间戳
       set({ lastAddedTimestamp: Date.now() });
@@ -192,11 +193,11 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     }
   },
 
-  addItems: async (items: ClipboardItem[]) => {
+  addItems: async (items: HistoryItem[]) => {
     set({ error: null });
 
     try {
-      await historyStorage.addItems(items);
+      await historyService.addItems(items);
 
       set({ lastAddedTimestamp: Date.now() });
 
@@ -207,11 +208,11 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     }
   },
 
-  updateItem: async (profileHash: string, updates: Partial<ClipboardItem>) => {
+  updateItem: async (profileHash: string, updates: Partial<HistoryItem>) => {
     set({ error: null });
 
     try {
-      await historyStorage.updateItem(profileHash, updates);
+      await historyService.updateItem(profileHash, updates);
 
       // 更新本地状态
       set((state) => ({
@@ -229,7 +230,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ error: null });
 
     try {
-      await historyStorage.softDeleteItem(profileHash);
+      await historyService.softDeleteItem(profileHash);
       set({ lastDeletedHashes: [profileHash] });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete item';
@@ -241,7 +242,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ error: null });
 
     try {
-      await historyStorage.softDeleteItems(profileHashes);
+      await historyService.softDeleteItems(profileHashes);
       set({ lastDeletedHashes: profileHashes });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete items';
@@ -253,7 +254,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ error: null });
 
     try {
-      await historyStorage.toggleStar(profileHash);
+      await historyService.toggleStar(profileHash);
       // 状态更新由 handleStorageChange 处理
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to toggle star';
@@ -265,7 +266,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ error: null });
 
     try {
-      await historyStorage.togglePin(profileHash);
+      await historyService.togglePin(profileHash);
       // 状态更新由 handleStorageChange 处理
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to toggle pin';
@@ -275,7 +276,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
   incrementUseCount: async (profileHash: string) => {
     try {
-      await historyStorage.incrementUseCount(profileHash);
+      await historyService.incrementUseCount(profileHash);
 
       // 更新本地状态（可选）
       set((state) => ({
@@ -297,7 +298,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      await historyStorage.clear();
+      await historyService.clear();
       set({
         items: [],
         totalCount: 0,
@@ -318,7 +319,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
   setSort: (sort: HistorySort | null) => {
     set({ sort });
     if (sort) {
-      historyStorage.setSortConfig(sort);
+      historyService.setSortConfig(sort);
     }
   },
 
@@ -363,11 +364,11 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     await get().loadItems();
   },
 
-  handleStorageChange: (changedItems: ClipboardItem[], action: 'add' | 'update' | 'delete') => {
+  handleStorageChange: (changedItems: HistoryItem[], action: HistoryChangeAction) => {
     const { items, filter } = get();
 
     // 检查是否匹配当前筛选条件
-    const matchesFilter = (record: ClipboardItem): boolean => {
+    const matchesFilter = (record: HistoryItem): boolean => {
       if (!filter) return true;
       if (filter.keyword && !record.text.toLowerCase().includes(filter.keyword.toLowerCase())) {
         return false;
@@ -426,7 +427,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
       /**
        * 获取排序字段的值
        */
-      const getSortValue = (item: ClipboardItem): number => {
+      const getSortValue = (item: HistoryItem): number => {
         switch (sortField) {
           case 'timestamp':
             return item.timestamp;
@@ -444,7 +445,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
       /**
        * 二分查找插入位置（参照桌面端 InsertHistoryInOrder）
        */
-      const findInsertIndex = (arr: ClipboardItem[], item: ClipboardItem): number => {
+      const findInsertIndex = (arr: HistoryItem[], item: HistoryItem): number => {
         // 先确定 pinned 区域的边界
         const isPinned = item.pinned;
         let searchStart = 0;
