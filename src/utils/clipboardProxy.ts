@@ -121,12 +121,11 @@ async function shouldUseOverlay(): Promise<boolean> {
 
 /**
  * 判断是否应该使用 Shizuku 获取剪贴板
- * 条件：Android + 后台 + 设置启用 + Shizuku 可用且有权限
+ * 条件：Android + 设置启用 + Shizuku 可用且有权限
  * Shizuku 优先级高于悬浮窗
  */
 async function shouldUseShizuku(): Promise<boolean> {
   if (Platform.OS !== 'android' || !shizukuModule) return false;
-  if (AppState.currentState !== 'background') return false;
   const config = await configService.getConfig();
   if (!(config?.enableShizukuClipboard ?? false)) return false;
   if (!shizukuModule.isShizukuAvailable()) return false;
@@ -141,14 +140,17 @@ export async function getStringAsync(options?: Clipboard.GetStringOptions): Prom
   if (await shouldUseShizuku()) {
     try {
       const result = await shizukuModule!.getStringViaShizuku();
-      return result;
+      if (result && result.length > 0) return result;
+      console.warn('[ClipboardProxy] Shizuku getStringAsync returned empty, falling back');
     } catch (e) {
       console.warn('[ClipboardProxy] Shizuku getStringAsync failed, falling back:', e);
     }
   }
   if (await shouldUseOverlay()) {
     try {
-      return await overlayModule!.getStringViaOverlay();
+      const result = await overlayModule!.getStringViaOverlay();
+      if (result && result.length > 0) return result;
+      console.warn('[ClipboardProxy] Overlay getStringAsync returned empty, falling back');
     } catch (e) {
       console.warn('[ClipboardProxy] Overlay getStringAsync failed, falling back:', e);
     }

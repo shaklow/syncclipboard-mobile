@@ -41,6 +41,10 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
 
       if (isUpload) {
         content = await localClipboard.getClipboardContent();
+        if (!content) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          content = await localClipboard.getClipboardContent();
+        }
         if (!content) throw new Error('剪贴板为空，无内容可上传');
         await setRemoteClipboard(content, signal, (info) => setProgress(info));
       } else {
