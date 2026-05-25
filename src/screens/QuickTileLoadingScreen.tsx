@@ -57,11 +57,13 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
         const toastMessage = preview.length > 40 ? preview.slice(0, 40) + '…' : preview;
         ToastAndroid.show(toastMessage, ToastAndroid.SHORT);
 
-        // 文本中包含 URL 时，存入 state 以显示操作按钮
-        const urlRegex = /https?:\/\/[^\s<>"'()\]\[{}]+/i;
-        const urlMatch = content.text.match(urlRegex);
-        if (urlMatch) {
-          setFileContent(content);
+        // 文本中包含 URL 时，存入 state 以显示操作按钮（仅下载时）
+        if (!isUpload) {
+          const urlRegex = /https?:\/\/[^\s<>"'()\]\[{}]+/i;
+          const urlMatch = content.text.match(urlRegex);
+          if (urlMatch) {
+            setFileContent(content);
+          }
         }
       }
 
