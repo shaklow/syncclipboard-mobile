@@ -1,9 +1,10 @@
 import { logger, consoleTransport } from 'react-native-logs';
 import { Paths, Directory, File } from 'expo-file-system';
-import { StorageAccessFramework, writeAsStringAsync } from 'expo-file-system/legacy';
+import { writeAsStringAsync } from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import { nativeZipFiles } from 'native-util';
 import * as Application from 'expo-application';
+import { saveFile } from './fileActions';
 
 const LOG_DIR = new Directory(Paths.document, 'logs');
 const MAX_LOG_DAYS = 3;
@@ -256,18 +257,19 @@ export async function saveLogsToFile(signal?: AbortSignal): Promise<void> {
   }
 
   const timestamp = formatLocalDateTime(new Date());
-  const zipFileName = `logs_${timestamp}`;
-
-  const permissions = await StorageAccessFramework.requestDirectoryPermissionsAsync();
-  if (!permissions.granted) {
-    throw new Error('未授予存储权限');
+  const zipFileName = `logs_${timestamp}.zip`;
+  const cacheDir = new Directory(Paths.cache);
+  const tempZipFile = new File(cacheDir, zipFileName);
+  try {
+    await nativeZipFiles(fileUris, tempZipFile.uri, signal);
+    await saveFile(tempZipFile.uri, zipFileName);
+  } finally {
+    try {
+      if (tempZipFile.exists) {
+        tempZipFile.delete();
+      }
+    } catch {
+      // ignore cleanup errors
+    }
   }
-
-  const destUri = await StorageAccessFramework.createFileAsync(
-    permissions.directoryUri,
-    zipFileName,
-    'application/zip'
-  );
-
-  await nativeZipFiles(fileUris, destUri, signal);
 }

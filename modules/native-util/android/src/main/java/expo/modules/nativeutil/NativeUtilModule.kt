@@ -1,14 +1,17 @@
 package expo.modules.nativeutil
 
-import android.net.Uri
-import android.os.Build
-import android.os.PowerManager
+import android.content.ContentValues
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.graphics.Bitmap
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.os.PowerManager
+import android.provider.MediaStore
 import android.provider.Settings
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
@@ -203,6 +206,82 @@ class NativeUtilModule : Module() {
             cancelFlags[jobId]?.set(true)
         }
 
+        AsyncFunction("saveFileToDownloads") { srcUri: String, fileName: String, mimeType: String, relativePath: String, promise: Promise ->
+            executor.submit {
+                try {
+                    val srcPath = resolveFilePath(srcUri)
+                    val src = File(srcPath)
+                    if (!src.exists()) {
+                        promise.reject(FileNotFoundException(srcPath))
+                        return@submit
+                    }
+
+                    val context = appContext.reactContext ?: run {
+                        promise.reject(CodedException("Context not available"))
+                        return@submit
+                    }
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        val resolver = context.contentResolver
+                        val values = ContentValues().apply {
+                            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                            put(MediaStore.Downloads.MIME_TYPE, mimeType)
+                            put(MediaStore.Downloads.RELATIVE_PATH, relativePath.ifEmpty { "Download/" })
+                            put(MediaStore.Downloads.IS_PENDING, 1)
+                        }
+                        val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                        val item = resolver.insert(collection, values) ?: run {
+                            promise.reject(CodedException("Failed to create MediaStore entry"))
+                            return@submit
+                        }
+                        try {
+                            resolver.openOutputStream(item)?.use { output ->
+                                FileInputStream(src).channel.use { srcChannel ->
+                                    val destChannel = Channels.newChannel(output)
+                                    var position = 0L
+                                    val size = srcChannel.size()
+                                    while (position < size) {
+                                        position += srcChannel.transferTo(position, size - position, destChannel)
+                                    }
+                                }
+                            }
+                            values.clear()
+                            values.put(MediaStore.Downloads.IS_PENDING, 0)
+                            resolver.update(item, values, null, null)
+                            promise.resolve(null)
+                        } catch (e: Exception) {
+                            resolver.delete(item, null, null)
+                            throw e
+                        }
+                    } else {
+                        @Suppress("DEPRECATION")
+                        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                        val destDir = if (relativePath.isNotEmpty() && relativePath != "Download/") {
+                            // Strip leading "Download/" prefix since downloadsDir is already the Downloads folder
+                            val subPath = relativePath.removePrefix("Download/").trimEnd('/')
+                            if (subPath.isNotEmpty()) File(downloadsDir, subPath) else downloadsDir
+                        } else {
+                            downloadsDir
+                        }
+                        destDir.mkdirs()
+                        val destFile = File(destDir, fileName)
+                        FileInputStream(src).channel.use { srcChannel ->
+                            FileOutputStream(destFile).channel.use { destChannel ->
+                                var position = 0L
+                                val size = srcChannel.size()
+                                while (position < size) {
+                                    position += srcChannel.transferTo(position, size - position, destChannel)
+                                }
+                            }
+                        }
+                        promise.resolve(null)
+                    }
+                } catch (e: Exception) {
+                    promise.reject(CodedException(e.message ?: "Unknown error"))
+                }
+            }
+        }
+
         AsyncFunction("copyFile") { srcUri: String, destUri: String, promise: Promise ->
             executor.submit {
                 try {
@@ -261,12 +340,17 @@ class NativeUtilModule : Module() {
                     val buffer = ByteArray(UPLOAD_BUFFER_SIZE)
 
                     val dest = Uri.parse(destUri)
-                    val outputStream = appContext.reactContext?.contentResolver?.openOutputStream(dest)
-                        ?: run {
-                            cancelFlags.remove(jobId)
-                            future.complete(OpenFailedException(destUri))
-                            return@submit
-                        }
+                    val outputStream = if (dest.scheme == "file") {
+                        val path = dest.path ?: destUri.removePrefix("file://")
+                        FileOutputStream(path)
+                    } else {
+                        appContext.reactContext?.contentResolver?.openOutputStream(dest)
+                            ?: run {
+                                cancelFlags.remove(jobId)
+                                future.complete(OpenFailedException(destUri))
+                                return@submit
+                            }
+                    }
 
                     ZipOutputStream(outputStream).use { zipOut ->
                         for (file in files) {

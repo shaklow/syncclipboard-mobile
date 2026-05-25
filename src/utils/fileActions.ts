@@ -3,11 +3,30 @@
  * 文件操作公共函数 - 打开、分享文件
  */
 
-import { NativeModules, Platform } from 'react-native';
 import * as MediaLibrary from 'expo-media-library';
-import { nativeCopyFile } from 'native-util';
+import { nativeCopyFile, nativeSaveFileToDownloads } from 'native-util';
 
 const APP_PACKAGE = 'com.jericx.syncclipboardmobile';
+
+/**
+ * 检测 SAF 返回的目录 URI 是否是 Downloads 根目录。
+ * Android 11+ 不允许通过 SAF 写入 Downloads 根目录，需切换为 MediaStore。
+ * Downloads 子目录可以正常通过 SAF 写入，无需特殊处理。
+ *
+ * Downloads 根目录的 URI 形式：
+ * - Downloads provider root: .../tree/downloads（tree doc ID 为字面量 "downloads"）
+ * - External storage provider Downloads 根: .../tree/primary%3ADownload（decoded = "primary:Download"）
+ */
+function isDownloadsRootUri(directoryUri: string): boolean {
+  const treeMatch = directoryUri.match(/\/tree\/([^/?#]+)/i);
+  if (!treeMatch) return false;
+  const treeDocId = decodeURIComponent(treeMatch[1]);
+  // Downloads provider 根目录：tree doc ID 就是 "downloads"
+  if (treeDocId.toLowerCase() === 'downloads') return true;
+  // External storage provider 指向 Download 根目录（没有子路径）
+  if (/^primary:download$/i.test(treeDocId)) return true;
+  return false;
+}
 
 /**
  * 根据文件 URI / 文件名推断 MIME 类型（模块私有）
@@ -63,9 +82,14 @@ export async function openFile(fileUri: string): Promise<void> {
 
 /**
  * 将文件储存到用户选择的目录（Android SAF）
- * 会弹出系统文件夹选择器，将文件复制到所选位置。
+ * 若用户选择了 Downloads 根目录，自动切换为 MediaStore.Downloads 写入以绕过 Android 11+ 限制。
+ * Downloads 子目录通过 SAF 正常写入。
  */
 export async function saveFile(fileUri: string, fileName?: string): Promise<void> {
+  const name = fileName || fileUri.split('/').pop() || 'file';
+  const mimeType = getMimeTypeFromUri(fileUri);
+  const resolvedMime = mimeType === '*/*' ? 'application/octet-stream' : mimeType;
+
   const FileSystem = await import('expo-file-system/legacy');
   const { StorageAccessFramework } = FileSystem;
 
@@ -74,37 +98,19 @@ export async function saveFile(fileUri: string, fileName?: string): Promise<void
     throw new Error('Storage permission denied');
   }
 
-  const name = fileName || fileUri.split('/').pop() || 'file';
-  const mimeType = getMimeTypeFromUri(fileUri);
+  // 只有 Downloads 根目录才切换为 MediaStore（Android 11+ 限制根目录）
+  if (isDownloadsRootUri(permissions.directoryUri)) {
+    await nativeSaveFileToDownloads(fileUri, name, resolvedMime, 'Download/');
+    return;
+  }
 
   const destUri = await StorageAccessFramework.createFileAsync(
     permissions.directoryUri,
     name,
-    mimeType === '*/*' ? 'application/octet-stream' : mimeType
+    resolvedMime
   );
 
-  // 运行时检查，避免模块顶层静态求值时 NativeModules 尚未注入的问题
-  const hashModule = Platform.OS === 'android' ? (NativeModules.NativeUtilModule ?? null) : null;
-  console.log(
-    '[saveFile] NativeModules.NativeUtilModule:',
-    hashModule,
-    'keys:',
-    hashModule ? Object.keys(hashModule) : 'N/A'
-  );
-
-  if (hashModule?.copyFile) {
-    // 原生流式拷贝：FileChannel.transferTo，不把文件读入 JS/Java 堆
-    await nativeCopyFile(fileUri, destUri);
-  } else {
-    console.warn('[saveFile] falling back to base64, hashModule:', hashModule);
-    // 降级：base64 读写（非 Android 或原生模块未加载时）
-    const content = await FileSystem.readAsStringAsync(fileUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    await FileSystem.writeAsStringAsync(destUri, content, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-  }
+  await nativeCopyFile(fileUri, destUri);
 }
 
 /**
