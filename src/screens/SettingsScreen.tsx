@@ -54,9 +54,14 @@ import {
   requestShizukuPermission,
 } from 'shizuku-clipboard';
 import { extractVerificationCode } from '@/tasks/SmsUploadTask';
+import { useTranslation } from 'react-i18next';
+import { useI18n } from '@/hooks/useI18n';
+import type { Language } from '@/i18n';
 
 export const SettingsScreen = () => {
   const { theme, themeMode, setThemeMode } = useTheme();
+  const { t } = useTranslation();
+  const { language: currentLanguage, systemLanguage, setLanguage } = useI18n();
   const {
     config,
     isLoaded,
@@ -137,6 +142,7 @@ export const SettingsScreen = () => {
   const [smsTestInput, setSmsTestInput] = useState('');
   const [showLogLevelMenu, setShowLogLevelMenu] = useState(false);
   const [showThemeMenu, setShowThemeMenu] = useState(false);
+  const [showLanguageMenu, setShowLanguageMenu] = useState(false);
   const [localHideFromRecents, setLocalHideFromRecents] = useState(
     config?.hideFromRecents ?? false
   );
@@ -281,9 +287,23 @@ export const SettingsScreen = () => {
   }, [isLoaded]);
 
   const themeOptions: { label: string; value: ThemeMode }[] = [
-    { label: '跟随系统', value: 'auto' },
-    { label: '浅色模式', value: 'light' },
-    { label: '深色模式', value: 'dark' },
+    { label: t('settings.themeAuto'), value: 'auto' },
+    { label: t('settings.themeLight'), value: 'light' },
+    { label: t('settings.themeDark'), value: 'dark' },
+  ];
+
+  // 语言选项：zh/en label 用 native 名称（中文/English），auto label 跟随 UI 语言并标注当前系统语言
+  const langNativeNames: Record<string, string> = {
+    zh: t('settings.languageZh'),
+    en: t('settings.languageEn'),
+  };
+  const languageOptions: { label: string; value: Language }[] = [
+    {
+      label: `${t('settings.languageAuto')}（${langNativeNames[systemLanguage] ?? systemLanguage}）`,
+      value: 'auto',
+    },
+    { label: '中文', value: 'zh' },
+    { label: 'English', value: 'en' },
   ];
 
   const imageAutoDownloadOptions: { label: string; value: 'wifi' | 'always' | 'off' }[] = [
@@ -2200,6 +2220,67 @@ export const SettingsScreen = () => {
               { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider },
             ]}
           >
+            {/* 语言设置 */}
+            <TouchableOpacity
+              style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}
+              onPress={() => setShowLanguageMenu(!showLanguageMenu)}
+            >
+              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                {t('settings.language')}
+              </Text>
+              <View style={styles.dropdownValue}>
+                <Text style={[styles.dropdownValueText, { color: theme.colors.textSecondary }]}>
+                  {languageOptions.find((o) => o.value === currentLanguage)?.label ??
+                    t('settings.languageAuto')}
+                </Text>
+                {showLanguageMenu ? (
+                  <ChevronUp color={theme.colors.textSecondary} width={18} height={18} />
+                ) : (
+                  <ChevronDown color={theme.colors.textSecondary} width={18} height={18} />
+                )}
+              </View>
+            </TouchableOpacity>
+
+            {showLanguageMenu && (
+              <View style={[styles.dropdownMenu, { borderColor: theme.colors.divider }]}>
+                {languageOptions.map((option, index) => (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[
+                      styles.dropdownItem,
+                      index < languageOptions.length - 1
+                        ? {
+                            borderBottomWidth: StyleSheet.hairlineWidth,
+                            borderBottomColor: theme.colors.divider,
+                          }
+                        : undefined,
+                    ]}
+                    onPress={() => {
+                      setLanguage(option.value);
+                      setShowLanguageMenu(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.dropdownItemText,
+                        {
+                          color:
+                            currentLanguage === option.value
+                              ? theme.colors.primary
+                              : theme.colors.text,
+                        },
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                    {currentLanguage === option.value && (
+                      <Check stroke={theme.colors.primary} width={18} height={18} strokeWidth={3} />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
             <TouchableOpacity
               style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}
               onPress={() => setShowThemeMenu(!showThemeMenu)}

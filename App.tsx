@@ -2,6 +2,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet, Linking, ToastAndroid, StatusBar, View, Platform } from 'react-native';
 import { useEffect, useState } from 'react';
 import { ThemeProvider } from './src/contexts/ThemeContext';
+import { I18nProvider } from './src/contexts/I18nContext';
+import '@/i18n';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { QuickTileLoadingScreen } from './src/screens/QuickTileLoadingScreen';
 import { ShareReceiveScreen } from './src/screens/ShareReceiveScreen';
@@ -140,47 +142,49 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.container}>
       <ThemeProvider>
-        <ThemedStatusBar />
-        {appMode === 'checking' ? null : <AppNavigator />}
-        {shareReceiveOverlay && (
-          <View style={StyleSheet.absoluteFill}>
-            <ShareReceiveScreen
-              onComplete={() => {
-                setShareReceiveOverlay(false);
-                // 使用 moveTaskToBack 而非 exitApp，保持 Activity 存活以维持后台任务
-                moveTaskToBack();
-              }}
-            />
-          </View>
-        )}
-        {quickActionOverlay && (
-          <View style={StyleSheet.absoluteFill}>
-            <QuickTileLoadingScreen
-              direction={quickActionOverlay.direction}
-              onLoadingComplete={() => {
-                const shouldExit = quickActionOverlay.exitAfterSync;
-                setQuickActionOverlay(null);
-                if (shouldExit) {
+        <I18nProvider>
+          <ThemedStatusBar />
+          {appMode === 'checking' ? null : <AppNavigator />}
+          {shareReceiveOverlay && (
+            <View style={StyleSheet.absoluteFill}>
+              <ShareReceiveScreen
+                onComplete={() => {
+                  setShareReceiveOverlay(false);
                   // 使用 moveTaskToBack 而非 exitApp，保持 Activity 存活以维持后台任务
                   moveTaskToBack();
-                }
-              }}
-              overlayMode
-            />
-          </View>
-        )}
-        {processTextOverlay && (
-          <View style={StyleSheet.absoluteFill}>
-            <ProcessTextScreen
-              text={processTextOverlay}
-              onComplete={() => {
-                setProcessTextOverlay(null);
-                // 使用 moveTaskToBack 而非 exitApp，保持 Activity 存活以维持后台任务
-                moveTaskToBack();
-              }}
-            />
-          </View>
-        )}
+                }}
+              />
+            </View>
+          )}
+          {quickActionOverlay && (
+            <View style={StyleSheet.absoluteFill}>
+              <QuickTileLoadingScreen
+                direction={quickActionOverlay.direction}
+                onLoadingComplete={() => {
+                  const shouldExit = quickActionOverlay.exitAfterSync;
+                  setQuickActionOverlay(null);
+                  if (shouldExit) {
+                    // 使用 moveTaskToBack 而非 exitApp，保持 Activity 存活以维持后台任务
+                    moveTaskToBack();
+                  }
+                }}
+                overlayMode
+              />
+            </View>
+          )}
+          {processTextOverlay && (
+            <View style={StyleSheet.absoluteFill}>
+              <ProcessTextScreen
+                text={processTextOverlay}
+                onComplete={() => {
+                  setProcessTextOverlay(null);
+                  // 使用 moveTaskToBack 而非 exitApp，保持 Activity 存活以维持后台任务
+                  moveTaskToBack();
+                }}
+              />
+            </View>
+          )}
+        </I18nProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
   );

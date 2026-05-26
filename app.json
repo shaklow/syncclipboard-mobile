@@ -23,7 +23,9 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.jericx.syncclipboardmobile",
-      "permissions": ["android.permission.REQUEST_INSTALL_PACKAGES"]
+      "permissions": [
+        "android.permission.REQUEST_INSTALL_PACKAGES"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -49,10 +51,13 @@
         {
           "android": {
             "enabled": true,
-            "singleShareMimeTypes": ["*/*"]
+            "singleShareMimeTypes": [
+              "*/*"
+            ]
           }
         }
-      ]
+      ],
+      "expo-localization"
     ]
   }
 }
