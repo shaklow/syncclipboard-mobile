@@ -14,6 +14,7 @@ import { useTransferQueueStore } from '@/stores/transferQueueStore';
 import { getHistoryTransferQueue } from '@/services/history/HistoryTransferQueue';
 import { getProfileId, formatSizeWithType, formatFileSize } from '@/utils';
 import { useSettingsStore } from '@/stores';
+import { useTranslation } from 'react-i18next';
 
 const ACTION_ICON_SIZE = 15;
 
@@ -61,6 +62,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
     _ref
   ) => {
     const { theme } = useTheme();
+    const { t } = useTranslation();
     const tasks = useTransferQueueStore((state) => state.tasks);
 
     // 响应式读取自动下载设置，变化时触发 effect 重新执行
@@ -147,15 +149,15 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
     const getTypeLabel = (type: string): string => {
       switch (type) {
         case 'Text':
-          return '文本';
+          return t('common.typeText');
         case 'Image':
-          return '图片';
+          return t('common.typeImage');
         case 'File':
-          return '文件';
+          return t('common.typeFile');
         case 'Group':
-          return '文件组';
+          return t('common.typeFileGroup');
         default:
-          return '未知';
+          return t('common.typeUnknown');
       }
     };
 
@@ -163,13 +165,13 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
       const now = Date.now();
       const diff = now - timestamp;
 
-      if (diff < 60000) return '刚刚';
-      if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`;
-      if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`;
-      if (diff < 604800000) return `${Math.floor(diff / 86400000)} 天前`;
+      if (diff < 60000) return t('common.timeJustNow');
+      if (diff < 3600000) return t('common.timeMinutesAgo', { minutes: Math.floor(diff / 60000) });
+      if (diff < 86400000) return t('common.timeHoursAgo', { hours: Math.floor(diff / 3600000) });
+      if (diff < 604800000) return t('common.timeDaysAgo', { days: Math.floor(diff / 86400000) });
 
       const date = new Date(timestamp);
-      return date.toLocaleDateString('zh-CN', {
+      return date.toLocaleDateString(undefined, {
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
@@ -183,14 +185,14 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
       }
       if (item.type === 'Image') {
         // Image: isLocalFileReady 为 false 时显示 text，为 true 时不显示文本
-        return item.text || '图片';
+        return item.text || t('common.typeImage');
       }
       if (item.type === 'File') {
         // File: 无论 isLocalFileReady 为 true 还是 false 都显示 text
-        return item.text || '文件';
+        return item.text || t('common.typeFile');
       }
       if (item.type === 'Group') {
-        return item.text || '文件组';
+        return item.text || t('common.typeFileGroup');
       }
       return '';
     };

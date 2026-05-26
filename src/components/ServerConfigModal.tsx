@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from 'react-i18next';
 import { ServerConfig } from '@/types/api';
 import { createClientFromConfig } from '@/services';
 
@@ -38,6 +39,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
   isEditing = false,
 }) => {
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const [isTesting, setIsTesting] = useState(false);
   const testAbortControllerRef = useRef<AbortController | null>(null);
 
@@ -109,22 +111,22 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
     if (type === 's3') {
       // S3：bucketName 必填，url 可选（AWS 原生时留空）
       if (!bucketName.trim()) {
-        Alert.alert('错误', '请输入存储桶名称');
+        Alert.alert(t('server.errorTitle'), t('server.bucketNameRequired'));
         return false;
       }
       if (!username.trim()) {
-        Alert.alert('错误', '请输入 Access Key ID');
+        Alert.alert(t('server.errorTitle'), t('server.accessKeyRequired'));
         return false;
       }
       if (!password.trim()) {
-        Alert.alert('错误', '请输入 Secret Access Key');
+        Alert.alert(t('server.errorTitle'), t('server.secretKeyRequired'));
         return false;
       }
       if (url.trim()) {
         try {
           new URL(url);
         } catch {
-          Alert.alert('错误', '端点地址格式不正确');
+          Alert.alert(t('server.errorTitle'), t('server.endpointInvalid'));
           return false;
         }
       }
@@ -132,24 +134,24 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
     }
 
     if (!url.trim()) {
-      Alert.alert('错误', '请输入服务器地址');
+      Alert.alert(t('server.errorTitle'), t('server.urlRequired'));
       return false;
     }
 
     try {
       new URL(url);
     } catch {
-      Alert.alert('错误', '服务器地址格式不正确');
+      Alert.alert(t('server.errorTitle'), t('server.urlInvalid'));
       return false;
     }
 
     if (!username.trim()) {
-      Alert.alert('错误', '请输入用户名');
+      Alert.alert(t('server.errorTitle'), t('server.usernameRequired'));
       return false;
     }
 
     if (!password.trim()) {
-      Alert.alert('错误', '请输入密码');
+      Alert.alert(t('server.errorTitle'), t('server.passwordRequired'));
       return false;
     }
 
@@ -166,11 +168,11 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
 
     if (type === 's3') {
       if (!bucketName.trim() || !username.trim() || !password.trim()) {
-        Alert.alert('提示', '请先填写存储桶名称、Access Key ID 和 Secret Access Key');
+        Alert.alert(t('server.tipTitle'), t('server.s3FieldsRequired'));
         return;
       }
     } else if (!url.trim() || !username.trim() || !password.trim()) {
-      Alert.alert('提示', '请先填写服务器地址、用户名和密码');
+      Alert.alert(t('server.tipTitle'), t('server.fieldsRequired'));
       return;
     }
 
@@ -196,14 +198,17 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
       await client.testConnection(testAbortControllerRef.current.signal);
       console.log('[ServerConfigModal] Test succeeded');
 
-      Alert.alert('成功', '服务器连接测试成功！');
+      Alert.alert(t('server.testSuccessTitle'), t('server.testSuccess'));
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
         console.log('[ServerConfigModal] Test cancelled');
         return;
       }
       console.error('[ServerConfigModal] Test failed:', error);
-      Alert.alert('连接失败', error instanceof Error ? error.message : '无法连接到服务器');
+      Alert.alert(
+        t('server.connectionFailedTitle'),
+        error instanceof Error ? error.message : t('server.connectionFailed')
+      );
     } finally {
       setIsTesting(false);
       testAbortControllerRef.current = null;
@@ -247,10 +252,12 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
         >
           <View style={[styles.header, { borderBottomColor: theme.colors.divider }]}>
             <TouchableOpacity onPress={handleClose} style={styles.headerButton}>
-              <Text style={[styles.headerButtonText, { color: theme.colors.primary }]}>取消</Text>
+              <Text style={[styles.headerButtonText, { color: theme.colors.primary }]}>
+                {t('common.cancel')}
+              </Text>
             </TouchableOpacity>
             <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-              {isEditing ? '编辑服务器' : '添加服务器'}
+              {isEditing ? t('server.editTitle') : t('server.addTitle')}
             </Text>
             <TouchableOpacity onPress={handleSave} style={styles.headerButton}>
               <Text
@@ -260,7 +267,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
                   { color: theme.colors.primary },
                 ]}
               >
-                保存
+                {t('common.save')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -274,7 +281,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
             {/* 服务器类型 */}
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
-                服务器类型
+                {t('server.typeSection')}
               </Text>
               <View
                 style={[
@@ -294,10 +301,10 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
                 >
                   <View style={styles.typeContent}>
                     <Text style={[styles.typeLabel, { color: theme.colors.text }]}>
-                      SyncClipboard 服务器
+                      {t('server.typeSyncClipboard')}
                     </Text>
                     <Text style={[styles.typeDescription, { color: theme.colors.textSecondary }]}>
-                      官方独立服务器或客户端内置服务器
+                      {t('server.typeSyncClipboardDesc')}
                     </Text>
                   </View>
                   {type === 'syncclipboard' && (
@@ -317,10 +324,10 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
                 >
                   <View style={styles.typeContent}>
                     <Text style={[styles.typeLabel, { color: theme.colors.text }]}>
-                      WebDAV 服务器
+                      {t('server.typeWebDAV')}
                     </Text>
                     <Text style={[styles.typeDescription, { color: theme.colors.textSecondary }]}>
-                      支持 WebDAV 协议的云存储服务
+                      {t('server.typeWebDAVDesc')}
                     </Text>
                   </View>
                   {type === 'webdav' && (
@@ -339,10 +346,10 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
                 >
                   <View style={styles.typeContent}>
                     <Text style={[styles.typeLabel, { color: theme.colors.text }]}>
-                      S3 兼容存储
+                      {t('server.typeS3')}
                     </Text>
                     <Text style={[styles.typeDescription, { color: theme.colors.textSecondary }]}>
-                      AWS S3 / MinIO / Cloudflare R2 等
+                      {t('server.typeS3Desc')}
                     </Text>
                   </View>
                   {type === 's3' && (
@@ -357,7 +364,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
             {/* 服务器信息 */}
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
-                连接信息
+                {t('server.connectionSection')}
               </Text>
               <View
                 style={[
@@ -368,7 +375,9 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
                 {type === 's3' ? (
                   <>
                     <View style={styles.inputGroup}>
-                      <Text style={[styles.inputLabel, { color: theme.colors.text }]}>名称</Text>
+                      <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                        {t('server.name')}
+                      </Text>
                       <TextInput
                         style={[
                           styles.input,
@@ -378,7 +387,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
                             borderColor: theme.colors.divider,
                           },
                         ]}
-                        placeholder="可选，用于卡片显示"
+                        placeholder={t('server.namePlaceholder')}
                         placeholderTextColor={theme.colors.textTertiary}
                         value={serverName}
                         onChangeText={setServerName}
@@ -392,7 +401,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
 
                     <View style={styles.inputGroup}>
                       <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
-                        存储桶名称 *
+                        {t('server.bucketName')}
                       </Text>
                       <TextInput
                         ref={bucketNameRef}
@@ -471,7 +480,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
 
                     <View style={styles.inputGroup}>
                       <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
-                        端点地址
+                        {t('server.endpoint')}
                       </Text>
                       <TextInput
                         ref={urlRef}
@@ -483,7 +492,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
                             borderColor: theme.colors.divider,
                           },
                         ]}
-                        placeholder="留空使用 AWS 标准端点"
+                        placeholder={t('server.endpointPlaceholder')}
                         placeholderTextColor={theme.colors.textTertiary}
                         value={url}
                         onChangeText={setUrl}
@@ -497,7 +506,9 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
                     </View>
 
                     <View style={styles.inputGroup}>
-                      <Text style={[styles.inputLabel, { color: theme.colors.text }]}>区域</Text>
+                      <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                        {t('server.region')}
+                      </Text>
                       <TextInput
                         ref={regionRef}
                         style={[
@@ -522,7 +533,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
 
                     <View style={styles.inputGroup}>
                       <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
-                        对象前缀
+                        {t('server.objectPrefix')}
                       </Text>
                       <TextInput
                         ref={objectPrefixRef}
@@ -547,7 +558,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
 
                     <View style={styles.switchGroup}>
                       <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
-                        路径风格寻址
+                        {t('server.forcePathStyle')}
                       </Text>
                       <Switch
                         value={forcePathStyle}
@@ -559,14 +570,14 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
                       />
                     </View>
                     <Text style={[styles.hintText, { color: theme.colors.textTertiary }]}>
-                      建议 S3 兼容服务器启用路径风格寻址
+                      {t('server.forcePathStyleHint')}
                     </Text>
                   </>
                 ) : (
                   <>
                     <View style={styles.inputGroup}>
                       <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
-                        服务器地址
+                        {t('server.url')}
                       </Text>
                       <TextInput
                         ref={urlRef}
@@ -592,7 +603,9 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
                     </View>
 
                     <View style={styles.inputGroup}>
-                      <Text style={[styles.inputLabel, { color: theme.colors.text }]}>用户名</Text>
+                      <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                        {t('server.username')}
+                      </Text>
                       <TextInput
                         ref={usernameRef}
                         style={[
@@ -616,7 +629,9 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
                     </View>
 
                     <View style={styles.inputGroup}>
-                      <Text style={[styles.inputLabel, { color: theme.colors.text }]}>密码</Text>
+                      <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                        {t('server.password')}
+                      </Text>
                       <TextInput
                         ref={passwordRef}
                         style={[
@@ -666,10 +681,12 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
               onPress={handleTestConnection}
             >
               {isTesting ? (
-                <Text style={[styles.testButtonText, { color: theme.colors.error }]}>取消测试</Text>
+                <Text style={[styles.testButtonText, { color: theme.colors.error }]}>
+                  {t('server.cancelTest')}
+                </Text>
               ) : (
                 <Text style={[styles.testButtonText, { color: theme.colors.primary }]}>
-                  测试连接
+                  {t('server.testConnection')}
                 </Text>
               )}
             </TouchableOpacity>

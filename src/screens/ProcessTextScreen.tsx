@@ -4,6 +4,7 @@
  */
 
 import React, { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { QuickLoadingPage } from '@/components/QuickLoadingPage';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { createContentFromText } from '@/utils/clipboard/clipboardContentUtils';
@@ -15,23 +16,24 @@ interface ProcessTextScreenProps {
 }
 
 export const ProcessTextScreen: React.FC<ProcessTextScreenProps> = ({ text, onComplete }) => {
+  const { t } = useTranslation();
   const activeServer = useSettingsStore((s) => s.getActiveServer());
 
   const task = useCallback(
     async (signal: AbortSignal) => {
-      if (!activeServer) throw new Error('请先在设置中配置服务器');
+      if (!activeServer) throw new Error(t('common.serverNotConfigured'));
       const content = await createContentFromText(text, { signal });
       await setRemoteClipboard(content, signal);
     },
-    [text, activeServer]
+    [text, activeServer, t]
   );
 
   return (
     <QuickLoadingPage
       task={task}
-      loadingText="正在上传文字…"
-      successText="上传成功"
-      failureText="上传失败"
+      loadingText={t('processText.uploadingText')}
+      successText={t('processText.uploadSuccess')}
+      failureText={t('processText.uploadFailed')}
       onComplete={onComplete}
       previewText={text.length > 50 ? `${text.slice(0, 50)}…` : text}
     />

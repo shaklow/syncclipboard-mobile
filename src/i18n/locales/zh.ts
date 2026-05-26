@@ -20,6 +20,7 @@ const zh = {
     operationFailed: '操作失败',
     setFailed: '设置失败',
     defaultError: '操作失败，请重试',
+    unknownError: '未知错误',
     goToSettings: '前往设置',
     learnMore: '了解更多',
     later: '稍后再说',
@@ -88,6 +89,7 @@ const zh = {
     savedToDevice: '已储存到设备',
     galleryPermissionRequired: '需要相册权限才能保存图片',
     saveFailed: '保存失败',
+    onlyImageToGallery: '仅支持保存图片到相册',
   },
 
   history: {
@@ -203,6 +205,7 @@ const zh = {
     enableBackgroundTasksTitle: '开启后台任务',
     enableBackgroundTasksMessage:
       '启用后台任务后，应用将在后台持续运行相关服务，大幅增加电量消耗，强烈建议按需开启。\n\n如有需要，可以在系统设置中将 SyncClipboard 的电池优化设为「不受限制」，并在多任务界面锁定 SyncClipboard，减少系统关闭后台任务的概率。',
+    backgroundTasksResumed: '已恢复后台任务',
     backgroundTasksEnabled: '已启用后台任务',
     backgroundTasksDisabled: '已禁用后台任务',
     foregroundNotification: '后台服务常驻通知',
@@ -286,6 +289,7 @@ const zh = {
     logLevelWarn: '警告',
     logLevelError: '错误',
     exportLogs: '导出日志',
+    noLogsToExport: '没有可导出的日志文件',
     logsSaved: '日志已保存',
     exportCanceled: '已取消导出',
     logLevelSetFailed: '设置日志等级失败',
@@ -314,6 +318,8 @@ const zh = {
     newVersionTitle: '发现新版本',
     newVersionMessage:
       '最新版本：{{newVersion}}\n当前版本：{{currentVersion}}\n\n更新说明：\n{{notes}}\n\n请选择下载渠道',
+    newVersionMessageNoNotes:
+      '最新版本：{{newVersion}}\n当前版本：{{currentVersion}}\n\n请选择下载渠道',
     downloadGitee: 'Gitee 下载',
     downloadGitHub: 'GitHub 下载',
     noSuitableApk: '找不到适合当前设备的 APK',
@@ -449,6 +455,26 @@ const zh = {
     uploadingText: '正在上传文字…',
     uploadSuccess: '上传成功',
     uploadFailed: '上传失败',
+  },
+
+  syncStatus: {
+    notConnected: '未连接服务器',
+    syncing: '同步中...',
+    synced: '已同步',
+    failed: '同步失败',
+    conflict: '同步冲突',
+    idle: '等待同步',
+    justSynced: '刚刚同步',
+  },
+
+  // --- 错误 ---
+  error: {
+    configureServerFirst: '请先在设置中配置服务器',
+    cannotReadFullText: '无法读取完整文本',
+    parseShareFailed: '解析分享内容失败: {{message}}',
+    noShareContent: '没有可处理的分享内容',
+    githubApiFailed: 'GitHub API 请求失败: {{status}}',
+    apkHashMismatch: 'APK 哈希校验失败：期望 {{expected}}，实际 {{actual}}',
   },
 } as const;
 

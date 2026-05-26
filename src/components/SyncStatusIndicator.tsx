@@ -6,6 +6,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from 'react-i18next';
 import { SyncStatus } from '@/types/sync';
 
 interface SyncStatusIndicatorProps {
@@ -20,6 +21,7 @@ export const SyncStatusIndicator: React.FC<SyncStatusIndicatorProps> = ({
   serverConnected,
 }) => {
   const { theme } = useTheme();
+  const { t } = useTranslation();
 
   const getStatusColor = (): string => {
     if (!serverConnected) return theme.colors.textTertiary;
@@ -58,20 +60,20 @@ export const SyncStatusIndicator: React.FC<SyncStatusIndicatorProps> = ({
   };
 
   const getStatusText = (): string => {
-    if (!serverConnected) return '未连接服务器';
+    if (!serverConnected) return t('syncStatus.notConnected');
 
     switch (status) {
       case SyncStatus.Syncing:
-        return '同步中...';
+        return t('syncStatus.syncing');
       case SyncStatus.Success:
-        return '已同步';
+        return t('syncStatus.synced');
       case SyncStatus.Failed:
-        return '同步失败';
+        return t('syncStatus.failed');
       case SyncStatus.Conflict:
-        return '同步冲突';
+        return t('syncStatus.conflict');
       case SyncStatus.Idle:
       default:
-        return '等待同步';
+        return t('syncStatus.idle');
     }
   };
 
@@ -81,11 +83,11 @@ export const SyncStatusIndicator: React.FC<SyncStatusIndicatorProps> = ({
     const now = Date.now();
     const diff = now - lastSyncTime;
 
-    if (diff < 60000) return '刚刚同步';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`;
+    if (diff < 60000) return t('syncStatus.justSynced');
+    if (diff < 3600000) return t('common.timeMinutesAgo', { minutes: Math.floor(diff / 60000) });
+    if (diff < 86400000) return t('common.timeHoursAgo', { hours: Math.floor(diff / 3600000) });
 
-    return new Date(lastSyncTime).toLocaleDateString('zh-CN', {
+    return new Date(lastSyncTime).toLocaleDateString(undefined, {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',

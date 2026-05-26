@@ -27,6 +27,7 @@ const en: DeepString<typeof zh> = {
     operationFailed: 'Operation failed',
     setFailed: 'Failed to set',
     defaultError: 'Operation failed, please try again',
+    unknownError: 'Unknown error',
     goToSettings: 'Go to Settings',
     learnMore: 'Learn More',
     later: 'Later',
@@ -95,6 +96,7 @@ const en: DeepString<typeof zh> = {
     savedToDevice: 'Saved to device',
     galleryPermissionRequired: 'Gallery permission required to save image',
     saveFailed: 'Save failed',
+    onlyImageToGallery: 'Only images can be saved to gallery',
   },
 
   history: {
@@ -211,6 +213,7 @@ const en: DeepString<typeof zh> = {
     enableBackgroundTasksTitle: 'Enable Background Tasks',
     enableBackgroundTasksMessage:
       'Enabling background tasks will keep the app running in the background, significantly increasing battery usage. Enable only when needed.\n\nYou may set battery optimization to "Unrestricted" and lock SyncClipboard in the multitasking screen to reduce the chance of the system killing background tasks.',
+    backgroundTasksResumed: 'Background tasks resumed',
     backgroundTasksEnabled: 'Background tasks enabled',
     backgroundTasksDisabled: 'Background tasks disabled',
     foregroundNotification: 'Persistent foreground notification',
@@ -297,6 +300,7 @@ const en: DeepString<typeof zh> = {
     logLevelWarn: 'Warning',
     logLevelError: 'Error',
     exportLogs: 'Export logs',
+    noLogsToExport: 'No log files to export',
     logsSaved: 'Logs saved',
     exportCanceled: 'Export canceled',
     logLevelSetFailed: 'Failed to set log level',
@@ -325,6 +329,8 @@ const en: DeepString<typeof zh> = {
     newVersionTitle: 'New version available',
     newVersionMessage:
       'Latest: {{newVersion}}\nCurrent: {{currentVersion}}\n\nRelease notes:\n{{notes}}\n\nSelect download source',
+    newVersionMessageNoNotes:
+      'Latest: {{newVersion}}\nCurrent: {{currentVersion}}\n\nSelect download source',
     downloadGitee: 'Download from Gitee',
     downloadGitHub: 'Download from GitHub',
     noSuitableApk: 'No suitable APK found for this device',
@@ -460,6 +466,26 @@ const en: DeepString<typeof zh> = {
     uploadingText: 'Uploading text…',
     uploadSuccess: 'Upload successful',
     uploadFailed: 'Upload failed',
+  },
+
+  syncStatus: {
+    notConnected: 'Server not connected',
+    syncing: 'Syncing...',
+    synced: 'Synced',
+    failed: 'Sync failed',
+    conflict: 'Sync conflict',
+    idle: 'Waiting to sync',
+    justSynced: 'Just synced',
+  },
+
+  // --- 错误 ---
+  error: {
+    configureServerFirst: 'Please configure server in settings first',
+    cannotReadFullText: 'Cannot read full text',
+    parseShareFailed: 'Failed to parse shared content: {{message}}',
+    noShareContent: 'No shared content to process',
+    githubApiFailed: 'GitHub API request failed: {{status}}',
+    apkHashMismatch: 'APK hash mismatch: expected {{expected}}, got {{actual}}',
   },
 };
 

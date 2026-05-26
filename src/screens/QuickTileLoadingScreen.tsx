@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { ToastAndroid, Linking } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { SyncDirection } from '@/types/sync';
 import { ClipboardContent } from '@/types/clipboard';
 import {
@@ -25,6 +26,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
   overlayMode,
 }) => {
   const isUpload = direction === SyncDirection.Upload;
+  const { t } = useTranslation();
 
   // 用 state 存储下载的文件内容，触发重渲染以更新 successButtons prop
   const [fileContent, setFileContent] = useState<ClipboardContent | null>(null);
@@ -45,7 +47,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
           await new Promise((resolve) => setTimeout(resolve, 500));
           content = await localClipboard.getClipboardContent();
         }
-        if (!content) throw new Error('剪贴板为空，无内容可上传');
+        if (!content) throw new Error(t('quickTile.clipboardEmpty'));
         await setRemoteClipboard(content, signal, (info) => setProgress(info));
       } else {
         content = await setLocalClipboardFromRemote((info) => setProgress(info), signal);
@@ -72,7 +74,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
         setFileContent(content);
       }
     },
-    [direction, isUpload]
+    [direction, isUpload, t]
   );
 
   // 检测文本中的 URL
@@ -87,17 +89,17 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
     ? fileContent.type === 'Text' && textUrl
       ? [
           {
-            label: '复制',
+            label: t('common.copy'),
             primary: true,
             onPress: async () => {
               try {
                 await Clipboard.setStringAsync(fileContent.text!);
-                ToastAndroid.show('已复制', ToastAndroid.SHORT);
+                ToastAndroid.show(t('quickTile.copied'), ToastAndroid.SHORT);
               } catch {}
             },
           },
           {
-            label: '打开链接',
+            label: t('clipboard.openLink'),
             primary: true,
             onPress: async () => {
               try {
@@ -108,7 +110,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
         ]
       : [
           {
-            label: '打开',
+            label: t('clipboard.open'),
             primary: true,
             onPress: async () => {
               try {
@@ -117,29 +119,29 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
             },
           },
           {
-            label: '保存',
+            label: t('clipboard.save'),
             primary: true,
             onPress: async () => {
               try {
                 if (fileContent.type === 'Image') {
                   await saveToGallery(fileContent.fileUri!);
-                  ToastAndroid.show('已保存到相册', ToastAndroid.SHORT);
+                  ToastAndroid.show(t('quickTile.savedToGallery'), ToastAndroid.SHORT);
                 } else {
                   await saveFile(fileContent.fileUri!, fileContent.fileName);
-                  ToastAndroid.show('已储存到设备', ToastAndroid.SHORT);
+                  ToastAndroid.show(t('quickTile.savedToDevice'), ToastAndroid.SHORT);
                 }
               } catch (error) {
                 console.error('[QuickTileLoadingScreen] Failed to save file:', error);
                 if (error instanceof Error && error.message === 'Media library permission denied') {
-                  ToastAndroid.show('需要相册权限才能保存图片', ToastAndroid.SHORT);
+                  ToastAndroid.show(t('quickTile.galleryPermissionRequired'), ToastAndroid.SHORT);
                   return;
                 }
-                ToastAndroid.show('保存失败', ToastAndroid.SHORT);
+                ToastAndroid.show(t('quickTile.saveFailed'), ToastAndroid.SHORT);
               }
             },
           },
           {
-            label: '分享',
+            label: t('clipboard.share'),
             primary: true,
             onPress: async () => {
               try {
@@ -153,9 +155,11 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
   return (
     <QuickLoadingPage
       task={task}
-      loadingText={isUpload ? '正在上传剪贴板...' : '正在下载剪贴板...'}
-      successText={isUpload ? '上传成功！' : '同步成功！'}
-      failureText={isUpload ? '上传失败' : '同步失败'}
+      loadingText={
+        isUpload ? t('quickTile.uploadingClipboard') : t('quickTile.downloadingClipboard')
+      }
+      successText={isUpload ? t('quickTile.uploadSuccess') : t('quickTile.syncSuccess')}
+      failureText={isUpload ? t('quickTile.uploadFailed') : t('quickTile.syncFailed')}
       onComplete={onLoadingComplete}
       successContent={fileContent ?? undefined}
       successButtons={successButtons}

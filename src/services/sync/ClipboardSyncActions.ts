@@ -10,6 +10,7 @@ import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
 import { localClipboard } from '../clipboard/LocalClipboard';
 import { DedupedOperation } from '@/utils/DedupedOperation';
 import { File } from 'expo-file-system';
+import i18n from '@/i18n';
 
 /** 比较两个 ClipboardContent 是否代表相同内容（用于去重继承判断） */
 function isSameContent(a: ClipboardContent, b: ClipboardContent): boolean {
@@ -43,7 +44,7 @@ export async function setRemoteClipboard(
     if (sig.aborted) throw new DOMException('Aborted', 'AbortError');
 
     const server = await configService.getActiveServer();
-    if (!server) throw new Error('请先在设置中配置服务器');
+    if (!server) throw new Error(i18n.t('common.serverNotConfigured'));
 
     await historyService.addLocalContent(content);
 

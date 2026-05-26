@@ -3,6 +3,8 @@
  * 检查 GitHub 最新 Release 版本更新
  */
 
+import i18n from '@/i18n';
+
 const GITHUB_RELEASES_API = 'https://api.github.com/repos/Jeric-X/syncclipboard-mobile/releases';
 const RELEASES_PAGE_URL = 'https://github.com/Jeric-X/syncclipboard-mobile/releases';
 const GITEE_RELEASES_PAGE_URL = 'https://gitee.com/JericX/syncclipboard-mobile/releases';
@@ -106,7 +108,7 @@ export async function checkForUpdate(
   });
 
   if (!response.ok) {
-    throw new Error(`GitHub API 请求失败: ${response.status}`);
+    throw new Error(i18n.t('error.githubApiFailed', { status: response.status }));
   }
 
   const releases: Array<{

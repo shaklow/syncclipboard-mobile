@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from 'react-i18next';
 import type { ClipboardContent } from '@/types/clipboard';
 import type { ProgressInfo } from 'native-util';
 import { formatFileSize, isTextInvalid } from '@/utils';
@@ -59,6 +60,7 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
   overlayMode,
 }) => {
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const [state, setState] = useState<LoadingState>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -87,7 +89,7 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
       if (signal.aborted) {
         return;
       }
-      setErrorMessage(err instanceof Error ? err.message : '操作失败，请重试');
+      setErrorMessage(err instanceof Error ? err.message : t('common.defaultError'));
       setState('error');
     }
   }, [onComplete]);
@@ -201,7 +203,9 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
             ]}
             onPress={handleCancel}
           >
-            <Text style={[styles.buttonText, { color: theme.colors.text }]}>取消</Text>
+            <Text style={[styles.buttonText, { color: theme.colors.text }]}>
+              {t('common.cancel')}
+            </Text>
           </TouchableOpacity>
         </>
       )}
@@ -254,7 +258,9 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
                 ]}
                 onPress={onComplete}
               >
-                <Text style={[styles.buttonText, { color: theme.colors.text }]}>返回</Text>
+                <Text style={[styles.buttonText, { color: theme.colors.text }]}>
+                  {t('common.back')}
+                </Text>
               </TouchableOpacity>
             </View>
           )}
@@ -280,7 +286,9 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
               style={[styles.button, { backgroundColor: theme.colors.primary }]}
               onPress={run}
             >
-              <Text style={[styles.buttonText, { color: theme.colors.white }]}>重试</Text>
+              <Text style={[styles.buttonText, { color: theme.colors.white }]}>
+                {t('common.retry')}
+              </Text>
             </TouchableOpacity>
             {errorMessage && (
               <TouchableOpacity
@@ -291,7 +299,9 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
                 ]}
                 onPress={() => Clipboard.setStringAsync(errorMessage)}
               >
-                <Text style={[styles.buttonText, { color: theme.colors.text }]}>复制</Text>
+                <Text style={[styles.buttonText, { color: theme.colors.text }]}>
+                  {t('common.copy')}
+                </Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -302,7 +312,9 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
               ]}
               onPress={onComplete}
             >
-              <Text style={[styles.buttonText, { color: theme.colors.text }]}>返回</Text>
+              <Text style={[styles.buttonText, { color: theme.colors.text }]}>
+                {t('common.back')}
+              </Text>
             </TouchableOpacity>
           </View>
         </>

@@ -6,6 +6,7 @@
 import { Paths, Directory, File } from 'expo-file-system';
 import type { ReleaseAssetInfo } from './update';
 import { parseVersion, compareVersions } from './update';
+import i18n from '@/i18n';
 
 // APK 缓存目录：CLIPBOARD_TEMP_DIR/updates/v{version}/
 // 清除缓存时会被一并清除
@@ -197,7 +198,7 @@ export async function downloadApk(options: ApkDownloadOptions): Promise<string> 
     console.log(`[ApkDownload] actual hash=${hash}`);
     if (hash.toLowerCase() !== asset.sha256.toLowerCase()) {
       destFile.delete();
-      throw new Error(`APK 哈希校验失败：期望 ${asset.sha256}，实际 ${hash}`);
+      throw new Error(i18n.t('error.apkHashMismatch', { expected: asset.sha256, actual: hash }));
     }
     console.log('[ApkDownload] hash verified OK');
   } else {

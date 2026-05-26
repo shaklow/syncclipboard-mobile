@@ -6,6 +6,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from 'react-i18next';
 import { ServerConfig } from '@/types/api';
 
 interface ServerListItemProps {
@@ -24,12 +25,17 @@ export const ServerListItem: React.FC<ServerListItemProps> = ({
   onDelete,
 }) => {
   const { theme } = useTheme();
+  const { t } = useTranslation();
 
   const handleDelete = () => {
-    Alert.alert('确认删除', `确定要删除服务器 "${getServerDisplayName(config)}" 吗？`, [
-      { text: '取消', style: 'cancel' },
-      { text: '删除', style: 'destructive', onPress: onDelete },
-    ]);
+    Alert.alert(
+      t('server.confirmDeleteTitle'),
+      t('server.confirmDeleteMessage', { name: getServerDisplayName(config) }),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('common.delete'), style: 'destructive', onPress: onDelete },
+      ]
+    );
   };
 
   const getServerDisplayName = (config: ServerConfig): string => {
@@ -113,8 +119,8 @@ export const ServerListItem: React.FC<ServerListItemProps> = ({
         <View style={styles.details}>
           <Text style={[styles.detailText, { color: theme.colors.textSecondary }]}>
             {config.type === 's3'
-              ? `🪣 ${config.bucketName || '未设置'}`
-              : `👤 ${config.username || '未设置'}`}
+              ? `🪣 ${config.bucketName || t('server.notSet')}`
+              : `👤 ${config.username || t('server.notSet')}`}
           </Text>
         </View>
       </View>
@@ -128,7 +134,9 @@ export const ServerListItem: React.FC<ServerListItemProps> = ({
             onEdit();
           }}
         >
-          <Text style={[styles.actionButtonText, { color: theme.colors.primary }]}>编辑</Text>
+          <Text style={[styles.actionButtonText, { color: theme.colors.primary }]}>
+            {t('common.edit')}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -138,7 +146,9 @@ export const ServerListItem: React.FC<ServerListItemProps> = ({
             handleDelete();
           }}
         >
-          <Text style={[styles.actionButtonText, { color: theme.colors.error }]}>删除</Text>
+          <Text style={[styles.actionButtonText, { color: theme.colors.error }]}>
+            {t('common.delete')}
+          </Text>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>

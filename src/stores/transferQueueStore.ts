@@ -7,6 +7,7 @@ import {
 } from '@/services/history/HistoryTransferQueue';
 import { useMessageStore } from './messageStore';
 import { errorService } from '../services/ErrorService';
+import i18n from '@/i18n';
 
 interface TransferQueueState {
   tasks: TransferTask[];
@@ -60,11 +61,15 @@ export const useTransferQueueStore = create<TransferQueueState>((set, get) => ({
       });
 
       if (task.status === 'failed' && task.errorMessage && !task.userCancelled) {
-        const operationName = task.type === 'download' ? '下载' : '上传';
+        const operationName =
+          task.type === 'download' ? i18n.t('clipboard.download') : i18n.t('clipboard.upload');
         errorService.showNetworkError(operationName, task.errorMessage);
         useMessageStore
           .getState()
-          .showMessage(`${operationName}失败: ${task.errorMessage}`, 'error');
+          .showMessage(
+            `${operationName}${i18n.t('transfer.statusFailed')}: ${task.errorMessage}`,
+            'error'
+          );
       }
     };
 

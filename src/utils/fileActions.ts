@@ -5,6 +5,7 @@
 
 import * as MediaLibrary from 'expo-media-library';
 import { nativeCopyFile, nativeSaveFileToDownloads } from 'native-util';
+import i18n from '@/i18n';
 
 const APP_PACKAGE = 'com.jericx.syncclipboardmobile';
 
@@ -135,7 +136,7 @@ export async function saveToGallery(fileUri: string): Promise<void> {
   const isImage = mimeType.startsWith('image/');
 
   if (!isImage) {
-    throw new Error('仅支持保存图片到相册');
+    throw new Error(i18n.t('clipboard.onlyImageToGallery'));
   }
 
   const { status } = await MediaLibrary.requestPermissionsAsync();

@@ -302,14 +302,14 @@ export const SettingsScreen = () => {
       label: `${t('settings.languageAuto')}（${langNativeNames[systemLanguage] ?? systemLanguage}）`,
       value: 'auto',
     },
-    { label: '中文', value: 'zh' },
+    { label: langNativeNames['zh'] ?? t('settings.languageZh'), value: 'zh' as Language },
     { label: 'English', value: 'en' },
   ];
 
   const imageAutoDownloadOptions: { label: string; value: 'wifi' | 'always' | 'off' }[] = [
-    { label: '仅 Wi-Fi', value: 'wifi' },
-    { label: '总是', value: 'always' },
-    { label: '关闭', value: 'off' },
+    { label: t('settings.imageAutoDownloadWifi'), value: 'wifi' },
+    { label: t('settings.imageAutoDownloadAlways'), value: 'always' },
+    { label: t('settings.imageAutoDownloadOff'), value: 'off' },
   ];
 
   // 获取服务器列表
@@ -383,13 +383,13 @@ export const SettingsScreen = () => {
     try {
       if (editingServerIndex !== null) {
         await updateServer(editingServerIndex, serverConfig);
-        showMessage('服务器配置已更新', 'success');
+        showMessage(t('settings.serverUpdated'), 'success');
       } else {
         await addServer(serverConfig);
-        showMessage('服务器已添加', 'success');
+        showMessage(t('settings.serverAdded'), 'success');
       }
     } catch (error: unknown) {
-      showMessage(error instanceof Error ? error.message : '操作失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.operationFailed'), 'error');
     }
   };
 
@@ -397,9 +397,9 @@ export const SettingsScreen = () => {
   const handleDeleteServer = async (index: number) => {
     try {
       await deleteServer(index);
-      showMessage('服务器已删除', 'success');
+      showMessage(t('settings.serverDeleted'), 'success');
     } catch (error: unknown) {
-      showMessage(error instanceof Error ? error.message : '删除失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.operationFailed'), 'error');
     }
   };
 
@@ -427,9 +427,9 @@ export const SettingsScreen = () => {
     try {
       await setActiveServer(index);
       await updateConfig({ needsHistoryReorganize: true });
-      showMessage('已切换服务器', 'success');
+      showMessage(t('settings.serverSwitched'), 'success');
     } catch (error: unknown) {
-      showMessage(error instanceof Error ? error.message : '切换失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.operationFailed'), 'error');
     }
   };
 
@@ -440,11 +440,14 @@ export const SettingsScreen = () => {
 
     try {
       await setAutoSync(enabled);
-      showMessage(enabled ? '已启用自动复制' : '已禁用自动复制', 'success');
+      showMessage(
+        enabled ? t('settings.autoSyncEnabled') : t('settings.autoSyncDisabled'),
+        'success'
+      );
     } catch (error: unknown) {
       // 如果设置失败，恢复原来的状态
       setLocalAutoSyncEnabled(!enabled);
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
 
@@ -455,24 +458,27 @@ export const SettingsScreen = () => {
       if (isTempDisabledBackgroundTasks) {
         setLocalBackgroundTasksEnabled(true);
         setTempDisabledBackgroundTasks(false);
-        showMessage('已恢复后台任务', 'success');
+        showMessage(t('settings.backgroundTasksResumed'), 'success');
         return;
       }
       Alert.alert(
-        '开启后台任务',
-        '启用后台任务后，应用将在后台持续运行相关服务，大幅增加电量消耗，强烈建议按需开启。\n\n如有需要，可以在系统设置中将 SyncClipboard 的电池优化设为「不受限制」，并在多任务界面锁定 SyncClipboard，减少系统关闭后台任务的概率。',
+        t('settings.enableBackgroundTasksTitle'),
+        t('settings.enableBackgroundTasksMessage'),
         [
-          { text: '取消', style: 'cancel' },
+          { text: t('common.cancel'), style: 'cancel' },
           {
-            text: '确认开启',
+            text: t('common.confirmEnable'),
             onPress: async () => {
               setLocalBackgroundTasksEnabled(true);
               try {
                 await setEnableBackgroundTasks(true);
-                showMessage('已启用后台任务', 'success');
+                showMessage(t('settings.backgroundTasksEnabled'), 'success');
               } catch (error: unknown) {
                 setLocalBackgroundTasksEnabled(false);
-                showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+                showMessage(
+                  error instanceof Error ? error.message : t('common.setFailed'),
+                  'error'
+                );
               }
             },
           },
@@ -484,10 +490,10 @@ export const SettingsScreen = () => {
     setLocalBackgroundTasksEnabled(false);
     try {
       await setEnableBackgroundTasks(false);
-      showMessage('已禁用后台任务', 'success');
+      showMessage(t('settings.backgroundTasksDisabled'), 'success');
     } catch (error: unknown) {
       setLocalBackgroundTasksEnabled(true);
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
 
@@ -497,10 +503,10 @@ export const SettingsScreen = () => {
       setLocalBackgroundDownloadEnabled(true);
       try {
         await setEnableBackgroundDownload(true);
-        showMessage('已启用后台下载远程', 'success');
+        showMessage(t('settings.backgroundDownloadEnabled'), 'success');
       } catch (error: unknown) {
         setLocalBackgroundDownloadEnabled(false);
-        showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+        showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
       }
       return;
     }
@@ -508,10 +514,10 @@ export const SettingsScreen = () => {
     setLocalBackgroundDownloadEnabled(false);
     try {
       await setEnableBackgroundDownload(false);
-      showMessage('已禁用后台下载远程', 'success');
+      showMessage(t('settings.backgroundDownloadDisabled'), 'success');
     } catch (error: unknown) {
       setLocalBackgroundDownloadEnabled(true);
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
 
@@ -519,20 +525,23 @@ export const SettingsScreen = () => {
   const handleToggleBackgroundUpload = async (enabled: boolean) => {
     if (enabled) {
       Alert.alert(
-        '开启后台上传本地剪贴板',
-        '无需启用此选项，SyncClipboard 也支持从选中文字弹出的菜单直接上传文字。\n\nAndroid 10 及以上的系统，应用在后台无法直接获取本地剪贴板内容，你可能需要启用悬浮窗或使用其他工具绕过此限制。',
+        t('settings.enableBackgroundUploadTitle'),
+        t('settings.enableBackgroundUploadMessage'),
         [
-          { text: '取消', style: 'cancel' },
+          { text: t('common.cancel'), style: 'cancel' },
           {
-            text: '确认开启',
+            text: t('common.confirmEnable'),
             onPress: async () => {
               setLocalBackgroundUploadEnabled(true);
               try {
                 await setEnableBackgroundUpload(true);
-                showMessage('已启用后台上传本地', 'success');
+                showMessage(t('settings.backgroundUploadEnabled'), 'success');
               } catch (error: unknown) {
                 setLocalBackgroundUploadEnabled(false);
-                showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+                showMessage(
+                  error instanceof Error ? error.message : t('common.setFailed'),
+                  'error'
+                );
               }
             },
           },
@@ -544,10 +553,10 @@ export const SettingsScreen = () => {
     setLocalBackgroundUploadEnabled(false);
     try {
       await setEnableBackgroundUpload(false);
-      showMessage('已禁用后台上传本地', 'success');
+      showMessage(t('settings.backgroundUploadDisabled'), 'success');
     } catch (error: unknown) {
       setLocalBackgroundUploadEnabled(true);
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
 
@@ -555,12 +564,12 @@ export const SettingsScreen = () => {
   const handleToggleClipboardOverlay = async (enabled: boolean) => {
     if (enabled && Platform.OS === 'android') {
       Alert.alert(
-        '启用悬浮窗获取剪贴板',
-        '启用后，应用将通过不可见的悬浮窗在后台获取剪贴板内容。这可能导致部分应用因焦点问题产生功能异常以及其他问题。\n\n如果您可以通过其他工具授予 SyncClipboard 后台读取剪贴板的权限，建议关闭此选项。',
+        t('settings.enableClipboardOverlayTitle'),
+        t('settings.enableClipboardOverlayMessage'),
         [
-          { text: '取消', style: 'cancel' },
+          { text: t('common.cancel'), style: 'cancel' },
           {
-            text: '确定',
+            text: t('settings.confirmOk'),
             onPress: async () => {
               if (!hasOverlayPermission()) {
                 requestOverlayPermission();
@@ -569,10 +578,13 @@ export const SettingsScreen = () => {
               setLocalClipboardOverlayEnabled(true);
               try {
                 await setEnableClipboardOverlay(true);
-                showMessage('已启用悬浮窗获取剪贴板', 'success');
+                showMessage(t('settings.clipboardOverlayEnabled'), 'success');
               } catch (error: unknown) {
                 setLocalClipboardOverlayEnabled(false);
-                showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+                showMessage(
+                  error instanceof Error ? error.message : t('common.setFailed'),
+                  'error'
+                );
               }
             },
           },
@@ -585,10 +597,13 @@ export const SettingsScreen = () => {
 
     try {
       await setEnableClipboardOverlay(enabled);
-      showMessage(enabled ? '已启用悬浮窗获取剪贴板' : '已禁用悬浮窗获取剪贴板', 'success');
+      showMessage(
+        enabled ? t('settings.clipboardOverlayEnabled') : t('settings.clipboardOverlayDisabled'),
+        'success'
+      );
     } catch (error: unknown) {
       setLocalClipboardOverlayEnabled(!enabled);
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
 
@@ -597,17 +612,13 @@ export const SettingsScreen = () => {
     if (enabled && Platform.OS === 'android') {
       // 检查 Shizuku 是否可用
       if (!isShizukuAvailable()) {
-        Alert.alert(
-          'Shizuku 未运行',
-          '请先安装并启动 Shizuku。\n\n非 Root 设备每次重启后需重新启动 Shizuku（Android 11+ 可通过无线调试自行启动）。',
-          [
-            { text: '取消', style: 'cancel' },
-            {
-              text: '了解更多',
-              onPress: () => Linking.openURL('https://shizuku.rikka.app/guide/setup/'),
-            },
-          ]
-        );
+        Alert.alert(t('settings.shizukuNotRunningTitle'), t('settings.shizukuNotRunningMessage'), [
+          { text: t('common.cancel'), style: 'cancel' },
+          {
+            text: t('common.learnMore'),
+            onPress: () => Linking.openURL('https://shizuku.rikka.app/guide/setup/'),
+          },
+        ]);
         return;
       }
 
@@ -615,10 +626,13 @@ export const SettingsScreen = () => {
       if (!hasShizukuPermission()) {
         const requested = requestShizukuPermission();
         if (!requested) {
-          Alert.alert('权限请求失败', '无法请求 Shizuku 权限，请确认 Shizuku 版本支持。');
+          Alert.alert(
+            t('settings.permissionRequestFailed'),
+            t('settings.shizukuPermissionRequestFailed')
+          );
           return;
         }
-        showMessage('请在 Shizuku 弹窗中授予权限后重新启用', 'info');
+        showMessage(t('settings.shizukuGrantThenEnable'), 'info');
         return;
       }
 
@@ -630,10 +644,10 @@ export const SettingsScreen = () => {
           await setEnableClipboardOverlay(false);
         }
         await setEnableShizukuClipboard(true);
-        showMessage('已启用 Shizuku 获取剪贴板', 'success');
+        showMessage(t('settings.shizukuClipboardEnabled'), 'success');
       } catch (error: unknown) {
         setLocalShizukuClipboardEnabled(false);
-        showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+        showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
       }
       return;
     }
@@ -641,10 +655,13 @@ export const SettingsScreen = () => {
     setLocalShizukuClipboardEnabled(enabled);
     try {
       await setEnableShizukuClipboard(enabled);
-      showMessage(enabled ? '已启用 Shizuku 获取剪贴板' : '已禁用 Shizuku 获取剪贴板', 'success');
+      showMessage(
+        enabled ? t('settings.shizukuClipboardEnabled') : t('settings.shizukuClipboardDisabled'),
+        'success'
+      );
     } catch (error: unknown) {
       setLocalShizukuClipboardEnabled(!enabled);
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
 
@@ -656,9 +673,9 @@ export const SettingsScreen = () => {
       if (!granted) {
         const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECEIVE_SMS);
         if (result !== PermissionsAndroid.RESULTS.GRANTED) {
-          Alert.alert('需要短信权限', '自动上传验证码需要短信接收权限，请在系统设置中允许', [
-            { text: '取消', style: 'cancel' },
-            { text: '前往设置', onPress: () => Linking.openSettings() },
+          Alert.alert(t('settings.smsPermissionTitle'), t('settings.smsPermissionMessage'), [
+            { text: t('common.cancel'), style: 'cancel' },
+            { text: t('common.goToSettings'), onPress: () => Linking.openSettings() },
           ]);
           return;
         }
@@ -673,10 +690,13 @@ export const SettingsScreen = () => {
         const { setStaticReceiverEnabled } = await import('sms-forwarder');
         setStaticReceiverEnabled(enabled);
       }
-      showMessage(enabled ? '已启用自动上传短信验证码' : '已禁用自动上传短信验证码', 'success');
+      showMessage(
+        enabled ? t('settings.smsForwardingEnabled') : t('settings.smsForwardingDisabled'),
+        'success'
+      );
     } catch (error: unknown) {
       setLocalSmsForwardingEnabled(!enabled);
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
 
@@ -684,19 +704,22 @@ export const SettingsScreen = () => {
   const handleToggleForegroundNotification = async (enabled: boolean) => {
     if (!enabled) {
       Alert.alert(
-        '关闭常驻通知',
-        '关闭常驻通知会降低后台服务稳定性，系统终止后台任务的可能性增大。',
+        t('settings.disableForegroundNotifTitle'),
+        t('settings.disableForegroundNotifMessage'),
         [
-          { text: '取消', style: 'cancel' },
+          { text: t('common.cancel'), style: 'cancel' },
           {
-            text: '确认关闭',
+            text: t('settings.confirmClose'),
             onPress: async () => {
               setLocalForegroundNotification(false);
               try {
                 await updateConfig({ enableForegroundNotification: false });
               } catch (error: unknown) {
                 setLocalForegroundNotification(true);
-                showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+                showMessage(
+                  error instanceof Error ? error.message : t('common.setFailed'),
+                  'error'
+                );
               }
             },
           },
@@ -715,19 +738,15 @@ export const SettingsScreen = () => {
           PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
         );
         if (!granted) {
-          Alert.alert(
-            '缺少通知权限',
-            '未授予通知权限，常驻通知可能无法显示。建议前往系统设置允许通知权限。',
-            [
-              { text: '稍后再说', style: 'cancel' },
-              { text: '前往设置', onPress: () => Linking.openSettings() },
-            ]
-          );
+          Alert.alert(t('settings.noNotifPermTitle'), t('settings.noNotifPermMessage'), [
+            { text: t('common.later'), style: 'cancel' },
+            { text: t('common.goToSettings'), onPress: () => Linking.openSettings() },
+          ]);
         }
       }
     } catch (error: unknown) {
       setLocalForegroundNotification(false);
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
 
@@ -737,15 +756,15 @@ export const SettingsScreen = () => {
       const sizeMB = parseInt(maxSizeInput, 10);
       if (isNaN(sizeMB) || sizeMB < 0) {
         setMaxSizeInput(autoDownloadMaxSizeMB.toString());
-        showMessage('请输入有效的数字', 'error');
+        showMessage(t('settings.invalidNumber'), 'error');
         return;
       }
       const sizeInBytes = sizeMB * 1024 * 1024;
       await setAutoDownloadMaxSize(sizeInBytes);
-      showMessage(`已设置最大文件大小为 ${sizeMB}MB`, 'success');
+      showMessage(t('settings.maxSizeSet', { size: sizeMB }), 'success');
     } catch (error: unknown) {
       setMaxSizeInput(autoDownloadMaxSizeMB.toString());
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
 
@@ -755,18 +774,18 @@ export const SettingsScreen = () => {
       const maxItems = parseInt(maxHistoryItemsInput, 10);
       if (isNaN(maxItems) || maxItems < 10) {
         setMaxHistoryItemsInput((config?.maxHistoryItems ?? 1000).toString());
-        showMessage('请输入大于等于10的数字', 'error');
+        showMessage(t('settings.numberMin10'), 'error');
         return;
       }
       await updateConfig({ maxHistoryItems: maxItems });
-      showMessage(`已设置历史记录最大保留条数为 ${maxItems}条`, 'success');
+      showMessage(t('settings.maxHistoryItemsSet', { count: maxItems }), 'success');
 
       // 更新历史记录存储的最大大小
       const { historyStorage } = await import('@/storage');
       historyStorage.setMaxHistorySize(maxItems);
     } catch (error: unknown) {
       setMaxHistoryItemsInput((config?.maxHistoryItems ?? 1000).toString());
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
 
@@ -776,15 +795,15 @@ export const SettingsScreen = () => {
       const seconds = parseInt(remotePollingInput, 10);
       if (isNaN(seconds) || seconds < 1) {
         setRemotePollingInput(((config?.remotePollingInterval ?? 3000) / 1000).toString());
-        showMessage('请输入大于等于1的数字', 'error');
+        showMessage(t('settings.numberMin1'), 'error');
         return;
       }
       const ms = seconds * 1000;
       await setRemotePollingInterval(ms);
-      showMessage(`已设置远程轮询间隔为 ${seconds}秒`, 'success');
+      showMessage(t('settings.remotePollingSet', { seconds }), 'success');
     } catch (error: unknown) {
       setRemotePollingInput(((config?.remotePollingInterval ?? 3000) / 1000).toString());
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
 
@@ -794,15 +813,15 @@ export const SettingsScreen = () => {
       const seconds = parseInt(localPollingInput, 10);
       if (isNaN(seconds) || seconds < 1) {
         setLocalPollingInput(((config?.localPollingInterval ?? 1000) / 1000).toString());
-        showMessage('请输入大于等于1的数字', 'error');
+        showMessage(t('settings.numberMin1'), 'error');
         return;
       }
       const ms = seconds * 1000;
       await setLocalPollingInterval(ms);
-      showMessage(`已设置本地轮询间隔为 ${seconds}秒`, 'success');
+      showMessage(t('settings.localPollingSet', { seconds }), 'success');
     } catch (error: unknown) {
       setLocalPollingInput(((config?.localPollingInterval ?? 1000) / 1000).toString());
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
 
@@ -821,11 +840,14 @@ export const SettingsScreen = () => {
 
     try {
       await updateConfig({ debugMode: enabled });
-      showMessage(enabled ? '已启用调试模式' : '已禁用调试模式', 'success');
+      showMessage(
+        enabled ? t('settings.debugModeEnabled') : t('settings.debugModeDisabled'),
+        'success'
+      );
     } catch (error: unknown) {
       // 如果设置失败，恢复原来的状态
       setLocalDebugModeEnabled(!enabled);
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
 
@@ -834,10 +856,13 @@ export const SettingsScreen = () => {
     setLocalDebugOverlayVisible(enabled);
     try {
       await updateConfig({ debugOverlayVisible: enabled });
-      showMessage(enabled ? '悬浮窗将在后台时可见' : '悬浮窗已隐藏', 'success');
+      showMessage(
+        enabled ? t('settings.debugOverlayEnabled') : t('settings.debugOverlayDisabled'),
+        'success'
+      );
     } catch (error: unknown) {
       setLocalDebugOverlayVisible(!enabled);
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
 
@@ -848,7 +873,7 @@ export const SettingsScreen = () => {
       await updateConfig({ debugUrlScheme: enabled });
     } catch (error: unknown) {
       setLocalDebugUrlScheme(!enabled);
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
 
@@ -859,7 +884,7 @@ export const SettingsScreen = () => {
       await updateConfig({ debugUpdateCheckNoLimit: enabled });
     } catch (error: unknown) {
       setLocalDebugUpdateCheckNoLimit(!enabled);
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
 
@@ -867,9 +892,9 @@ export const SettingsScreen = () => {
   const handleTestSmsCode = () => {
     const code = extractVerificationCode(smsTestInput);
     if (code) {
-      Alert.alert('提取成功', `验证码: ${code}`);
+      Alert.alert(t('settings.smsExtractSuccess'), t('settings.smsExtractCode', { code }));
     } else {
-      Alert.alert('提取失败', '未能从输入文本中提取到验证码');
+      Alert.alert(t('settings.smsExtractFailed'), t('settings.smsExtractFailedMessage'));
     }
   };
 
@@ -889,7 +914,7 @@ export const SettingsScreen = () => {
     const Clipboard = await import('expo-clipboard');
     await Clipboard.setStringAsync(statsText);
     setShowStatsModal(false);
-    showMessage('已复制统计信息', 'success');
+    showMessage(t('settings.statisticsCopied'), 'success');
   };
 
   // 处理切换自动检查更新
@@ -899,7 +924,7 @@ export const SettingsScreen = () => {
       await setAutoCheckUpdate(enabled);
     } catch (error: unknown) {
       setLocalAutoCheckUpdateEnabled(!enabled);
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
 
@@ -910,7 +935,7 @@ export const SettingsScreen = () => {
       await setUpdateToBeta(enabled);
     } catch (error: unknown) {
       setLocalUpdateToBetaEnabled(!enabled);
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
 
@@ -936,10 +961,13 @@ export const SettingsScreen = () => {
         await updateConfig({ needsHistoryReorganize: true });
       }
 
-      showMessage(enabled ? '已启用历史记录同步' : '已禁用历史记录同步', 'success');
+      showMessage(
+        enabled ? t('settings.historySyncEnabled') : t('settings.historySyncDisabled'),
+        'success'
+      );
     } catch (error: unknown) {
       setLocalHistorySyncEnabled(!enabled);
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
 
@@ -960,7 +988,7 @@ export const SettingsScreen = () => {
       await updateConfig({ syncToastEnabled: enabled });
     } catch (error: unknown) {
       setLocalSyncToastEnabled(!enabled);
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
 
@@ -975,7 +1003,7 @@ export const SettingsScreen = () => {
       await updateConfig({ hideFromRecents: enabled });
     } catch (error: unknown) {
       setLocalHideFromRecents(!enabled);
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
 
@@ -998,14 +1026,14 @@ export const SettingsScreen = () => {
         setUpdateAvailable(false);
         setLatestVersion(null);
         if (showNoUpdateToast) {
-          showMessage('当前已是最新版本', 'success');
+          showMessage(t('settings.alreadyLatest'), 'success');
         }
       }
       // 无论是否有更新，清除当前版本及旧版本的 APK 缓存
       cleanOldApkCache(appVersion);
     } catch {
       if (showNoUpdateToast) {
-        showMessage('检查更新失败，请检查网络连接', 'error');
+        showMessage(t('settings.checkUpdateFailed'), 'error');
       }
     } finally {
       setIsCheckingUpdate(false);
@@ -1050,22 +1078,24 @@ export const SettingsScreen = () => {
     assets: ReleaseAssetInfo[],
     releaseNotes?: string
   ) => {
-    const notesText = releaseNotes ? `\n\n更新说明：\n${releaseNotes}` : '';
-    Alert.alert(
-      '发现新版本',
-      `最新版本：${version}\n当前版本：${appVersion}${notesText}\n\n请选择下载渠道`,
-      [
-        { text: '稍后再说', style: 'cancel' },
-        {
-          text: 'Gitee 下载',
-          onPress: () => handleDownloadApk('gitee', version, assets),
-        },
-        {
-          text: 'GitHub 下载',
-          onPress: () => handleDownloadApk('github', version, assets),
-        },
-      ]
-    );
+    const body = releaseNotes
+      ? t('settings.newVersionMessage', {
+          newVersion: version,
+          currentVersion: appVersion,
+          notes: releaseNotes,
+        })
+      : t('settings.newVersionMessageNoNotes', { newVersion: version, currentVersion: appVersion });
+    Alert.alert(t('settings.newVersionTitle'), body, [
+      { text: t('common.later'), style: 'cancel' },
+      {
+        text: t('settings.downloadGitee'),
+        onPress: () => handleDownloadApk('gitee', version, assets),
+      },
+      {
+        text: t('settings.downloadGitHub'),
+        onPress: () => handleDownloadApk('github', version, assets),
+      },
+    ]);
   };
 
   // 下载 APK
@@ -1096,7 +1126,7 @@ export const SettingsScreen = () => {
         .join(',')} selectedAsset=${asset?.name ?? 'none'}`
     );
     if (!asset) {
-      showMessage('找不到适合当前设备的 APK', 'error');
+      showMessage(t('settings.noSuitableApk'), 'error');
       return;
     }
 
@@ -1132,9 +1162,9 @@ export const SettingsScreen = () => {
     } catch (err) {
       console.error('[UpdateDownload] error:', err);
       if (err instanceof Error && err.name === 'AbortError') {
-        showMessage('已取消下载', 'info');
+        showMessage(t('settings.downloadCanceled'), 'info');
       } else {
-        showMessage(err instanceof Error ? err.message : '下载失败', 'error');
+        showMessage(err instanceof Error ? err.message : t('common.operationFailed'), 'error');
       }
     } finally {
       setIsDownloading(false);
@@ -1145,10 +1175,10 @@ export const SettingsScreen = () => {
 
   // 取消下载对话框
   const handleCancelDownload = () => {
-    Alert.alert('取消下载', '确定要取消下载吗？', [
-      { text: '继续下载', style: 'cancel' },
+    Alert.alert(t('settings.cancelDownloadTitle'), t('settings.cancelDownloadMessage'), [
+      { text: t('settings.continueDownload'), style: 'cancel' },
       {
-        text: '取消下载',
+        text: t('settings.cancelDownloadTitle'),
         style: 'destructive',
         onPress: () => downloadAbortRef.current?.abort(),
       },
@@ -1177,22 +1207,22 @@ export const SettingsScreen = () => {
   // 清除缓存
   const handleClearCache = () => {
     Alert.alert(
-      '清空缓存',
-      '确定要清空缓存目录吗？这将删除所有缓存文件。',
+      t('settings.clearCacheTitle'),
+      t('settings.clearCacheMessage'),
       [
         {
-          text: '取消',
+          text: t('common.cancel'),
           style: 'cancel',
         },
         {
-          text: '确定',
+          text: t('settings.confirmOk'),
           onPress: async () => {
             try {
               clearDirectory(cacheDir);
               await calculateStorageSizes();
-              showMessage('缓存已清空', 'success');
+              showMessage(t('settings.cacheCleared'), 'success');
             } catch {
-              showMessage('清空缓存失败', 'error');
+              showMessage(t('settings.clearCacheFailed'), 'error');
             }
           },
         },
@@ -1204,22 +1234,22 @@ export const SettingsScreen = () => {
   // 清除日志
   const handleClearLogs = () => {
     Alert.alert(
-      '清空日志',
-      '确定要清空日志目录吗？这将删除所有日志文件。',
+      t('settings.clearLogsTitle'),
+      t('settings.clearLogsMessage'),
       [
         {
-          text: '取消',
+          text: t('common.cancel'),
           style: 'cancel',
         },
         {
-          text: '确定',
+          text: t('settings.confirmOk'),
           onPress: async () => {
             try {
               clearLogs();
               await calculateStorageSizes();
-              showMessage('日志已清空', 'success');
+              showMessage(t('settings.logsCleared'), 'success');
             } catch {
-              showMessage('清空日志失败', 'error');
+              showMessage(t('settings.clearLogsFailed'), 'error');
             }
           },
         },
@@ -1241,12 +1271,12 @@ export const SettingsScreen = () => {
 
     try {
       await saveLogsToFile(abortController.signal);
-      showMessage('日志已保存', 'success');
+      showMessage(t('settings.logsSaved'), 'success');
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
-        showMessage('已取消导出', 'info');
+        showMessage(t('settings.exportCanceled'), 'info');
       } else {
-        const message = error instanceof Error ? error.message : '导出日志失败';
+        const message = error instanceof Error ? error.message : t('common.operationFailed');
         showMessage(message, 'error');
       }
     } finally {
@@ -1260,9 +1290,9 @@ export const SettingsScreen = () => {
     try {
       await setLogLevel(level);
       setLoggerLogLevel(level);
-      showMessage(`日志等级已设置为 ${level}`, 'success');
+      showMessage(t('settings.logLevelSet', { level }), 'success');
     } catch {
-      showMessage('设置日志等级失败', 'error');
+      showMessage(t('settings.logLevelSetFailed'), 'error');
     }
   };
 
@@ -1271,7 +1301,7 @@ export const SettingsScreen = () => {
     try {
       await shortcut.addDownloadShortcut();
     } catch (error: unknown) {
-      showMessage(error instanceof Error ? error.message : '添加失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.operationFailed'), 'error');
     }
   };
 
@@ -1280,7 +1310,7 @@ export const SettingsScreen = () => {
     try {
       await shortcut.addUploadShortcut();
     } catch (error: unknown) {
-      showMessage(error instanceof Error ? error.message : '添加失败', 'error');
+      showMessage(error instanceof Error ? error.message : t('common.operationFailed'), 'error');
     }
   };
 
@@ -1298,7 +1328,9 @@ export const SettingsScreen = () => {
               onPress={() => servers.length > 1 && setServersCollapsed(!serversCollapsed)}
               disabled={servers.length <= 1}
             >
-              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>服务器配置</Text>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+                {t('settings.serverSection')}
+              </Text>
               {servers.length > 1 && (
                 <View style={styles.collapseIcon}>
                   {serversCollapsed ? (
@@ -1317,10 +1349,10 @@ export const SettingsScreen = () => {
           {servers.length === 0 ? (
             <View style={[styles.emptyCard, { backgroundColor: theme.colors.surface }]}>
               <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
-                还没有配置服务器
+                {t('settings.noServers')}
               </Text>
               <Text style={[styles.emptyHint, { color: theme.colors.textTertiary }]}>
-                点击右上角"添加"按钮添加第一个服务器
+                {t('settings.noServersHint')}
               </Text>
             </View>
           ) : serversCollapsed && servers.length > 1 ? (
@@ -1350,7 +1382,9 @@ export const SettingsScreen = () => {
         {/* 同步设置部分 */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderBase}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>同步设置</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              {t('settings.syncSection')}
+            </Text>
           </View>
 
           <View
@@ -1361,9 +1395,11 @@ export const SettingsScreen = () => {
           >
             <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
               <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>自动同步</Text>
+                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                  {t('settings.autoSync')}
+                </Text>
                 <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                  处于前台时自动同步剪贴板
+                  {t('settings.autoSyncDesc')}
                 </Text>
               </View>
               <Switch
@@ -1377,10 +1413,10 @@ export const SettingsScreen = () => {
             <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  同步 Toast 通知
+                  {t('settings.syncToast')}
                 </Text>
                 <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                  上传/下载完成后显示 Toast 提示
+                  {t('settings.syncToastDesc')}
                 </Text>
               </View>
               <Switch
@@ -1396,10 +1432,10 @@ export const SettingsScreen = () => {
             <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  允许自动同步的数据大小
+                  {t('settings.autoDownloadMaxSize')}
                 </Text>
                 <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                  小于此大小的文件将自动下载
+                  {t('settings.autoDownloadMaxSizeDesc')}
                 </Text>
               </View>
               <View style={styles.inputContainer}>
@@ -1427,7 +1463,7 @@ export const SettingsScreen = () => {
               <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
                 <View style={styles.settingInfo}>
                   <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    远程轮询间隔
+                    {t('settings.remotePollingInterval')}
                   </Text>
                 </View>
                 <View style={styles.inputContainer}>
@@ -1447,7 +1483,9 @@ export const SettingsScreen = () => {
                     placeholder="3"
                     placeholderTextColor={theme.colors.textTertiary}
                   />
-                  <Text style={[styles.unitLabel, { color: theme.colors.textSecondary }]}>秒</Text>
+                  <Text style={[styles.unitLabel, { color: theme.colors.textSecondary }]}>
+                    {t('settings.unitSecond')}
+                  </Text>
                 </View>
               </View>
             )}
@@ -1455,7 +1493,7 @@ export const SettingsScreen = () => {
             <View style={styles.settingRowNoBorder}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  本地轮询间隔
+                  {t('settings.localPollingInterval')}
                 </Text>
               </View>
               <View style={styles.inputContainer}>
@@ -1475,7 +1513,9 @@ export const SettingsScreen = () => {
                   placeholder="1"
                   placeholderTextColor={theme.colors.textTertiary}
                 />
-                <Text style={[styles.unitLabel, { color: theme.colors.textSecondary }]}>秒</Text>
+                <Text style={[styles.unitLabel, { color: theme.colors.textSecondary }]}>
+                  {t('settings.unitSecond')}
+                </Text>
               </View>
             </View>
           </View>
@@ -1484,7 +1524,9 @@ export const SettingsScreen = () => {
         {/* 历史记录部分 */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderBase}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>历史记录</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              {t('settings.historySection')}
+            </Text>
           </View>
 
           <View
@@ -1496,12 +1538,12 @@ export const SettingsScreen = () => {
             <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  历史记录同步
+                  {t('settings.historySync')}
                 </Text>
                 <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
                   {activeServer?.type !== 'syncclipboard'
-                    ? '当前服务器不支持历史记录同步'
-                    : '同步历史记录到服务器'}
+                    ? t('settings.historySyncNotSupported')
+                    : t('settings.historySyncDesc')}
                 </Text>
               </View>
               <Switch
@@ -1520,10 +1562,10 @@ export const SettingsScreen = () => {
             <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  历史记录最大保留条数
+                  {t('settings.maxHistoryItems')}
                 </Text>
                 <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                  最小值为10条
+                  {t('settings.maxHistoryItemsDesc')}
                 </Text>
               </View>
               <View style={styles.inputContainer}>
@@ -1543,7 +1585,9 @@ export const SettingsScreen = () => {
                   placeholder="100"
                   placeholderTextColor={theme.colors.textTertiary}
                 />
-                <Text style={[styles.unitLabel, { color: theme.colors.textSecondary }]}>条</Text>
+                <Text style={[styles.unitLabel, { color: theme.colors.textSecondary }]}>
+                  {t('settings.unitItem')}
+                </Text>
               </View>
             </View>
 
@@ -1552,12 +1596,12 @@ export const SettingsScreen = () => {
               onPress={() => setShowImageAutoDownloadMenu(!showImageAutoDownloadMenu)}
             >
               <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                浏览到图片时自动下载
+                {t('settings.imageAutoDownload')}
               </Text>
               <View style={styles.dropdownValue}>
                 <Text style={[styles.dropdownValueText, { color: theme.colors.textSecondary }]}>
                   {imageAutoDownloadOptions.find((o) => o.value === localImageAutoDownload)
-                    ?.label ?? '仅 Wi-Fi'}
+                    ?.label ?? t('settings.imageAutoDownloadWifi')}
                 </Text>
                 {showImageAutoDownloadMenu ? (
                   <ChevronUp color={theme.colors.textSecondary} width={18} height={18} />
@@ -1615,10 +1659,10 @@ export const SettingsScreen = () => {
             >
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  为图片显示复制按钮
+                  {t('settings.showImageCopyButton')}
                 </Text>
                 <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                  在历史记录的图片项显示复制到剪贴板按钮
+                  {t('settings.showImageCopyButtonDesc')}
                 </Text>
               </View>
               <Switch
@@ -1639,7 +1683,9 @@ export const SettingsScreen = () => {
         {Platform.OS === 'android' && (
           <View style={styles.section}>
             <View style={styles.sectionHeaderBase}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>后台任务</Text>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+                {t('settings.backgroundTasksSection')}
+              </Text>
             </View>
 
             <View
@@ -1650,11 +1696,13 @@ export const SettingsScreen = () => {
             >
               <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
                 <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>后台任务</Text>
+                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                    {t('settings.backgroundTasksSection')}
+                  </Text>
                   <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
                     {isTempDisabledBackgroundTasks
-                      ? '已临时停止，重启 APP 后恢复开启状态'
-                      : '关闭后将停止所有后台任务'}
+                      ? t('settings.backgroundTasksTempStopped')
+                      : t('settings.backgroundTasksDesc')}
                   </Text>
                 </View>
                 <Switch
@@ -1680,7 +1728,7 @@ export const SettingsScreen = () => {
                       },
                     ]}
                   >
-                    后台服务常驻通知
+                    {t('settings.foregroundNotification')}
                   </Text>
                   <Text
                     style={[
@@ -1692,7 +1740,7 @@ export const SettingsScreen = () => {
                       },
                     ]}
                   >
-                    启用后会增加后台服务的稳定性
+                    {t('settings.foregroundNotificationDesc')}
                   </Text>
                 </View>
                 <Switch
@@ -1720,7 +1768,7 @@ export const SettingsScreen = () => {
                       },
                     ]}
                   >
-                    后台下载远程
+                    {t('settings.backgroundDownload')}
                   </Text>
                 </View>
                 <Switch
@@ -1748,7 +1796,7 @@ export const SettingsScreen = () => {
                       },
                     ]}
                   >
-                    后台上传本地
+                    {t('settings.backgroundUpload')}
                   </Text>
                 </View>
                 <Switch
@@ -1776,7 +1824,7 @@ export const SettingsScreen = () => {
                       },
                     ]}
                   >
-                    后台时通过悬浮窗获取剪贴板
+                    {t('settings.clipboardOverlay')}
                   </Text>
                 </View>
                 <Switch
@@ -1804,13 +1852,13 @@ export const SettingsScreen = () => {
                       },
                     ]}
                   >
-                    后台时通过 Shizuku 获取剪贴板
+                    {t('settings.shizukuClipboard')}
                   </Text>
                   <Text
                     style={[styles.settingDescription, { color: theme.colors.primary }]}
                     onPress={() => Linking.openURL('https://shizuku.rikka.app/')}
                   >
-                    前往 Shizuku 官网
+                    {t('settings.shizukuWebsite')}
                   </Text>
                 </View>
                 <Switch
@@ -1833,7 +1881,9 @@ export const SettingsScreen = () => {
         {Platform.OS === 'android' && (
           <View style={styles.section}>
             <View style={styles.sectionHeaderBase}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>短信自动化</Text>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+                {t('settings.smsSection')}
+              </Text>
             </View>
 
             <View
@@ -1845,7 +1895,7 @@ export const SettingsScreen = () => {
               <View style={styles.settingRowNoBorder}>
                 <View style={styles.settingInfo}>
                   <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    自动上传短信验证码
+                    {t('settings.smsForwarding')}
                   </Text>
                 </View>
                 <Switch
@@ -1865,7 +1915,9 @@ export const SettingsScreen = () => {
         {Platform.OS === 'android' && (
           <View style={styles.section}>
             <View style={[styles.sectionHeaderBase, styles.sectionHeaderRow]}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>权限管理</Text>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+                {t('settings.permissionsSection')}
+              </Text>
               <TouchableOpacity
                 style={styles.iconButton}
                 onPress={refreshPermissions}
@@ -1883,7 +1935,9 @@ export const SettingsScreen = () => {
             >
               <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
                 <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>通知权限</Text>
+                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                    {t('settings.permissionNotification')}
+                  </Text>
                 </View>
                 <Switch
                   value={permNotification}
@@ -1896,10 +1950,10 @@ export const SettingsScreen = () => {
               <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
                 <View style={styles.settingInfo}>
                   <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    悬浮窗权限
+                    {t('settings.permissionOverlay')}
                   </Text>
                   <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                    后台通过悬浮窗获取剪贴板所需
+                    {t('settings.permissionOverlayDesc')}
                   </Text>
                 </View>
                 <Switch
@@ -1912,9 +1966,11 @@ export const SettingsScreen = () => {
 
               <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
                 <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>短信权限</Text>
+                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                    {t('settings.permissionSms')}
+                  </Text>
                   <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                    自动上传短信验证码所需
+                    {t('settings.permissionSmsDesc')}
                   </Text>
                 </View>
                 <Switch
@@ -1928,12 +1984,12 @@ export const SettingsScreen = () => {
               <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
                 <View style={styles.settingInfo}>
                   <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    Shizuku 权限
+                    {t('settings.permissionShizuku')}
                   </Text>
                   <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
                     {shizukuAvailable
-                      ? '后台通过 Shizuku 获取剪贴板所需'
-                      : 'Shizuku 未运行，请先启动 Shizuku'}
+                      ? t('settings.permissionShizukuDesc')
+                      : t('settings.shizukuNotRunningDesc')}
                   </Text>
                 </View>
                 <Switch
@@ -1941,15 +1997,15 @@ export const SettingsScreen = () => {
                   onValueChange={async () => {
                     if (!shizukuAvailable) {
                       Alert.alert(
-                        'Shizuku 未运行',
-                        '请先安装并启动 Shizuku。\n\n非 Root 设备每次重启后需重新启动 Shizuku（Android 11+ 可通过无线调试自行启动）。',
+                        t('settings.shizukuNotRunningTitle'),
+                        t('settings.shizukuNotRunningMessage'),
                         [
                           {
-                            text: '了解更多',
+                            text: t('common.learnMore'),
                             onPress: () =>
                               Linking.openURL('https://shizuku.rikka.app/guide/setup/'),
                           },
-                          { text: '取消', style: 'cancel' },
+                          { text: t('common.cancel'), style: 'cancel' },
                         ]
                       );
                       return;
@@ -1968,10 +2024,10 @@ export const SettingsScreen = () => {
               <View style={styles.settingRowNoBorder}>
                 <View style={styles.settingInfo}>
                   <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    忽略电池优化
+                    {t('settings.permissionBattery')}
                   </Text>
                   <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                    防止省电模式中断后台同步
+                    {t('settings.permissionBatteryDesc')}
                   </Text>
                 </View>
                 <Switch
@@ -1980,14 +2036,14 @@ export const SettingsScreen = () => {
                     const { requestIgnoreBatteryOptimizations } = await import('native-util');
                     if (hasBatteryOptRequested.current) {
                       Alert.alert(
-                        '无法唤起系统弹窗',
-                        '系统限制每次安装仅允许弹出一次电池优化请求，请前往系统设置手动关闭电池优化。',
+                        t('settings.batteryOptDialogTitle'),
+                        t('settings.batteryOptDialogMessage'),
                         [
                           {
-                            text: '前往设置',
+                            text: t('common.goToSettings'),
                             onPress: () => Linking.openSettings(),
                           },
-                          { text: '取消', style: 'cancel' },
+                          { text: t('common.cancel'), style: 'cancel' },
                         ]
                       );
                       return;
@@ -2006,7 +2062,9 @@ export const SettingsScreen = () => {
         {/* 快捷操作部分 */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderBase}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>快捷操作</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              {t('settings.shortcutsSection')}
+            </Text>
           </View>
 
           <View
@@ -2018,28 +2076,32 @@ export const SettingsScreen = () => {
             <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  添加桌面快捷方式：下载
+                  {t('settings.addDownloadShortcut')}
                 </Text>
               </View>
               <TouchableOpacity
                 style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
                 onPress={handleAddDownloadShortcut}
               >
-                <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>添加</Text>
+                <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>
+                  {t('common.add')}
+                </Text>
               </TouchableOpacity>
             </View>
 
             <View style={styles.settingRowNoBorder}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  添加桌面快捷方式：上传
+                  {t('settings.addUploadShortcut')}
                 </Text>
               </View>
               <TouchableOpacity
                 style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
                 onPress={handleAddUploadShortcut}
               >
-                <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>添加</Text>
+                <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>
+                  {t('common.add')}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2048,7 +2110,9 @@ export const SettingsScreen = () => {
         {/* 存储部分 */}
         <View style={styles.section}>
           <View style={[styles.sectionHeaderBase, styles.sectionHeaderRow]}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>存储</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              {t('settings.storageSection')}
+            </Text>
             <TouchableOpacity
               style={styles.iconButton}
               onPress={calculateStorageSizes}
@@ -2067,10 +2131,10 @@ export const SettingsScreen = () => {
             <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  缓存空间占用
+                  {t('settings.cacheSize')}
                 </Text>
                 <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                  {isCalculating ? '加载中...' : formatFileSize(cacheSize)}
+                  {isCalculating ? t('common.loading') : formatFileSize(cacheSize)}
                 </Text>
               </View>
               <TouchableOpacity
@@ -2078,17 +2142,19 @@ export const SettingsScreen = () => {
                 onPress={handleClearCache}
                 disabled={isCalculating}
               >
-                <Text style={[styles.clearButtonText, { color: theme.colors.white }]}>清理</Text>
+                <Text style={[styles.clearButtonText, { color: theme.colors.white }]}>
+                  {t('common.clearAction')}
+                </Text>
               </TouchableOpacity>
             </View>
 
             <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  日志空间占用
+                  {t('settings.logSize')}
                 </Text>
                 <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                  {isCalculating ? '加载中...' : formatFileSize(logSize)}
+                  {isCalculating ? t('common.loading') : formatFileSize(logSize)}
                 </Text>
               </View>
               <TouchableOpacity
@@ -2096,17 +2162,19 @@ export const SettingsScreen = () => {
                 onPress={handleClearLogs}
                 disabled={isCalculating}
               >
-                <Text style={[styles.clearButtonText, { color: theme.colors.white }]}>清理</Text>
+                <Text style={[styles.clearButtonText, { color: theme.colors.white }]}>
+                  {t('common.clearAction')}
+                </Text>
               </TouchableOpacity>
             </View>
 
             <View style={styles.settingRowNoBorder}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  历史记录空间占用
+                  {t('settings.historySize')}
                 </Text>
                 <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                  {isCalculating ? '加载中...' : formatFileSize(historySize)}
+                  {isCalculating ? t('common.loading') : formatFileSize(historySize)}
                 </Text>
               </View>
             </View>
@@ -2116,7 +2184,9 @@ export const SettingsScreen = () => {
         {/* 日志设置部分 */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderBase}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>日志</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              {t('settings.logsSection')}
+            </Text>
           </View>
 
           <View
@@ -2129,16 +2199,18 @@ export const SettingsScreen = () => {
               style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}
               onPress={() => setShowLogLevelMenu(!showLogLevelMenu)}
             >
-              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>日志等级</Text>
+              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                {t('settings.logLevel')}
+              </Text>
               <View style={styles.dropdownValue}>
                 <Text style={[styles.dropdownValueText, { color: theme.colors.textSecondary }]}>
                   {config?.logLevel === 'debug'
-                    ? '调试'
+                    ? t('settings.logLevelDebug')
                     : config?.logLevel === 'info'
-                      ? '信息'
+                      ? t('settings.logLevelInfo')
                       : config?.logLevel === 'warn'
-                        ? '警告'
-                        : '错误'}
+                        ? t('settings.logLevelWarn')
+                        : t('settings.logLevelError')}
                 </Text>
                 {showLogLevelMenu ? (
                   <ChevronUp color={theme.colors.textSecondary} width={18} height={18} />
@@ -2151,10 +2223,10 @@ export const SettingsScreen = () => {
             {showLogLevelMenu && (
               <View style={[styles.dropdownMenu, { borderColor: theme.colors.divider }]}>
                 {[
-                  { label: '调试', value: 'debug' as LogLevel },
-                  { label: '信息', value: 'info' as LogLevel },
-                  { label: '警告', value: 'warn' as LogLevel },
-                  { label: '错误', value: 'error' as LogLevel },
+                  { label: t('settings.logLevelDebug'), value: 'debug' as LogLevel },
+                  { label: t('settings.logLevelInfo'), value: 'info' as LogLevel },
+                  { label: t('settings.logLevelWarn'), value: 'warn' as LogLevel },
+                  { label: t('settings.logLevelError'), value: 'error' as LogLevel },
                 ].map((option, index) => (
                   <TouchableOpacity
                     key={option.value}
@@ -2194,14 +2266,16 @@ export const SettingsScreen = () => {
             )}
 
             <View style={styles.settingRowNoBorder}>
-              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>导出日志</Text>
+              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                {t('settings.exportLogs')}
+              </Text>
               <TouchableOpacity
                 style={[styles.clearButton, { backgroundColor: theme.colors.primary }]}
                 onPress={handleExportLogs}
                 disabled={isCalculating}
               >
                 <Text style={[styles.clearButtonText, { color: theme.colors.white }]}>
-                  {isExportingLogs ? '取消' : '导出'}
+                  {isExportingLogs ? t('common.cancel') : t('common.export')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -2211,7 +2285,9 @@ export const SettingsScreen = () => {
         {/* 外观设置部分 */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderBase}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>外观</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              {t('settings.appearanceSection')}
+            </Text>
           </View>
 
           <View
@@ -2285,10 +2361,13 @@ export const SettingsScreen = () => {
               style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}
               onPress={() => setShowThemeMenu(!showThemeMenu)}
             >
-              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>主题</Text>
+              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                {t('settings.theme')}
+              </Text>
               <View style={styles.dropdownValue}>
                 <Text style={[styles.dropdownValueText, { color: theme.colors.textSecondary }]}>
-                  {themeOptions.find((o) => o.value === themeMode)?.label ?? '跟随系统'}
+                  {themeOptions.find((o) => o.value === themeMode)?.label ??
+                    t('settings.themeAuto')}
                 </Text>
                 {showThemeMenu ? (
                   <ChevronUp color={theme.colors.textSecondary} width={18} height={18} />
@@ -2340,10 +2419,10 @@ export const SettingsScreen = () => {
               <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
                 <View style={styles.settingInfo}>
                   <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    在最近任务列表中隐藏
+                    {t('settings.hideFromRecents')}
                   </Text>
                   <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                    建议隐藏前先锁定，防止被一键清理
+                    {t('settings.hideFromRecentsDesc')}
                   </Text>
                 </View>
                 <Switch
@@ -2362,7 +2441,9 @@ export const SettingsScreen = () => {
         {/* 应用信息部分 */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderBase}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>关于</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              {t('settings.aboutSection')}
+            </Text>
           </View>
 
           <View
@@ -2383,7 +2464,7 @@ export const SettingsScreen = () => {
               <View style={styles.versionTopRow}>
                 <View style={styles.versionLabelGroup}>
                   <Text style={[styles.infoLabel, { color: theme.colors.textSecondary }]}>
-                    版本
+                    {t('settings.version')}
                   </Text>
                   <Text style={[styles.infoValue, { color: theme.colors.text }]}>{appVersion}</Text>
                 </View>
@@ -2426,12 +2507,14 @@ export const SettingsScreen = () => {
                       ]}
                     >
                       {isCheckingUpdate
-                        ? '检查中...'
+                        ? t('settings.checkingUpdate')
                         : isDownloading
-                          ? `下载中 ${Math.round(downloadProgress * 100)}%`
+                          ? t('settings.downloadingUpdate', {
+                              percent: Math.round(downloadProgress * 100),
+                            })
                           : updateAvailable
-                            ? `更新 ${latestVersion}`
-                            : '检查更新'}
+                            ? t('settings.updateAvailable', { version: latestVersion })
+                            : t('settings.checkUpdate')}
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -2457,7 +2540,7 @@ export const SettingsScreen = () => {
             <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  自动检查更新
+                  {t('settings.autoCheckUpdate')}
                 </Text>
               </View>
               <Switch
@@ -2473,7 +2556,7 @@ export const SettingsScreen = () => {
             <View style={styles.settingRowNoBorder}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  更新到测试版
+                  {t('settings.updateToBeta')}
                 </Text>
               </View>
               <Switch
@@ -2491,7 +2574,9 @@ export const SettingsScreen = () => {
         {/* 调试部分 */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderBase}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>调试</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              {t('settings.debugSection')}
+            </Text>
           </View>
 
           <View
@@ -2510,7 +2595,9 @@ export const SettingsScreen = () => {
               ]}
             >
               <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>调试模式</Text>
+                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                  {t('settings.debugMode')}
+                </Text>
               </View>
               <Switch
                 value={localDebugModeEnabled}
@@ -2526,10 +2613,10 @@ export const SettingsScreen = () => {
               <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
                 <View style={styles.settingInfo}>
                   <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    显示悬浮窗
+                    {t('settings.debugOverlay')}
                   </Text>
                   <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                    后台获取剪贴板时显示可见的悬浮窗
+                    {t('settings.debugOverlayDesc')}
                   </Text>
                 </View>
                 <Switch
@@ -2555,7 +2642,7 @@ export const SettingsScreen = () => {
               >
                 <View style={styles.settingInfo}>
                   <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    显示 URL Scheme 调用
+                    {t('settings.debugUrlScheme')}
                   </Text>
                 </View>
                 <Switch
@@ -2573,7 +2660,7 @@ export const SettingsScreen = () => {
               <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
                 <View style={styles.settingInfo}>
                   <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    测试验证码短信
+                    {t('settings.debugSmsTest')}
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -2583,7 +2670,9 @@ export const SettingsScreen = () => {
                     setShowSmsTestModal(true);
                   }}
                 >
-                  <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>测试</Text>
+                  <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>
+                    {t('common.test')}
+                  </Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -2592,10 +2681,10 @@ export const SettingsScreen = () => {
               <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
                 <View style={styles.settingInfo}>
                   <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    更新检查不限次数
+                    {t('settings.debugUpdateCheckNoLimit')}
                   </Text>
                   <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                    开启后每次启动均检查更新，不限每天一次
+                    {t('settings.debugUpdateCheckNoLimitDesc')}
                   </Text>
                 </View>
                 <Switch
@@ -2612,13 +2701,17 @@ export const SettingsScreen = () => {
             {localDebugModeEnabled && (
               <View style={styles.settingRowNoBorder}>
                 <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>统计信息</Text>
+                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                    {t('settings.statistics')}
+                  </Text>
                 </View>
                 <TouchableOpacity
                   style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
                   onPress={handleShowStatistics}
                 >
-                  <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>查看</Text>
+                  <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>
+                    {t('common.view')}
+                  </Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -2650,7 +2743,7 @@ export const SettingsScreen = () => {
         <View style={[styles.smsTestModalOverlay, { backgroundColor: theme.colors.overlay }]}>
           <View style={[styles.smsTestModalContent, { backgroundColor: theme.colors.surface }]}>
             <Text style={[styles.smsTestModalTitle, { color: theme.colors.text }]}>
-              测试验证码短信
+              {t('settings.smsTestTitle')}
             </Text>
             <TextInput
               style={[
@@ -2661,7 +2754,7 @@ export const SettingsScreen = () => {
                   backgroundColor: theme.colors.background,
                 },
               ]}
-              placeholder="输入短信内容..."
+              placeholder={t('settings.smsTestInputPlaceholder')}
               placeholderTextColor={theme.colors.textTertiary}
               value={smsTestInput}
               onChangeText={setSmsTestInput}
@@ -2675,7 +2768,7 @@ export const SettingsScreen = () => {
                 onPress={() => setShowSmsTestModal(false)}
               >
                 <Text style={[styles.smsTestModalButtonText, { color: theme.colors.text }]}>
-                  取消
+                  {t('common.cancel')}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -2683,7 +2776,7 @@ export const SettingsScreen = () => {
                 onPress={handleTestSmsCode}
               >
                 <Text style={[styles.smsTestModalButtonText, { color: theme.colors.white }]}>
-                  测试
+                  {t('common.test')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -2700,7 +2793,9 @@ export const SettingsScreen = () => {
       >
         <View style={[styles.smsTestModalOverlay, { backgroundColor: theme.colors.overlay }]}>
           <View style={[styles.smsTestModalContent, { backgroundColor: theme.colors.surface }]}>
-            <Text style={[styles.smsTestModalTitle, { color: theme.colors.text }]}>统计信息</Text>
+            <Text style={[styles.smsTestModalTitle, { color: theme.colors.text }]}>
+              {t('settings.statistics')}
+            </Text>
             <Text style={[styles.statsText, { color: theme.colors.text }]} selectable>
               {statsText}
             </Text>
@@ -2710,7 +2805,7 @@ export const SettingsScreen = () => {
                 onPress={() => setShowStatsModal(false)}
               >
                 <Text style={[styles.smsTestModalButtonText, { color: theme.colors.text }]}>
-                  关闭
+                  {t('common.close')}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -2718,7 +2813,7 @@ export const SettingsScreen = () => {
                 onPress={handleCopyStatistics}
               >
                 <Text style={[styles.smsTestModalButtonText, { color: theme.colors.white }]}>
-                  复制
+                  {t('common.copy')}
                 </Text>
               </TouchableOpacity>
             </View>

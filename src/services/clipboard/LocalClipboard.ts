@@ -12,6 +12,7 @@ import { isTextInvalid } from '@/utils/index';
 import { historyStorage } from '../../storage/HistoryStorage';
 import { prepareTempFilePath, CLIPBOARD_TEMP_DIR } from '@/utils/fileStorage';
 import { nativeSetClipboardImageFromFile } from 'native-util';
+import i18n from '@/i18n';
 
 /**
  * 剪贴板复制生命周期回调，由外部模块（如 ClipboardMonitor）注册
@@ -308,7 +309,7 @@ export class LocalClipboard {
         } catch (error) {
           console.error('[ClipboardManager] Failed to read text file:', error);
           if (isTextInvalid(content.text)) {
-            throw new Error('无法读取完整文本');
+            throw new Error(i18n.t('error.cannotReadFullText'));
           }
           // fallback to preview text
         }

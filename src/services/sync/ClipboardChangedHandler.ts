@@ -13,6 +13,7 @@ import { uploadLocalClipboard, downloadRemoteClipboard } from './ClipboardSyncAc
 import { updateForegroundNotification } from '../notification/ForegroundNotification';
 import { historyService } from '../history/HistoryService';
 import { calculateTextHash } from '../../utils/hash';
+import i18n from '@/i18n';
 
 class ClipboardChangedHandler {
   private static instance: ClipboardChangedHandler | null = null;
@@ -146,9 +147,9 @@ class ClipboardChangedHandler {
       await this.copyToLocalClipboard(content);
       if (Platform.OS === 'android') {
         const preview = this.getContentPreview(content);
-        updateForegroundNotification(`已下载: ${preview}`);
+        updateForegroundNotification(`${i18n.t('clipboard.download')}: ${preview}`);
         if (config?.syncToastEnabled !== false) {
-          ToastAndroid.show(`已下载\n${preview}`, ToastAndroid.SHORT);
+          ToastAndroid.show(i18n.t('common.downloaded', { preview }), ToastAndroid.SHORT);
         }
       }
     } catch (error) {
@@ -194,9 +195,9 @@ class ClipboardChangedHandler {
       const uploaded = await uploadLocalClipboard(content);
       if (uploaded && Platform.OS === 'android') {
         const preview = this.getContentPreview(content);
-        updateForegroundNotification(`已上传: ${preview}`);
+        updateForegroundNotification(`${i18n.t('clipboard.upload')}: ${preview}`);
         if (config?.syncToastEnabled !== false) {
-          ToastAndroid.show(`已上传\n${preview}`, ToastAndroid.SHORT);
+          ToastAndroid.show(i18n.t('common.uploaded', { preview }), ToastAndroid.SHORT);
         }
         remoteClipboardMonitor.refresh().catch(() => {});
       }
