@@ -74,8 +74,10 @@ export class ClipboardMonitor {
     // 开始轮询（iOS）或设置监听器（Android）
     if (Platform.OS === 'ios') {
       this.startPolling();
+      void this.checkClipboard();
     } else if (Platform.OS === 'android') {
       this.startPolling(); // Android 也使用轮询作为备选方案
+      void this.checkClipboard();
       // TODO: 实现原生 Android ClipboardManager 监听器
     }
 
