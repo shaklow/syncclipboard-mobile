@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sms_channel_name">SMS Verification Code Upload</string>
+    <string name="sms_channel_desc">SMS verification code background upload notification</string>
+    <string name="sms_processing">Processing SMS verification code…</string>
+    <string name="sms_uploaded_title">Verification code uploaded: %s</string>
+    <string name="sms_auto_close">Auto close in 30 seconds</string>
+    <string name="sms_upload_failed">Verification code upload failed: %s</string>
+    <string name="sms_cancel">Cancel</string>
+</resources>
