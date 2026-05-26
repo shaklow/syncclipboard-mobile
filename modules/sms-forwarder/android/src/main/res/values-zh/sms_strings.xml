@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sms_channel_name">短信验证码上传</string>
+    <string name="sms_channel_desc">短信验证码后台上传通知</string>
+    <string name="sms_processing">正在处理短信验证码…</string>
+    <string name="sms_uploaded_title">已上传验证码：%s</string>
+    <string name="sms_auto_close">30秒后自动关闭</string>
+    <string name="sms_upload_failed">验证码上传失败：%s</string>
+    <string name="sms_cancel">取消</string>
+</resources>
