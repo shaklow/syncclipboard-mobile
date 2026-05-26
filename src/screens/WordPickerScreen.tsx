@@ -58,8 +58,7 @@ function tokenize(text: string): string[] {
  * - 其余字符（含CJK）逐字拆分
  */
 function tokenizeByChar(text: string): string[] {
-  const regex = /[a-zA-Z0-9]+|[\s]+|./g;
-  return text.match(regex) || [];
+  return [...text].filter((char) => char.trim() !== '');
 }
 
 /**
@@ -186,13 +185,7 @@ export const WordPickerScreen: React.FC<WordPickerScreenProps> = ({ text, onComp
   }, []);
 
   const selectAll = useCallback(() => {
-    const all = new Set<number>();
-    tokens.forEach((t, i) => {
-      if (!/^\s+$/.test(t)) {
-        all.add(i);
-      }
-    });
-    setSelected(all);
+    setSelected(new Set(tokens.keys()));
   }, [tokens]);
 
   const clearSelection = useCallback(() => {
@@ -280,14 +273,6 @@ export const WordPickerScreen: React.FC<WordPickerScreenProps> = ({ text, onComp
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.tokensContainer}>
           <View style={styles.tokensWrap}>
             {tokens.map((token, index) => {
-              const isWhitespace = /^\s+$/.test(token);
-              if (isWhitespace) {
-                return (
-                  <Text key={index} style={styles.whitespace}>
-                    {token}
-                  </Text>
-                );
-              }
               const isSelected = selected.has(index);
               return (
                 <TouchableOpacity
@@ -441,9 +426,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
-  },
-  whitespace: {
-    width: 6,
   },
   token: {
     paddingHorizontal: 10,
