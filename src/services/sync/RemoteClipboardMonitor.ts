@@ -214,13 +214,14 @@ class RemoteClipboardMonitor {
   /**
    * 主动拉取最新远程剪贴板内容并返回。
    * 仅在内容哈希变化时触发回调（与 refresh 行为一致），但无论是否变化都返回内容。
+   * @param signal 可选的取消信号
    * @returns 最新的远程剪贴板内容
    * @throws 无服务器连接或拉取失败时抛出异常
    */
-  async fetchLatest(): Promise<ClipboardContent> {
-    return this._fetchOp.execute(true, undefined, null, async (signal) => {
+  async fetchLatest(signal?: AbortSignal): Promise<ClipboardContent> {
+    return this._fetchOp.execute(true, undefined, signal ?? null, async (sig) => {
       const apiClient = await getAPIClient();
-      const profile = await apiClient.getClipboard(signal);
+      const profile = await apiClient.getClipboard(sig);
       if (!profile) throw new Error('No clipboard data returned');
       const content: ClipboardContent = profileDtoToContent(profile);
       const hash = content.profileHash || content.text;

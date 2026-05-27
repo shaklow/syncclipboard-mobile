@@ -134,14 +134,25 @@ export async function refreshMonitor(): Promise<void> {
 }
 
 /**
+ * 拉取最新远程剪贴板内容。
+ * @param signal 可选的取消信号
+ * @returns 远程剪贴板内容
+ */
+export async function fetchRemoteClipboard(signal?: AbortSignal): Promise<ClipboardContent> {
+  return await remoteClipboardMonitor.fetchLatest(signal);
+}
+
+/**
  * 拉取最新远程剪贴板内容，若包含未下载的文件则先下载，最后写入本地剪贴板。
+ * @param providedcontent 可选的远程剪贴板内容；若未提供则自动获取
  * @returns 最终写入的内容；若远程无文件或无需下载则返回 fetchLatest 的结果
  */
 export async function setLocalClipboardFromRemote(
   onProgress?: (info: ProgressDetail) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  providedcontent?: ClipboardContent
 ): Promise<ClipboardContent | null> {
-  const content = await remoteClipboardMonitor.fetchLatest();
+  const content = providedcontent ?? (await remoteClipboardMonitor.fetchLatest(signal));
 
   const needsDownload =
     content.hasData &&

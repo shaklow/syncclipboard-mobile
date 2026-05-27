@@ -5,6 +5,7 @@ import { SyncDirection } from '@/types/sync';
 import { ClipboardContent } from '@/types/clipboard';
 import {
   setRemoteClipboard,
+  fetchRemoteClipboard,
   setLocalClipboardFromRemote,
 } from '@/services/sync/ClipboardSyncActions';
 import { localClipboard } from '@/services/clipboard/LocalClipboard';
@@ -50,17 +51,15 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
         if (!content) throw new Error(t('quickTile.clipboardEmpty'));
         await setRemoteClipboard(content, signal, (info) => setProgress(info));
       } else {
-        content = await setLocalClipboardFromRemote((info) => setProgress(info), signal);
-      }
+        content = await fetchRemoteClipboard(signal);
+        if (content.hasData) {
+          setPreviewText(content.text);
+          content = await setLocalClipboardFromRemote((info) => setProgress(info), signal, content);
+        }
 
-      // 只有文本类型才显示 Toast 提示
-      if (content && content.type === 'Text' && !isTextInvalid(content.text)) {
-        const preview = content.text.trim().replace(/\s+/g, ' ');
-        const toastMessage = preview.length > 40 ? preview.slice(0, 40) + '…' : preview;
-        ToastAndroid.show(toastMessage, ToastAndroid.SHORT);
-
-        // 文本中包含 URL 时，存入 state 以显示操作按钮（仅下载时）
-        if (!isUpload) {
+        if (content && content.type !== 'Text' && content.fileUri) {
+          setFileContent(content);
+        } else if (content && content.type === 'Text') {
           const urlRegex = /https?:\/\/[^\s<>"'()\]\[{}]+/i;
           const urlMatch = content.text.match(urlRegex);
           if (urlMatch) {
@@ -69,12 +68,19 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
         }
       }
 
+      // 只有文本类型才显示 Toast 提示
+      if (content && content.type === 'Text' && !isTextInvalid(content.text)) {
+        const preview = content.text.trim().replace(/\s+/g, ' ');
+        const toastMessage = preview.length > 40 ? preview.slice(0, 40) + '…' : preview;
+        ToastAndroid.show(toastMessage, ToastAndroid.SHORT);
+      }
+
       // 下载了非文本文件时，存入 state，触发重渲染更新 successButtons
       if (!isUpload && content && content.type !== 'Text' && content.fileUri) {
         setFileContent(content);
       }
     },
-    [direction, isUpload, t]
+    [isUpload, t]
   );
 
   // 检测文本中的 URL
