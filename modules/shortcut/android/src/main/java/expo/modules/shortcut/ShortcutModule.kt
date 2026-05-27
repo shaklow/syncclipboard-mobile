@@ -1,6 +1,7 @@
 package expo.modules.shortcut
 
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
@@ -18,6 +19,7 @@ import expo.modules.kotlin.modules.ModuleDefinition
 
 class ShortcutModule : Module() {
     companion object {
+        private const val APP_PACKAGE = "com.jericx.syncclipboardmobile"
         private const val DOWNLOAD_SHORTCUT_ID = "shortcut_download"
         private const val DOWNLOAD_DIRECTION = "download"
         private const val DOWNLOAD_ICON_RES = "ic_tile_download"
@@ -30,6 +32,10 @@ class ShortcutModule : Module() {
 
         private const val QUICK_ACTION_ACTIVITY = "com.jericx.syncclipboardmobile.quickaction.QuickActionActivity"
 
+        private fun getAppString(context: Context, name: String): String {
+            val resId = context.resources.getIdentifier(name, "string", APP_PACKAGE)
+            return if (resId != 0) context.getString(resId) else name
+        }
     }
 
     override fun definition() = ModuleDefinition {
@@ -40,7 +46,7 @@ class ShortcutModule : Module() {
                 promise.reject(ReactContextMissingError())
                 return@AsyncFunction
             }
-            val label = reactContext.getString(R.string.shortcut_download_label)
+            val label = getAppString(reactContext, "shortcut_download_label")
             requestPinShortcutInternal(DOWNLOAD_SHORTCUT_ID, label, DOWNLOAD_DIRECTION, DOWNLOAD_ICON_RES, DOWNLOAD_BG_COLOR, promise)
         }
 
@@ -49,7 +55,7 @@ class ShortcutModule : Module() {
                 promise.reject(ReactContextMissingError())
                 return@AsyncFunction
             }
-            val label = reactContext.getString(R.string.shortcut_upload_label)
+            val label = getAppString(reactContext, "shortcut_upload_label")
             requestPinShortcutInternal(UPLOAD_SHORTCUT_ID, label, UPLOAD_DIRECTION, UPLOAD_ICON_RES, UPLOAD_BG_COLOR, promise)
         }
 
@@ -59,8 +65,8 @@ class ShortcutModule : Module() {
                 val shortcutManager = reactContext.getSystemService(ShortcutManager::class.java)
                     ?: return@Function false
 
-                val downloadLabel = reactContext.getString(R.string.shortcut_download_label)
-                val uploadLabel = reactContext.getString(R.string.shortcut_upload_label)
+                val downloadLabel = getAppString(reactContext, "shortcut_download_label")
+                val uploadLabel = getAppString(reactContext, "shortcut_upload_label")
                 val downloadShortcut = createShortcutInfo(reactContext, DOWNLOAD_SHORTCUT_ID, downloadLabel, DOWNLOAD_DIRECTION, DOWNLOAD_ICON_RES, DOWNLOAD_BG_COLOR)
                 val uploadShortcut = createShortcutInfo(reactContext, UPLOAD_SHORTCUT_ID, uploadLabel, UPLOAD_DIRECTION, UPLOAD_ICON_RES, UPLOAD_BG_COLOR)
 

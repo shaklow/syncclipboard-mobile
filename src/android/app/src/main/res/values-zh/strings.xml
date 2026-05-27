@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Foreground Service -->
+  <string name="fg_channel_name">后台任务</string>
+  <string name="fg_channel_desc">SyncClipboard 后台同步服务</string>
+  <string name="fg_restart_channel_name">服务重启提醒</string>
+  <string name="fg_restart_channel_desc">后台服务被系统终止后重启提醒</string>
+  <string name="fg_notification_running">后台任务运行中</string>
+  <string name="fg_notification_stopping">正在停止...</string>
+  <string name="fg_action_temp_stop">临时停止</string>
+  <string name="fg_action_stop">永久停止</string>
+  <string name="fg_timeout_content">系统限制后台任务在主界面关闭后24小时内最多运行6小时，点击重新启动</string>
+  <string name="fg_restart_title">后台服务已停止</string>
+  <string name="fg_restart_content">点击恢复后台服务</string>
+
+  <!-- Shortcut -->
+  <string name="shortcut_download_label">下载剪贴板</string>
+  <string name="shortcut_upload_label">上传剪贴板</string>
+
+  <!-- Tile (Quick Settings) -->
+  <string name="tile_download_label">下载剪贴板</string>
+  <string name="tile_upload_label">上传剪贴板</string>
+  <string name="process_text_label">上传</string>
+
+  <!-- SMS Forwarder -->
+  <string name="sms_channel_name">短信验证码上传</string>
+  <string name="sms_channel_desc">短信验证码后台上传通知</string>
+  <string name="sms_processing">正在处理短信验证码…</string>
+  <string name="sms_uploaded_title">已上传验证码：%s</string>
+  <string name="sms_auto_close">30秒后自动关闭</string>
+  <string name="sms_upload_failed">验证码上传失败：%s</string>
+  <string name="sms_cancel">取消</string>
+</resources>

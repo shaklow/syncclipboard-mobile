@@ -29,6 +29,7 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
 
     companion object {
         private const val TAG = "SmsHeadlessTask"
+        private const val APP_PACKAGE = "com.jericx.syncclipboardmobile"
         const val CHANNEL_ID = "syncclipboard_sms_headless"
         const val NOTIFICATION_ID = 0x2022
         const val TASK_NAME = "SmsUploadTask"
@@ -42,13 +43,23 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
         @Volatile
         var pendingSuccessCode: String? = null
 
+        private fun getAppString(context: Context, name: String): String {
+            val resId = context.resources.getIdentifier(name, "string", APP_PACKAGE)
+            return if (resId != 0) context.getString(resId) else name
+        }
+
+        private fun getAppStringFormatted(context: Context, name: String, vararg args: Any): String {
+            val resId = context.resources.getIdentifier(name, "string", APP_PACKAGE)
+            return if (resId != 0) context.getString(resId, *args) else name
+        }
+
         fun updateNotificationText(context: Context, text: String) {
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
                 ?: return
             ensureNotificationChannel(context, nm)
             nm.notify(NOTIFICATION_ID, buildStaticNotification(
                 context, "SyncClipboard", text,
-                dismissButtonLabel = context.getString(R.string.sms_cancel)
+                dismissButtonLabel = getAppString(context, "sms_cancel")
             ))
         }
 
@@ -67,10 +78,10 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val channel = NotificationChannel(
                     CHANNEL_ID,
-                    context.getString(R.string.sms_channel_name),
+                    getAppString(context, "sms_channel_name"),
                     NotificationManager.IMPORTANCE_LOW
                 ).apply {
-                    description = context.getString(R.string.sms_channel_desc)
+                    description = getAppString(context, "sms_channel_desc")
                     setShowBadge(false)
                     lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 }
@@ -131,7 +142,7 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
         instance = this
         pendingSuccessCode = null
         NativeLogger.d(TAG, "[C] Building foreground notification")
-        val notification = buildStaticNotification(this, "SyncClipboard", getString(R.string.sms_processing))
+        val notification = buildStaticNotification(this, "SyncClipboard", getAppString(this, "sms_processing"))
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE)
@@ -165,7 +176,7 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
             NativeLogger.e(TAG, "HeadlessJsTaskService failed to start React context: " +
                     "${e.javaClass.simpleName}: ${e.message}", e)
             updateNotificationText(this,
-                getString(R.string.sms_upload_failed, "JS runtime not ready: ${e.javaClass.simpleName}: ${e.message}"))
+                getAppStringFormatted(this, "sms_upload_failed", "JS runtime not ready: ${e.javaClass.simpleName}: ${e.message}"))
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
@@ -224,8 +235,8 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
         ensureNotificationChannel(this, nm)
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(R.string.sms_uploaded_title, code))
-            .setContentText(getString(R.string.sms_auto_close))
+            .setContentTitle(getAppStringFormatted(this, "sms_uploaded_title", code))
+            .setContentText(getAppString(this, "sms_auto_close"))
             .setSmallIcon(getNotificationIcon(this))
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)

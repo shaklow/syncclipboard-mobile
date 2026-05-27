@@ -16,6 +16,7 @@ class SyncForegroundService : Service() {
 
     companion object {
         private const val TAG = "SyncForegroundService"
+        private const val APP_PACKAGE = "com.jericx.syncclipboardmobile"
         const val CHANNEL_ID = "syncclipboard_foreground"
         const val NOTIFY_ID = 0x2020
         const val ACTION_START = "START"
@@ -33,6 +34,11 @@ class SyncForegroundService : Service() {
     }
 
     private var notificationManager: NotificationManager? = null
+
+    private fun getAppString(name: String): String {
+        val resId = resources.getIdentifier(name, "string", APP_PACKAGE)
+        return if (resId != 0) getString(resId) else name
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -59,7 +65,7 @@ class SyncForegroundService : Service() {
                     return START_NOT_STICKY
                 }
 
-                val notification = createNotification(getString(R.string.fg_notification_running))
+                val notification = createNotification(getAppString("fg_notification_running"))
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     startForeground(NOTIFY_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
                 } else {
@@ -72,7 +78,7 @@ class SyncForegroundService : Service() {
                 NativeLogger.d(TAG, "Stopping foreground service (permanent)")
                 stoppedByUser = true
                 if (!isRunning) {
-                    val notification = createNotification(getString(R.string.fg_notification_stopping))
+                    val notification = createNotification(getAppString("fg_notification_stopping"))
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                         startForeground(NOTIFY_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
                     } else {
@@ -88,7 +94,7 @@ class SyncForegroundService : Service() {
                 NativeLogger.d(TAG, "Stopping foreground service (temporary)")
                 stoppedByUser = true
                 if (!isRunning) {
-                    val notification = createNotification(getString(R.string.fg_notification_stopping))
+                    val notification = createNotification(getAppString("fg_notification_stopping"))
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                         startForeground(NOTIFY_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
                     } else {
@@ -101,11 +107,11 @@ class SyncForegroundService : Service() {
                 ForegroundServiceModule.sendTempStopEvent()
             }
             ACTION_UPDATE -> {
-                val content = intent.getStringExtra(EXTRA_CONTENT) ?: getString(R.string.fg_notification_running)
+                val content = intent.getStringExtra(EXTRA_CONTENT) ?: getAppString("fg_notification_running")
                 updateNotification(content)
             }
             else -> {
-                val notification = createNotification(getString(R.string.fg_notification_running))
+                val notification = createNotification(getAppString("fg_notification_running"))
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     startForeground(NOTIFY_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
                 } else {
@@ -128,7 +134,7 @@ class SyncForegroundService : Service() {
     override fun onTimeout(startId: Int) {
         NativeLogger.w(TAG, "dataSync foreground service timed out (6h/24h quota exhausted), stopping gracefully")
         stoppedByUser = true
-        showRestartNotification(contentText = getString(R.string.fg_timeout_content))
+        showRestartNotification(contentText = getAppString("fg_timeout_content"))
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
         isRunning = false
@@ -162,10 +168,10 @@ class SyncForegroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                getString(R.string.fg_channel_name),
+                getAppString("fg_channel_name"),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = getString(R.string.fg_channel_desc)
+                description = getAppString("fg_channel_desc")
                 setShowBadge(false)
             }
             notificationManager?.createNotificationChannel(channel)
@@ -220,8 +226,8 @@ class SyncForegroundService : Service() {
             .setContentIntent(pendingLaunchIntent)
             .setOngoing(true)
             .setSilent(true)
-            .addAction(0, getString(R.string.fg_action_temp_stop), tempStopPendingIntent)
-            .addAction(0, getString(R.string.fg_action_stop), stopPendingIntent)
+            .addAction(0, getAppString("fg_action_temp_stop"), tempStopPendingIntent)
+            .addAction(0, getAppString("fg_action_stop"), stopPendingIntent)
             .setStyle(NotificationCompat.BigTextStyle()
                 .setBigContentTitle(title)
                 .bigText(body)
@@ -234,16 +240,16 @@ class SyncForegroundService : Service() {
         notificationManager?.notify(NOTIFY_ID, notification)
     }
 
-    private fun showRestartNotification(contentText: String = getString(R.string.fg_restart_content)) {
+    private fun showRestartNotification(contentText: String = getAppString("fg_restart_content")) {
         val nm = getSystemService(NOTIFICATION_SERVICE) as? NotificationManager ?: return
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 RESTART_CHANNEL_ID,
-                getString(R.string.fg_restart_channel_name),
+                getAppString("fg_restart_channel_name"),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = getString(R.string.fg_restart_channel_desc)
+                description = getAppString("fg_restart_channel_desc")
             }
             nm.createNotificationChannel(channel)
         }
@@ -266,7 +272,7 @@ class SyncForegroundService : Service() {
             ?: android.R.drawable.ic_menu_info_details
 
         val notification = NotificationCompat.Builder(this, RESTART_CHANNEL_ID)
-            .setContentTitle(getString(R.string.fg_restart_title))
+            .setContentTitle(getAppString("fg_restart_title"))
             .setContentText(contentText)
             .setSmallIcon(iconResId)
             .setContentIntent(pendingIntent)
