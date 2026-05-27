@@ -3,13 +3,14 @@
  * 首页 - 显示当前剪贴板和同步状态
  */
 
-import React, { useState, useLayoutEffect, useMemo, useCallback } from 'react';
+import React, { useState, useLayoutEffect, useMemo, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import * as ClipboardProxy from '@/utils/clipboardProxy';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTheme } from '@/hooks/useTheme';
 import { useLocalClipboardStore } from '@/stores/localClipboardStore';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -32,6 +33,7 @@ import {
   refreshMonitor,
 } from '@/services/sync/ClipboardSyncActions';
 import type { ProgressInfo } from '@/types/progress';
+import { longRunningTaskManager } from '@/longRunningTask/LongRunningTaskManager';
 
 export function HomeScreen() {
   const { theme } = useTheme();
@@ -60,6 +62,13 @@ export function HomeScreen() {
 
   const { currentContent } = useLocalClipboardStore();
   const { getActiveServer } = useSettingsStore();
+
+  // 启动所有后台任务（先加载字体，再启动后台任务，避免后台繁重任务导致导航栏图标加载缓慢）
+  useEffect(() => {
+    Ionicons.loadFont().then(() => {
+      longRunningTaskManager.startAll().catch(() => {});
+    });
+  }, []);
 
   const activeServer = getActiveServer();
 
