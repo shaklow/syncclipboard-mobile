@@ -1,20 +1,16 @@
 import { Platform } from 'react-native';
+import i18n from '@/i18n';
 
 /**
  * 更新前台服务通知文本。
- * 将 "操作: 预览" 格式转换为双行显示："操作\n预览"
+ * @param isUpload true 表示上传，false 表示下载
+ * @param preview 内容预览文本
  */
-export function updateForegroundNotification(text: string): void {
+export function updateForegroundNotification(isUpload: boolean, preview: string): void {
   if (Platform.OS !== 'android') return;
-  const colonIdx = text.indexOf(': ');
-  let content: string;
-  if (colonIdx >= 0) {
-    const action = text.slice(0, colonIdx);
-    const preview = text.slice(colonIdx + 2);
-    content = `${action}\n${preview}`;
-  } else {
-    content = `SyncClipboard\n${text}`;
-  }
+  const content = isUpload
+    ? i18n.t('common.uploaded', { preview })
+    : i18n.t('common.downloaded', { preview });
   import('foreground-service')
     .then((ForegroundService) => {
       ForegroundService.updateNotification(content);

@@ -147,7 +147,7 @@ class ClipboardChangedHandler {
       await this.copyToLocalClipboard(content);
       if (Platform.OS === 'android') {
         const preview = this.getContentPreview(content);
-        updateForegroundNotification(`${i18n.t('clipboard.download')}: ${preview}`);
+        updateForegroundNotification(false, preview);
         if (config?.syncToastEnabled !== false) {
           ToastAndroid.show(i18n.t('common.downloaded', { preview }), ToastAndroid.SHORT);
         }
@@ -195,7 +195,7 @@ class ClipboardChangedHandler {
       const uploaded = await uploadLocalClipboard(content);
       if (uploaded && Platform.OS === 'android') {
         const preview = this.getContentPreview(content);
-        updateForegroundNotification(`${i18n.t('clipboard.upload')}: ${preview}`);
+        updateForegroundNotification(true, preview);
         if (config?.syncToastEnabled !== false) {
           ToastAndroid.show(i18n.t('common.uploaded', { preview }), ToastAndroid.SHORT);
         }

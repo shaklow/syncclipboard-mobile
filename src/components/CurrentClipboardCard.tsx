@@ -350,7 +350,11 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
             onPress={() => Linking.openURL(detectedUrl)}
           >
-            <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>
+            <Text
+              style={[styles.actionButtonText, { color: theme.colors.white }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
               {t('clipboard.openLink')}
             </Text>
           </TouchableOpacity>
@@ -362,7 +366,11 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
             onPress={() => onWordPick(clipboard.text!)}
           >
-            <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>
+            <Text
+              style={[styles.actionButtonText, { color: theme.colors.white }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
               {t('clipboard.wordPick')}
             </Text>
           </TouchableOpacity>
@@ -378,7 +386,11 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             ]}
             onPress={() => onCopy(clipboard)}
           >
-            <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>
+            <Text
+              style={[styles.actionButtonText, { color: theme.colors.white }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
               {t('common.copy')}
             </Text>
           </TouchableOpacity>
@@ -390,7 +402,11 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
             onPress={handleOpenFile}
           >
-            <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>
+            <Text
+              style={[styles.actionButtonText, { color: theme.colors.white }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
               {t('clipboard.open')}
             </Text>
           </TouchableOpacity>
@@ -402,7 +418,11 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
             onPress={handleSaveFile}
           >
-            <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>
+            <Text
+              style={[styles.actionButtonText, { color: theme.colors.white }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
               {t('clipboard.save')}
             </Text>
           </TouchableOpacity>
@@ -418,7 +438,11 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             ]}
             onPress={handleShare}
           >
-            <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>
+            <Text
+              style={[styles.actionButtonText, { color: theme.colors.white }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
               {t('clipboard.share')}
             </Text>
           </TouchableOpacity>
@@ -452,6 +476,8 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
                 styles.secondaryButtonText,
                 { color: theme.colors.primary },
               ]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
             >
               {acting && actionProgress
                 ? `${(actionProgress.progress * 100).toFixed(0)}%  ${formatFileSize(
@@ -541,8 +567,8 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    height: 40,
+    paddingHorizontal: 12,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
@@ -555,6 +581,9 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 15,
     fontWeight: '600',
+  },
+  actionButtonTextWrapper: {
+    flex: 1,
   },
   secondaryButtonText: {
     fontWeight: '500',

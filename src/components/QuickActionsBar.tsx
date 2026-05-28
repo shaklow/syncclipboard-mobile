@@ -57,6 +57,8 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
             styles.buttonText,
             { color: disabled ? theme.colors.textTertiary : theme.colors.text },
           ]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
         >
           {t('clipboard.upload')}
         </Text>
@@ -78,7 +80,11 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
         ) : (
           <Text style={styles.syncButtonIcon}>🔄</Text>
         )}
-        <Text style={[styles.syncButtonText, { color: theme.colors.white }]}>
+        <Text
+          style={[styles.syncButtonText, { color: theme.colors.white }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+        >
           {syncInProgress ? t('quickTile.syncing') : t('quickTile.sync')}
         </Text>
       </TouchableOpacity>
@@ -100,6 +106,8 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
             styles.buttonText,
             { color: disabled ? theme.colors.textTertiary : theme.colors.text },
           ]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
         >
           {t('clipboard.download')}
         </Text>
@@ -121,7 +129,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    height: 44,
     borderRadius: 8,
     marginHorizontal: 4,
   },
@@ -141,7 +149,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
+    height: 48,
     borderRadius: 10,
     marginHorizontal: 8,
   },
