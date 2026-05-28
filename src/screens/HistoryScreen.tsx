@@ -80,7 +80,6 @@ export function HistoryScreen() {
     setSort,
     selectedIds,
     toggleSelection,
-    selectAll,
     clearSelection,
     deleteSelected,
   } = useHistoryStore();
@@ -890,6 +889,34 @@ export function HistoryScreen() {
     return result;
   }, [sortedItems]);
 
+  // 全选当前分类的项目
+  const handleSelectAllInCurrentTab = useCallback(() => {
+    const currentTabKey = tabRoutes[tabIndex]?.key;
+    if (!currentTabKey) return;
+
+    const currentTabItems = filteredItemsByTab[currentTabKey] || [];
+    const newSelectedIds = new Set(currentTabItems.map((item) => item.profileHash));
+
+    // 直接设置 selectedIds
+    useHistoryStore.setState({ selectedIds: newSelectedIds });
+  }, [tabRoutes, tabIndex, filteredItemsByTab]);
+
+  // 取消全选当前分类的项目（保留其他分类的选中状态）
+  const handleClearSelectionInCurrentTab = useCallback(() => {
+    const currentTabKey = tabRoutes[tabIndex]?.key;
+    if (!currentTabKey) return;
+
+    const currentTabItems = filteredItemsByTab[currentTabKey] || [];
+    const currentTabIds = new Set(currentTabItems.map((item) => item.profileHash));
+
+    // 从 selectedIds 中移除当前分类的项目
+    const newSelectedIds = new Set(selectedIds);
+    currentTabIds.forEach((id) => newSelectedIds.delete(id));
+
+    // 更新 selectedIds
+    useHistoryStore.setState({ selectedIds: newSelectedIds });
+  }, [tabRoutes, tabIndex, filteredItemsByTab, selectedIds]);
+
   // 渲染每个 Tab 的内容
   const renderScene = useCallback(
     ({ route }: { route: Route }) => {
@@ -1144,11 +1171,32 @@ export function HistoryScreen() {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={() => (selectedIds.size === items.length ? clearSelection() : selectAll())}
+            onPress={() => {
+              const currentTabKey = tabRoutes[tabIndex]?.key;
+              const currentTabItems = currentTabKey ? filteredItemsByTab[currentTabKey] || [] : [];
+              const isAllSelected =
+                currentTabItems.length > 0 &&
+                currentTabItems.every((item) => selectedIds.has(item.profileHash));
+
+              if (isAllSelected) {
+                handleClearSelectionInCurrentTab();
+              } else {
+                handleSelectAllInCurrentTab();
+              }
+            }}
             style={styles.multiSelectButton}
           >
             <Ionicons
-              name={selectedIds.size === items.length ? 'checkbox' : 'checkbox-outline'}
+              name={(() => {
+                const currentTabKey = tabRoutes[tabIndex]?.key;
+                const currentTabItems = currentTabKey
+                  ? filteredItemsByTab[currentTabKey] || []
+                  : [];
+                return currentTabItems.length > 0 &&
+                  currentTabItems.every((item) => selectedIds.has(item.profileHash))
+                  ? 'checkbox'
+                  : 'checkbox-outline';
+              })()}
               size={22}
               color={theme.colors.primary}
             />
