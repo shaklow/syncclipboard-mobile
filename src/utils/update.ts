@@ -219,6 +219,7 @@ async function checkForUpdateFromGitee(
 
   const releases: Array<{
     tag_name: string;
+    name?: string;
     prerelease: boolean;
     draft: boolean;
     html_url: string;
@@ -235,6 +236,10 @@ async function checkForUpdateFromGitee(
   const candidates = releases.filter((r) => {
     if (r.draft) return false;
     if (!includeBeta && r.prerelease) return false;
+    if (r.name && r.name.startsWith('WIP:')) {
+      console.log(`[UpdateCheck] Gitee: 跳过 WIP 版本: ${r.tag_name} (${r.name})`);
+      return false;
+    }
     return true;
   });
 
