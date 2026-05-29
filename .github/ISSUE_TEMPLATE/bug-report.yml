@@ -1,0 +1,54 @@
+name: 报告程序错误 | Bug report
+description: Create a report to help us improve
+labels: ["bug report"]
+body:
+- type: textarea
+  attributes:
+    label: 错误描述 | Describe the bug
+  validations:
+    required: true
+- type: textarea
+  attributes:
+    label: 复现步骤 | Steps to Reproduce
+  validations:
+    required: true
+- type: textarea
+  attributes:
+    label: 截图 | Screenshots
+  validations: 
+    required: false
+- type: input
+  attributes:
+    label: 服务端信息 | Server
+    description: 'Docker/WebDAV(坚果云, Nextcloud, or …)/独立服务器/客户端内置'
+  validations:
+    required: true
+- type: input
+  attributes:
+    label: 移动端设备 | Mobile Device
+    description: 'Device: [e.g. Xiaomi 12]'
+  validations:
+    required: true
+- type: input
+  attributes:
+    label: Android版本 | Android Version
+    description: 'Android Version: [e.g. Android 13]'
+  validations:
+    required: true
+- type: input
+  attributes:
+    label: 移动端SyncClipboard版本 | Mobile SyncClipboard Version
+    description: 'SyncClipboard Version: [e.g. v1.0.0]'
+  validations:
+    required: true
+- type: textarea
+  attributes:
+    label: 日志文件 | Log File
+    description: '设置 → 调试 → 导出日志 | Settings → Debug → Export Logs'
+  validations: 
+    required: false
+- type: textarea
+  attributes:
+    label: 其他附加信息 | Additional context
+  validations:
+    required: false
