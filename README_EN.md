@@ -23,9 +23,9 @@ Mobile client for SyncClipboard, currently only supports Android
 ## Screenshots
 
 <p align="center">
-  <img src="docs/screenshorts/Screenshot01.jpg" width="250" alt="Home" />
-  <img src="docs/screenshorts/Screenshot02.jpg" width="250" alt="History" />
-  <img src="docs/screenshorts/Screenshot03.jpg" width="250" alt="Settings" />
+  <img src="docs/screenshorts_en/Screenshot01.jpg" width="250" alt="Home" />
+  <img src="docs/screenshorts_en/Screenshot02.jpg" width="250" alt="History" />
+  <img src="docs/screenshorts_en/Screenshot03.jpg" width="250" alt="Settings" />
 </p>
 
 ## Development
