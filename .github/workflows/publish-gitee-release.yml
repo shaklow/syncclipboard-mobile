@@ -12,9 +12,20 @@ jobs:
       - name: Setup SSH for Gitee
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.GITEE_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.GITEE_PRIVATE_KEY }}" | base64 -d > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan gitee.com >> ~/.ssh/known_hosts
+
+      - name: Verify SSH key
+        run: |
+          echo "=== SSH key format ==="
+          head -1 ~/.ssh/id_rsa
+          echo ""
+          echo "=== SSH key fingerprint ==="
+          ssh-keygen -l -f ~/.ssh/id_rsa
+          echo ""
+          echo "=== Testing connection to Gitee ==="
+          ssh -T git@gitee.com -o StrictHostKeyChecking=yes || true
 
       - name: Bare clone from GitHub
         run: |
