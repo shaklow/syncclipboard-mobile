@@ -88,7 +88,17 @@ export default function App() {
     if (!isLoaded) return;
 
     // Cold start: app launched via URL scheme
-    Linking.getInitialURL().then((url) => {
+    // 冷启动时 getInitialURL 可能为空，需要重试一次
+    const getInitialUrlWithRetry = async (): Promise<string | null> => {
+      let url = await Linking.getInitialURL();
+      if (!url) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        url = await Linking.getInitialURL();
+      }
+      return url;
+    };
+
+    getInitialUrlWithRetry().then((url) => {
       if (config?.debugUrlScheme) {
         ToastAndroid.show(`getInitialURL: ${url ?? 'null'}`, ToastAndroid.LONG);
       }
