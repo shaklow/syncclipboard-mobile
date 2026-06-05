@@ -2,6 +2,11 @@ name: publish-gitee-release
 
 on:
   workflow_call:
+    secrets:
+      GITEE_PRIVATE_KEY:
+        required: true
+      GITEE_ACCESS_TOKEN:
+        required: true
 
 jobs:
   sync-to-gitee:
@@ -12,18 +17,25 @@ jobs:
       - name: Setup SSH for Gitee
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.GITEE_PRIVATE_KEY }}" | base64 -d > ~/.ssh/id_rsa
+          # Debug: Check if secret exists
+          if [ -z "${{ secrets.GITEE_PRIVATE_KEY }}" ]; then
+            echo "ERROR: GITEE_PRIVATE_KEY secret is empty or not set!"
+            exit 1
+          fi
+          # Decode base64
+          echo "${{ secrets.GITEE_PRIVATE_KEY }}" | base64 -d > ~/.ssh/id_rsa || {
+            echo "ERROR: Base64 decode failed. Secret may not be in base64 format."
+            exit 1
+          }
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan gitee.com >> ~/.ssh/known_hosts
 
       - name: Verify SSH key
         run: |
-          echo "=== SSH key format ==="
-          head -1 ~/.ssh/id_rsa
-          echo ""
-          echo "=== SSH key fingerprint ==="
-          ssh-keygen -l -f ~/.ssh/id_rsa
-          echo ""
+          # Verify key file exists and is valid
+          test -f ~/.ssh/id_rsa || { echo "ERROR: SSH key file not found"; exit 1; }
+          ssh-keygen -l -f ~/.ssh/id_rsa >/dev/null 2>&1 || { echo "ERROR: Invalid SSH key format"; exit 1; }
+          echo "SSH key verified successfully"
           echo "=== Testing connection to Gitee ==="
           ssh -T git@gitee.com -o StrictHostKeyChecking=yes || true
 
@@ -34,7 +46,7 @@ jobs:
       - name: Mirror push to Gitee
         run: |
           cd bare-repo
-          git push git@gitee.com:${{ vars.GITEE_OWNER }}/${{ vars.GITEE_REPO }}.git \
+          git push git@gitee.com:JericX/syncclipboard-mobile.git \
             '+refs/heads/*:refs/heads/*' \
             '+refs/tags/*:refs/tags/*' \
             --prune
@@ -42,6 +54,7 @@ jobs:
   publish-gitee-release-create:
     name: Create Gitee Release
     needs: [sync-to-gitee]
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     outputs:
       release_id: ${{ steps.create_release.outputs.release_id }}
@@ -57,8 +70,8 @@ jobs:
       - name: Delete existing releases in same channel
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_ACCESS_TOKEN }}
-          GITEE_OWNER: ${{ vars.GITEE_OWNER }}
-          GITEE_REPO: ${{ vars.GITEE_REPO }}
+          GITEE_OWNER: JericX
+          GITEE_REPO: syncclipboard-mobile
           IS_PRERELEASE: ${{ contains(github.ref_name, 'beta') }}
         run: |
           python3 - <<'PYEOF'
@@ -86,8 +99,8 @@ jobs:
         id: create_release
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_ACCESS_TOKEN }}
-          GITEE_OWNER: ${{ vars.GITEE_OWNER }}
-          GITEE_REPO: ${{ vars.GITEE_REPO }}
+          GITEE_OWNER: JericX
+          GITEE_REPO: syncclipboard-mobile
           TAG_NAME: ${{ github.ref_name }}
           IS_PRERELEASE: ${{ contains(github.ref_name, 'beta') }}
         run: |
@@ -132,8 +145,8 @@ jobs:
       - name: Upload APK to Gitee Release
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_ACCESS_TOKEN }}
-          GITEE_OWNER: ${{ vars.GITEE_OWNER }}
-          GITEE_REPO: ${{ vars.GITEE_REPO }}
+          GITEE_OWNER: JericX
+          GITEE_REPO: syncclipboard-mobile
           RELEASE_ID: ${{ needs.publish-gitee-release-create.outputs.release_id }}
         run: |
           APK=$(ls apk/*.apk | head -1)
@@ -153,8 +166,8 @@ jobs:
       - name: Update Release Title
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_ACCESS_TOKEN }}
-          GITEE_OWNER: ${{ vars.GITEE_OWNER }}
-          GITEE_REPO: ${{ vars.GITEE_REPO }}
+          GITEE_OWNER: JericX
+          GITEE_REPO: syncclipboard-mobile
           RELEASE_ID: ${{ needs.publish-gitee-release-create.outputs.release_id }}
           TAG_NAME: ${{ github.ref_name }}
         run: |
