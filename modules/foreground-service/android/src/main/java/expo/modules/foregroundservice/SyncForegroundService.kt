@@ -24,7 +24,7 @@ class SyncForegroundService : Service() {
         const val ACTION_TEMP_STOP = "TEMP_STOP"
         const val ACTION_UPDATE = "UPDATE"
         const val EXTRA_CONTENT = "content"
-        private const val RESTART_NOTIFY_ID = 0x2021
+        const val RESTART_NOTIFY_ID = 0x2021
         private const val RESTART_CHANNEL_ID = "syncclipboard_restart"
 
         var isRunning = false

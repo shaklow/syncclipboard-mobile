@@ -88,5 +88,12 @@ class ForegroundServiceModule : Module() {
         Function("isRunning") {
             SyncForegroundService.isRunning
         }
+
+        Function("cancelRestartNotification") {
+            val context = appContext.reactContext ?: return@Function false
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+            nm?.cancel(SyncForegroundService.RESTART_NOTIFY_ID)
+            true
+        }
     }
 }
