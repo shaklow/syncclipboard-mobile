@@ -475,6 +475,7 @@ const zh = {
     conflict: '同步冲突',
     idle: '等待同步',
     justSynced: '刚刚同步',
+    serviceRestored: '服务已恢复',
   },
 
   // --- 错误 ---

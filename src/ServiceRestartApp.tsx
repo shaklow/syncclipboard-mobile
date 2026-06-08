@@ -7,15 +7,20 @@
 
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, Text, BackHandler, StatusBar, Platform } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { ThemeProvider } from './contexts/ThemeContext';
+import { I18nProvider } from './contexts/I18nContext';
 import { useSettingsStore } from './stores';
 import { initLogger } from './utils/Logger';
 import { longRunningTaskManager } from './longRunningTask/LongRunningTaskManager';
+import { useTranslation } from 'react-i18next';
 
 interface ServiceRestartAppProps {
   systemTheme?: 'light' | 'dark';
 }
 
-export default function ServiceRestartApp({ systemTheme }: ServiceRestartAppProps) {
+function ServiceRestartContent({ systemTheme }: ServiceRestartAppProps) {
+  const { t } = useTranslation();
   const { loadConfig, isLoaded } = useSettingsStore();
   const [ready, setReady] = useState(false);
   const isDark = systemTheme === 'dark';
@@ -51,9 +56,23 @@ export default function ServiceRestartApp({ systemTheme }: ServiceRestartAppProp
       <StatusBar backgroundColor="transparent" translucent barStyle="light-content" />
       <View style={[styles.card, isDark ? styles.cardDark : styles.cardLight]}>
         <Text style={[styles.icon]}>✓</Text>
-        <Text style={[styles.text, isDark ? styles.textDark : styles.textLight]}>服务已恢复</Text>
+        <Text style={[styles.text, isDark ? styles.textDark : styles.textLight]}>
+          {t('syncStatus.serviceRestored')}
+        </Text>
       </View>
     </View>
+  );
+}
+
+export default function ServiceRestartApp({ systemTheme }: ServiceRestartAppProps) {
+  return (
+    <GestureHandlerRootView style={styles.container}>
+      <I18nProvider>
+        <ThemeProvider systemColorSchemeOverride={systemTheme}>
+          <ServiceRestartContent systemTheme={systemTheme} />
+        </ThemeProvider>
+      </I18nProvider>
+    </GestureHandlerRootView>
   );
 }
 

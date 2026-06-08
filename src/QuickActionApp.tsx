@@ -14,6 +14,7 @@ import React, { useCallback, useEffect } from 'react';
 import { StyleSheet, StatusBar, Platform, BackHandler } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { I18nProvider } from './contexts/I18nContext';
 import { QuickTileLoadingScreen } from './screens/QuickTileLoadingScreen';
 import { ProcessTextScreen } from './screens/ProcessTextScreen';
 import { DirectShareReceiveScreen } from './screens/DirectShareReceiveScreen';
@@ -75,10 +76,16 @@ export default function QuickActionApp({
   if (shareMode && shareData) {
     return (
       <GestureHandlerRootView style={styles.container}>
-        <ThemeProvider systemColorSchemeOverride={systemTheme}>
-          <StatusBar backgroundColor="transparent" translucent barStyle="light-content" />
-          <DirectShareReceiveScreen shareData={shareData} onComplete={handleComplete} overlayMode />
-        </ThemeProvider>
+        <I18nProvider>
+          <ThemeProvider systemColorSchemeOverride={systemTheme}>
+            <StatusBar backgroundColor="transparent" translucent barStyle="light-content" />
+            <DirectShareReceiveScreen
+              shareData={shareData}
+              onComplete={handleComplete}
+              overlayMode
+            />
+          </ThemeProvider>
+        </I18nProvider>
       </GestureHandlerRootView>
     );
   }
@@ -87,10 +94,12 @@ export default function QuickActionApp({
   if (text) {
     return (
       <GestureHandlerRootView style={styles.container}>
-        <ThemeProvider systemColorSchemeOverride={systemTheme}>
-          <StatusBar backgroundColor="transparent" translucent barStyle="light-content" />
-          <ProcessTextScreen text={text} onComplete={handleComplete} overlayMode />
-        </ThemeProvider>
+        <I18nProvider>
+          <ThemeProvider systemColorSchemeOverride={systemTheme}>
+            <StatusBar backgroundColor="transparent" translucent barStyle="light-content" />
+            <ProcessTextScreen text={text} onComplete={handleComplete} overlayMode />
+          </ThemeProvider>
+        </I18nProvider>
       </GestureHandlerRootView>
     );
   }
@@ -98,14 +107,16 @@ export default function QuickActionApp({
   // Quick tile mode: download/upload
   return (
     <GestureHandlerRootView style={styles.container}>
-      <ThemeProvider systemColorSchemeOverride={systemTheme}>
-        <StatusBar backgroundColor="transparent" translucent barStyle="light-content" />
-        <QuickTileLoadingScreen
-          direction={syncDirection}
-          onLoadingComplete={handleComplete}
-          overlayMode
-        />
-      </ThemeProvider>
+      <I18nProvider>
+        <ThemeProvider systemColorSchemeOverride={systemTheme}>
+          <StatusBar backgroundColor="transparent" translucent barStyle="light-content" />
+          <QuickTileLoadingScreen
+            direction={syncDirection}
+            onLoadingComplete={handleComplete}
+            overlayMode
+          />
+        </ThemeProvider>
+      </I18nProvider>
     </GestureHandlerRootView>
   );
 }

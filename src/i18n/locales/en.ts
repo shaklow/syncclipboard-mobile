@@ -486,6 +486,7 @@ const en: DeepString<typeof zh> = {
     conflict: 'Sync conflict',
     idle: 'Waiting to sync',
     justSynced: 'Just synced',
+    serviceRestored: 'Service restored',
   },
 
   // --- 错误 ---
