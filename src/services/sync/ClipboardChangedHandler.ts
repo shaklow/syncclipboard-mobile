@@ -9,7 +9,12 @@ import type { AppConfig } from '../../types';
 import { clipboardSyncState } from './SyncState';
 import { configService } from '../ConfigService';
 import { remoteClipboardMonitor } from './RemoteClipboardMonitor';
-import { uploadLocalClipboard, downloadRemoteClipboard } from './ClipboardSyncActions';
+import {
+  uploadLocalClipboard,
+  downloadRemoteClipboard,
+  getJustUploadedHash,
+  clearJustUploadedHash,
+} from './ClipboardSyncActions';
 import { updateForegroundNotification } from '../notification/ForegroundNotification';
 import { historyService } from '../history/HistoryService';
 import { calculateTextHash } from '../../utils/hash';
@@ -19,8 +24,6 @@ class ClipboardChangedHandler {
   private static instance: ClipboardChangedHandler | null = null;
   private lastRemoteProfileHash: string | null = null;
   private lastLocalProfileHash: string | null = null;
-  /** 临时忽略的 hash：匹配此 hash 的远程内容不触发处理（用于防止上传后立即下载） */
-  private ignoreHash: string | null = null;
 
   private constructor() {}
 
@@ -52,30 +55,6 @@ class ClipboardChangedHandler {
     this.lastLocalProfileHash = hash;
   }
 
-  /**
-   * 设置临时忽略的 hash。
-   * 匹配此 hash 的远程内容不会触发处理，用于防止上传后立即下载。
-   */
-  setIgnoreHash(hash: string): void {
-    this.ignoreHash = hash;
-    console.log('[ClipboardChangedHandler] Set ignore hash:', hash);
-  }
-
-  /**
-   * 获取当前的临时忽略 hash。
-   */
-  getIgnoreHash(): string | null {
-    return this.ignoreHash;
-  }
-
-  /**
-   * 清除临时忽略的 hash。
-   */
-  clearIgnoreHash(): void {
-    this.ignoreHash = null;
-    console.log('[ClipboardChangedHandler] Cleared ignore hash');
-  }
-
   async processRemoteClipboardContent(content: ClipboardContent): Promise<void> {
     if (!content.hasData && content.type === 'Text' && !content.profileHash && content.text) {
       content.profileHash = await calculateTextHash(content.text);
@@ -83,15 +62,16 @@ class ClipboardChangedHandler {
 
     const currentHash = content.profileHash || content.text;
 
-    // 如果匹配临时忽略的 hash，跳过处理
-    if (currentHash && currentHash === this.ignoreHash) {
+    // 如果匹配刚上传的 hash，跳过处理
+    if (currentHash && currentHash === getJustUploadedHash()) {
       console.log('[ClipboardChangedHandler] Ignoring remote content with hash:', currentHash);
-      // 清除忽略 hash（只忽略一次）
-      this.ignoreHash = null;
+      // 清除刚上传 hash（只忽略一次）
+      clearJustUploadedHash();
       // 更新 lastRemoteProfileHash，防止后续重复处理
       this.lastRemoteProfileHash = currentHash;
       return;
     }
+    clearJustUploadedHash();
 
     // 仅在 hash 变化时更新 state，避免覆盖已下载的 fileUri 等状态
     const stateRemote = clipboardSyncState.getState().remoteContent;
