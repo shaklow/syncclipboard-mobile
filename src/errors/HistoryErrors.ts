@@ -30,3 +30,13 @@ export class RecordNotFoundError extends Error {
     this.profileId = profileId;
   }
 }
+
+/**
+ * History API 未初始化错误
+ */
+export class HistoryAPINotInitializedError extends Error {
+  constructor() {
+    super('History API not initialized');
+    this.name = 'HistoryAPINotInitializedError';
+  }
+}

@@ -106,3 +106,4 @@ tmpclaude-*-cwd
 /android/
 modules/*/android/build/
 modules/*/build/
+.vscode/settings.json

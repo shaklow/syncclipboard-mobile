@@ -4,7 +4,7 @@
  */
 
 import type { IHistoryAPI } from '@/api/history';
-import { RecordNotFoundError } from '@/errors';
+import { HistoryAPINotInitializedError, RecordNotFoundError } from '@/errors';
 import { HistoryStorage } from '../../storage/HistoryStorage';
 import { HistorySyncStatus, type ClipboardContent, isLocalFileReady } from '@/types/clipboard';
 import { getHistoryFileDir } from '@/utils/fileStorage';
@@ -589,7 +589,7 @@ export class HistoryTransferQueue {
    */
   private async executeDownloadTask(task: TransferTask): Promise<ClipboardContent> {
     if (!this.historyAPI) {
-      throw new Error('History API not initialized');
+      throw new HistoryAPINotInitializedError();
     }
 
     console.log(`[HistoryTransferQueue] ========== Execute Download Task ==========`);
@@ -675,7 +675,7 @@ export class HistoryTransferQueue {
    */
   private async executeUploadTask(task: TransferTask): Promise<ClipboardContent> {
     if (!this.historyAPI) {
-      throw new Error('History API not initialized');
+      throw new HistoryAPINotInitializedError();
     }
 
     const { parseProfileId } = await import('@/utils');

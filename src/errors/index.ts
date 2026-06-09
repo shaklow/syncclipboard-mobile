@@ -5,4 +5,8 @@ export { ServerError } from './ServerError';
 export { TimeoutError } from './TimeoutError';
 export { ConfigurationError } from './ConfigurationError';
 export { ValidationError } from './ValidationError';
-export { SyncConflictError, RecordNotFoundError } from './HistoryErrors';
+export {
+  SyncConflictError,
+  RecordNotFoundError,
+  HistoryAPINotInitializedError,
+} from './HistoryErrors';

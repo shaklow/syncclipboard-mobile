@@ -29,6 +29,10 @@ export class ClientService {
     }
 
     if (server.type === 'syncclipboard') {
+      const config = await configService.getConfig();
+      if (!config.enableHistorySync) {
+        return downloadForStorage(content, progress, signal);
+      }
       return downloadForSyncClipboard(content, progress, signal);
     }
     return downloadForStorage(content, progress, signal);
@@ -45,6 +49,10 @@ export class ClientService {
     }
 
     if (server.type === 'syncclipboard') {
+      const config = await configService.getConfig();
+      if (!config.enableHistorySync) {
+        return uploadForStorage(content, progress, signal);
+      }
       return uploadForSyncClipboard(content, progress, signal);
     }
     return uploadForStorage(content, progress, signal);

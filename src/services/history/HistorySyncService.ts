@@ -6,7 +6,7 @@
 import type { IHistoryAPI } from '@/api/history';
 import { HistoryRecordDto, HistoryRecordUpdateDto, ProfileTypeFilter } from '@/types/history';
 import { dtoToHistoryItem } from '@/utils/clipboard/convert';
-import { SyncConflictError, RecordNotFoundError } from '@/errors';
+import { HistoryAPINotInitializedError, SyncConflictError, RecordNotFoundError } from '@/errors';
 import { HistoryStorage } from '../../storage/HistoryStorage';
 import { HistoryItem, HistorySyncStatus, isLocalFileReady } from '@/types/clipboard';
 import { ServerConfig } from '@/types/api';
@@ -168,7 +168,7 @@ export class HistorySyncService {
     }
 
     if (!this.historyAPI) {
-      throw new Error('History API not initialized');
+      throw new HistoryAPINotInitializedError();
     }
 
     if (!(await this.isHistorySyncEnabled())) {
@@ -781,7 +781,7 @@ export class HistorySyncService {
     signal?: AbortSignal
   ): Promise<'synced' | 'notFound' | 'conflict'> {
     if (!this.historyAPI) {
-      throw new Error('History API not initialized');
+      throw new HistoryAPINotInitializedError();
     }
 
     const type = item.type as 'Text' | 'Image' | 'File';
@@ -964,7 +964,7 @@ export class HistorySyncService {
   ): Promise<'synced' | 'notFound' | 'conflict'> {
     if (!this.historyAPI) {
       console.warn('[HistorySyncService] History API not initialized, cannot sync');
-      throw new Error('History API not initialized');
+      throw new HistoryAPINotInitializedError();
     }
 
     try {
