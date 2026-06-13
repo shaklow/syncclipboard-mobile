@@ -171,26 +171,28 @@ jobs:
           RELEASE_ID: ${{ needs.publish-gitee-release-create.outputs.release_id }}
           TAG_NAME: ${{ github.ref_name }}
         run: |
-          python3 - <<'PYEOF'
-          import json, os, urllib.request
+          # 先获取现有 release，提取必填字段 (tag_name, body, prerelease)
+          EXISTING=$(curl -s --retry 3 --retry-delay 5 \
+            "https://gitee.com/api/v5/repos/${GITEE_OWNER}/${GITEE_REPO}/releases/${RELEASE_ID}?access_token=${GITEE_TOKEN}")
 
-          token = os.environ["GITEE_TOKEN"]
-          owner = os.environ["GITEE_OWNER"]
-          repo = os.environ["GITEE_REPO"]
-          release_id = os.environ["RELEASE_ID"]
-          tag_name = os.environ["TAG_NAME"]
-
-          url = f"https://gitee.com/api/v5/repos/{owner}/{repo}/releases/{release_id}"
-          data = {
-              "access_token": token,
-              "name": tag_name
+          # 构建 PATCH body，包含所有必填字段
+          PATCH_BODY=$(echo "$EXISTING" | python3 -c "
+          import json, sys
+          r = json.load(sys.stdin)
+          patch = {
+              'access_token': '${GITEE_TOKEN}',
+              'name': '${TAG_NAME}',
+              'tag_name': r['tag_name'],
+              'body': r['body'],
+              'prerelease': r['prerelease'],
           }
+          print(json.dumps(patch))
+          ")
 
-          req_data = json.dumps(data).encode('utf-8')
-          req = urllib.request.Request(url, data=req_data, method='PATCH')
-          req.add_header('Content-Type', 'application/json')
-
-          with urllib.request.urlopen(req) as response:
-              result = json.loads(response.read())
-              print(f"Updated release title: {result.get('name')}")
-          PYEOF
+          RESPONSE=$(curl -s --retry 3 --retry-delay 5 -X PATCH \
+            "https://gitee.com/api/v5/repos/${GITEE_OWNER}/${GITEE_REPO}/releases/${RELEASE_ID}" \
+            -H "Content-Type: application/json" \
+            -d "$PATCH_BODY")
+          echo "Gitee API response: $RESPONSE"
+          UPDATED_NAME=$(echo "$RESPONSE" | python3 -c 'import json,sys; print(json.load(sys.stdin)["name"])')
+          echo "Updated release title: $UPDATED_NAME"
