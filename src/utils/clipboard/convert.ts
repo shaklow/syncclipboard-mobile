@@ -174,7 +174,7 @@ export function validateClipboardContent(content: ClipboardContent): boolean {
 /**
  * 将 ClipboardContent 转换为 ClipboardItem，填充默认元数据。
  * @param content 剪贴板内容
- * @param overrides 覆盖默认字段（如 syncStatus、hasRemoteData 等）
+ * @param overrides 覆盖默认字段
  */
 export function clipboardContentToItem(
   content: ClipboardContent,
@@ -208,10 +208,11 @@ export function historyItemToContent(item: HistoryItem): ClipboardContent {
 // ─── HistoryRecordDto ↔ ClipboardItem ────────────────────────────────────────
 
 /**
- * 根据 HistoryRecordDto 推断数据文件名：
+ * 根据 HistoryRecordDto 推断数据文件名（DTD 不含 dataName 字段，需根据类型推断）：
  * - File / Image：使用 text 字段（服务器将文件名存入 text）
- * - Text with hasData：生成 "<hash前8位>.txt"
- * - 其他：undefined
+ * - Text with hasData：生成 "Text_<timestamp>_<random>.txt"
+ * - Group：生成 "Group_<timestamp>_<random>.zip"
+ * - 其他 / 无 hasData：undefined
  */
 function getDataNameFromDto(dto: HistoryRecordDto): string | undefined {
   if (!dto.hasData) return undefined;
@@ -219,8 +220,16 @@ function getDataNameFromDto(dto: HistoryRecordDto): string | undefined {
     case 'File':
     case 'Image':
       return dto.text || undefined;
-    case 'Text':
-      return `${dto.hash.substring(0, 8)}.txt`;
+    case 'Text': {
+      const timestamp = Date.now();
+      const randomPart = Math.random().toString(36).substring(2, 8);
+      return `Text_${timestamp}_${randomPart}.txt`;
+    }
+    case 'Group': {
+      const timestamp = Date.now();
+      const randomPart = Math.random().toString(36).substring(2, 8);
+      return `Group_${timestamp}_${randomPart}.zip`;
+    }
     default:
       return undefined;
   }
@@ -235,7 +244,7 @@ export function dtoToHistoryItem(dto: HistoryRecordDto): HistoryItem {
     text: dto.text || '',
     profileHash: dto.hash,
     hasData: dto.hasData || false,
-    dataName: getDataNameFromDto(dto),
+    dataName: dto.hasData ? getDataNameFromDto(dto) : undefined,
     size: dto.size ?? 0,
     timestamp: dto.createTime ? new Date(dto.createTime).getTime() : Date.now(),
     starred: dto.starred ?? false,
@@ -245,7 +254,6 @@ export function dtoToHistoryItem(dto: HistoryRecordDto): HistoryItem {
     lastModified: dto.lastModified ? new Date(dto.lastModified).getTime() : Date.now(),
     lastAccessed: dto.lastAccessed ? new Date(dto.lastAccessed).getTime() : Date.now(),
     isDeleted: dto.isDeleted ?? false,
-    hasRemoteData: dto.hasData ?? false,
   };
 }
 

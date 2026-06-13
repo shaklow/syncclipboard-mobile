@@ -81,7 +81,6 @@ function normalizeClipboardItem(item: HistoryItem): HistoryItem {
     isDeleted: item.isDeleted ?? false,
     pinned: item.pinned ?? false,
     from: item.from,
-    hasRemoteData: item.hasRemoteData ?? false,
   };
 }
 

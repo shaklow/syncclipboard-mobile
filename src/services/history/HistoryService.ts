@@ -53,13 +53,7 @@ export class HistoryService {
   }
 
   addRemoteContent(content: ClipboardContent): Promise<HistoryItem> {
-    const hasData = content.hasData;
-    const fileUri = content.fileUri;
-
     const historyItem = clipboardContentToItem(content, {
-      hasData,
-      hasRemoteData: hasData,
-      fileUri,
       syncStatus: HistorySyncStatus.Synced,
     });
 
@@ -100,8 +94,6 @@ export class HistoryService {
     }
 
     const historyItem = clipboardContentToItem(content, {
-      hasData: content.hasData,
-      hasRemoteData: false,
       fileUri,
       syncStatus: HistorySyncStatus.LocalOnly,
     });

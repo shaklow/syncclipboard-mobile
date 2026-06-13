@@ -5,7 +5,7 @@
  */
 
 import type { ClipboardContent } from '../../types/clipboard';
-import type { ServerConfig } from '../../types/api';
+import type { ClipboardContentType, ProfileDto, ServerConfig } from '../../types/api';
 import type { ProfileChangedEvent, ConnectionState } from 'signalr-client';
 import { getSignalRClient } from 'signalr-client';
 import { setTimer, clearTimer } from 'native-timer';
@@ -162,8 +162,8 @@ class RemoteClipboardMonitor {
 
   private readonly _signalREventCallback = (event: ProfileChangedEvent): void => {
     try {
-      const profile = {
-        type: event.type as 'Text' | 'Image' | 'File' | 'Group',
+      const profile: ProfileDto = {
+        type: event.type as ClipboardContentType,
         hash: event.hash,
         text: event.text,
         hasData: event.hasData,

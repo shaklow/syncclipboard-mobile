@@ -9,7 +9,7 @@ import { dtoToHistoryItem } from '@/utils/clipboard/convert';
 import { HistoryAPINotInitializedError, SyncConflictError, RecordNotFoundError } from '@/errors';
 import { HistoryStorage } from '../../storage/HistoryStorage';
 import { HistoryItem, HistorySyncStatus, isLocalFileReady } from '@/types/clipboard';
-import { ServerConfig } from '@/types/api';
+import { ClipboardContentType, ServerConfig } from '@/types/api';
 import { getSignalRClient, type HistoryChangedEvent } from 'signalr-client';
 import { historyService } from './HistoryService';
 import type { HistoryChangeAction } from '@/storage/HistoryStorage';
@@ -465,7 +465,6 @@ export class HistorySyncService {
               version: remoteVersion,
               lastModified: remoteModified,
               syncStatus: HistorySyncStatus.Synced,
-              hasRemoteData: remoteRecord.hasData,
               fileUri: localItem.fileUri,
               isDeleted: remoteRecord.isDeleted || false,
             },
@@ -651,7 +650,6 @@ export class HistorySyncService {
             ? new Date(createdRecord.lastModified).getTime()
             : Date.now(),
           syncStatus: HistorySyncStatus.Synced,
-          hasRemoteData: false,
         });
 
         console.log(`[HistorySyncService] LocalOnly record uploaded: ${item.profileHash}`);
@@ -696,7 +694,6 @@ export class HistorySyncService {
         ? new Date(serverRecord.lastModified).getTime()
         : Date.now(),
       syncStatus: HistorySyncStatus.Synced,
-      hasRemoteData: serverRecord.hasData,
       fileUri: local.fileUri,
       isDeleted: serverRecord.isDeleted,
     });
@@ -756,7 +753,6 @@ export class HistorySyncService {
           ? new Date(createdRecord.lastModified).getTime()
           : Date.now(),
         syncStatus: HistorySyncStatus.Synced,
-        hasRemoteData: false,
       });
 
       console.log(`[HistorySyncService] New record uploaded: ${item.profileHash}`);
@@ -784,7 +780,6 @@ export class HistorySyncService {
       throw new HistoryAPINotInitializedError();
     }
 
-    const type = item.type as 'Text' | 'Image' | 'File';
     const update: HistoryRecordUpdateDto = {
       starred: item.starred,
       pinned: item.pinned,
@@ -795,7 +790,7 @@ export class HistorySyncService {
 
     try {
       const updatedRecord = await this.historyAPI.updateRecord(
-        type,
+        item.type,
         item.profileHash,
         update,
         signal
@@ -846,7 +841,7 @@ export class HistorySyncService {
     const record: HistoryRecordDto = {
       hash: event.hash,
       text: event.text,
-      type: event.type as 'Text' | 'Image' | 'File',
+      type: event.type as ClipboardContentType,
       hasData: event.hasData,
       size: event.size,
       starred: event.starred,
@@ -902,7 +897,6 @@ export class HistorySyncService {
             version: remoteVersion,
             lastModified: remoteModified,
             syncStatus: HistorySyncStatus.Synced,
-            hasRemoteData: record.hasData,
             fileUri: localItem.fileUri,
             isDeleted: false,
           });
@@ -1046,10 +1040,7 @@ export class HistorySyncService {
         continue;
       }
 
-      const hasRemoteData = item.hasRemoteData === true;
-      const noLocalData = !isLocalFileReady(item);
-
-      if (hasRemoteData && noLocalData) {
+      if (!isLocalFileReady(item)) {
         toDeleteHashes.push(item.profileHash);
       } else if (
         item.syncStatus === HistorySyncStatus.Synced ||

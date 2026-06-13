@@ -18,7 +18,6 @@ export async function downloadForSyncClipboard(
   try {
     const historyItem = clipboardContentToItem(remoteContent, {
       syncStatus: HistorySyncStatus.NeedSync,
-      hasRemoteData: true,
     });
     await historyService.addItem(historyItem);
   } catch (e) {

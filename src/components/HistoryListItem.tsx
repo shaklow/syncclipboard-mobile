@@ -89,7 +89,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
 
     useEffect(() => {
       if (autoDownloadTriggered.current) return;
-      if (item.type !== 'Image' || localFileReady || !item.hasRemoteData) return;
+      if (item.type !== 'Image' || localFileReady) return;
       if (!enableHistorySync) return;
       if (imageAutoDownload === 'off') return;
 
@@ -110,14 +110,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
         }
       };
       doAutoDownload();
-    }, [
-      item.profileHash,
-      localFileReady,
-      item.type,
-      item.hasRemoteData,
-      enableHistorySync,
-      imageAutoDownload,
-    ]);
+    }, [item.profileHash, localFileReady, item.type, enableHistorySync, imageAutoDownload]);
 
     const profileId = getProfileId(item.type, item.profileHash);
     const activeTask = tasks.find(

@@ -615,7 +615,6 @@ export class HistoryTransferQueue {
 
     console.log(`[HistoryTransferQueue] Item type: ${item.type}`);
     console.log(`[HistoryTransferQueue] Item text (fileName): ${item.text}`);
-    console.log(`[HistoryTransferQueue] Item hasRemoteData: ${item.hasRemoteData}`);
     console.log(`[HistoryTransferQueue] Item isLocalFileReady: ${isLocalFileReady(item)}`);
 
     const historyDir = getHistoryFileDir(item.type, parsed.hash);
@@ -623,7 +622,7 @@ export class HistoryTransferQueue {
       historyDir.create();
     }
 
-    const fileName = item.dataName || (item.type !== 'Text' && item.text ? item.text : 'data');
+    const fileName = item.dataName || 'data';
     const destinationFile = new File(historyDir, fileName);
     const destinationUri = destinationFile.uri;
 

@@ -84,9 +84,6 @@ export interface HistoryItem {
 
   /** 来源设备 */
   from?: string;
-
-  /** 远程是否有数据（服务器HasData字段） */
-  hasRemoteData?: boolean;
 }
 
 export function isLocalFileReady(item: HistoryItem): boolean {

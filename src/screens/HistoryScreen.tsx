@@ -807,7 +807,6 @@ export function HistoryScreen() {
       console.log(`[HistoryScreen] Item profileHash: ${item.profileHash}`);
       console.log(`[HistoryScreen] Item type: ${item.type}`);
       console.log(`[HistoryScreen] Item dataName: ${item.dataName}`);
-      console.log(`[HistoryScreen] Item hasRemoteData: ${item.hasRemoteData}`);
       console.log(`[HistoryScreen] Item isLocalFileReady: ${isLocalFileReady(item)}`);
 
       if (!getHistorySyncService().isInitialized()) {
