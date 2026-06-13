@@ -5,7 +5,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
@@ -27,21 +26,11 @@ class SyncForegroundService : Service() {
         const val EXTRA_CONTENT = "content"
         const val RESTART_NOTIFY_ID = 0x2021
         private const val RESTART_CHANNEL_ID = "syncclipboard_restart"
-        private const val PREFS_NAME = "sync_fg_prefs"
-        private const val KEY_KILLED_BY_USER = "killed_by_user"
 
         var isRunning = false
             private set
 
         internal var stoppedByUser = false
-
-        /**
-         * 内存标志：当前进程已进入"用户主动退出"处理流程。
-         * 用于 onStartCommand 与 onTaskRemoved 回调顺序不确定时的互相感知，
-         * 防止 START_STICKY 重建后 onTaskRemoved 被重复触发导致循环 killProcess。
-         * 进程重建时自动重置为 false；正常启动服务时显式清除。
-         */
-        private var handledKilledByUser = false
     }
 
     private var notificationManager: NotificationManager? = null
@@ -69,19 +58,6 @@ class SyncForegroundService : Service() {
                 //     系统重投了上次的 ACTION_START intent，JS 并未实际运行
                 // 以上两种情况：JS 不存在，不启动前台服务，仅发重启引导通知
                 if (intent == null || !ForegroundServiceModule.isJsRuntimeAlive()) {
-                    // 检查是否因用户从多任务界面退出而触发的进程重建
-                    // 若是，则安静停止，不弹出重启引导通知
-                    // 同时检查 SharedPreferences（跨进程）和内存标志（同进程不同回调顺序）
-                    val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                    val killedByUser = prefs.getBoolean(KEY_KILLED_BY_USER, false) || handledKilledByUser
-                    if (killedByUser) {
-                        NativeLogger.d(TAG, "Process was restarted after user swiped from recents, stopping quietly")
-                        handledKilledByUser = true  // 确保 onTaskRemoved 若后触发也能感知
-                        prefs.edit().putBoolean(KEY_KILLED_BY_USER, false).apply()
-                        stoppedByUser = true
-                        stopSelf()
-                        return START_NOT_STICKY
-                    }
                     NativeLogger.w(TAG, "Service restarted by system (intent=${intent?.action}, jsAlive=${ForegroundServiceModule.isJsRuntimeAlive()}), JS not running, showing restart notification")
                     showRestartNotification()
                     stoppedByUser = true  // 防止 onDestroy 再次发重启通知
@@ -96,7 +72,6 @@ class SyncForegroundService : Service() {
                     startForeground(NOTIFY_ID, notification)
                 }
                 NativeLogger.d(TAG, "startForeground called successfully")
-                handledKilledByUser = false  // 正常启动，清除退出标志以备下次
                 isRunning = true
             }
             ACTION_STOP -> {
@@ -175,27 +150,13 @@ class SyncForegroundService : Service() {
             return
         }
 
-        NativeLogger.d(TAG, "onTaskRemoved: user swiped app from recents, killing process")
-        // 持久化标记，供进程重建后的 onStartCommand 判断，避免弹出"服务需要恢复"通知
-        // 必须使用 commit()（同步写入），确保在 killProcess 之前写入完成
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-
-        // 若标志已置位，说明这是 START_STICKY 重建后的二次 onTaskRemoved，安静停止即可
-        if (prefs.getBoolean(KEY_KILLED_BY_USER, false) || handledKilledByUser) {
-            NativeLogger.d(TAG, "onTaskRemoved: spurious restart after user kill, stopping quietly")
-            prefs.edit().putBoolean(KEY_KILLED_BY_USER, false).commit()
-            stoppedByUser = true
-            isRunning = false
-            stopSelf()
-            return
-        }
-
-        prefs.edit().putBoolean(KEY_KILLED_BY_USER, true).commit()
+        NativeLogger.d(TAG, "onTaskRemoved: user swiped app from recents, pausing background tasks")
         stoppedByUser = true
         isRunning = false
-        // 直接结束进程，停止所有后台任务（含 JS 侧 keepAlive 任务如 remoteClipboardMonitor）
-        // 否则进程在前台服务停止后仍短暂存活，导致后台任务持续运行，出现严格交替的 bug
-        android.os.Process.killProcess(android.os.Process.myPid())
+        // 通知 JS 侧暂停所有后台任务（复用临时停止逻辑，回到前台自动恢复）
+        ForegroundServiceModule.sendTempStopEvent()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     override fun onDestroy() {

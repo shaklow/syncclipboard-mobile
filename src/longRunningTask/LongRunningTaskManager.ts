@@ -48,6 +48,9 @@ class LongRunningTaskManager {
         this._syncBackgroundTaskState();
       } else if (wasBackground && nextState !== 'background') {
         this._notifyForeground();
+        // 用户回到前台时自动清除临时停止标志，恢复所有后台任务
+        // 包括通知栏"临时停止"和 onTaskRemoved 触发的暂停
+        backgroundRuntimeState.setTempDisabled(false);
         this._startNonKeepAlive();
       }
     });
