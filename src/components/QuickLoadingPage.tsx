@@ -44,6 +44,8 @@ export interface QuickLoadingPageProps {
   previewImage?: string;
   /** When true, renders as a floating card over a semi-transparent backdrop (for transparent Activity). */
   overlayMode?: boolean;
+  /** When true, tapping the backdrop does nothing (used during active save operations). */
+  disableBackdropClose?: boolean;
 }
 
 export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
@@ -58,6 +60,7 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
   previewText,
   previewImage,
   overlayMode,
+  disableBackdropClose,
 }) => {
   const { theme } = useTheme();
   const { t } = useTranslation();
@@ -244,6 +247,8 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
                       styles.buttonText,
                       { color: btn.primary ? theme.colors.white : theme.colors.text },
                     ]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
                   >
                     {btn.label}
                   </Text>
@@ -327,6 +332,7 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
       {overlayMode ? (
         <TouchableWithoutFeedback
           onPress={() => {
+            if (disableBackdropClose) return;
             if (state !== 'loading') onComplete();
           }}
         >
@@ -372,7 +378,7 @@ const ContentPreview: React.FC<{ content: ClipboardContent }> = ({ content }) =>
   }
 
   // File (or Image without local URI)
-  const label = content.fileName || content.text || '未知文件';
+  const label = content.text || content.fileName || '未知文件';
   const size = content.fileSize != null ? ` · ${(content.fileSize / 1024).toFixed(1)} KB` : '';
   return (
     <View
@@ -382,7 +388,7 @@ const ContentPreview: React.FC<{ content: ClipboardContent }> = ({ content }) =>
       ]}
     >
       <Text style={[styles.previewFileIcon, { color: theme.colors.primary }]}>📄</Text>
-      <Text style={[styles.previewFileName, { color: theme.colors.text }]} numberOfLines={2}>
+      <Text style={[styles.previewFileName, { color: theme.colors.text }]} numberOfLines={10}>
         {label}
       </Text>
       {size !== '' && (
@@ -442,7 +448,7 @@ const styles = StyleSheet.create({
   },
   successButton: {
     flex: 1,
-    paddingHorizontal: 0,
+    paddingHorizontal: 8,
   },
   button: {
     paddingHorizontal: 28,

@@ -91,6 +91,7 @@ const zh = {
     savedToGallery: '已保存到相册',
     savedToDevice: '已储存到设备',
     galleryPermissionRequired: '需要相册权限才能保存图片',
+    saving: '正在保存...',
     saveFailed: '保存失败',
     onlyImageToGallery: '仅支持保存图片到相册',
   },
@@ -185,7 +186,7 @@ const zh = {
     remotePollingSet: '已设置远程轮询间隔为 {{seconds}}秒',
     localPollingSet: '已设置本地轮询间隔为 {{seconds}}秒',
     autoSaveSyncFile: '自动保存同步文件',
-    autoSaveSyncFileDesc: '同步文件后自动保存到指定路径',
+    autoSaveSyncFileDesc: '执行快捷下载时自动保存文件到指定路径',
     autoSaveSyncFileEnabled: '已启用自动保存同步文件',
     autoSaveSyncFileDisabled: '已禁用自动保存同步文件',
     syncFileSavePath: '保存路径',
@@ -447,6 +448,7 @@ const zh = {
     savedToDevice: '已储存到设备',
     galleryPermissionRequired: '需要相册权限才能保存图片',
     saveFailed: '保存失败',
+    savingFile: '正在保存文件...',
   },
 
   wordPicker: {
@@ -462,6 +464,8 @@ const zh = {
     processingFile: '正在处理文件…',
     uploadingText: '正在上传文字…',
     uploadingFile: '正在上传文件…',
+    processingMultipleFiles: '正在处理 {{count}} 个文件…',
+    processingFileProgress: '正在处理文件 {{current}}/{{total}}…',
     resolving: '正在解析分享内容…',
     success: '接收并上传成功',
     failed: '处理失败',

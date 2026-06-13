@@ -28,6 +28,13 @@ export interface ZipProgressEvent {
   totalBytes: number;
 }
 
+export interface CopyProgressEvent {
+  jobId: string;
+  progress: number;
+  bytesCopied: number;
+  totalBytes: number;
+}
+
 export interface ProgressInfo {
   progress: number;
   bytesTransferred: number;
@@ -51,12 +58,13 @@ export interface NativeUtilModuleType {
     fileUri: string | null
   ): string;
   startZipFiles(fileUris: string[], destUri: string): string;
-  saveFileToDownloads(
+  startUnzipFile(zipUri: string, destDirUri: string): string;
+  startCopyFileToDirectory(
     srcUri: string,
+    directoryUri: string,
     fileName: string,
-    mimeType: string,
-    relativePath: string
-  ): Promise<void>;
+    overwrite: boolean
+  ): string;
   isIgnoringBatteryOptimizations(): boolean;
   requestIgnoreBatteryOptimizations(): boolean;
   setExcludeFromRecents(exclude: boolean): boolean;
@@ -144,16 +152,64 @@ export async function nativeCopyFile(srcUri: string, destUri: string): Promise<v
   await NativeUtilModule.copyFile(srcUri, destUri);
 }
 
-export async function nativeSaveFileToDownloads(
+export async function nativeCopyFileToDirectory(
   srcUri: string,
-  fileName: string,
-  mimeType: string,
-  relativePath: string = 'Download/'
+  directoryUri: string,
+  fileName: string = '',
+  overwrite: boolean = false,
+  signal?: AbortSignal,
+  onProgress?: (info: ProgressInfo) => void
 ): Promise<void> {
   if (Platform.OS !== 'android') {
     throw new Error('NativeUtilModule is not available on this platform');
   }
-  await NativeUtilModule.saveFileToDownloads(srcUri, fileName, mimeType, relativePath);
+
+  if (signal?.aborted) {
+    throw new DOMException('Copy aborted', 'AbortError');
+  }
+
+  let progressSub: EventSubscription | null = null;
+  let resolvedJobId: string | null = null;
+  if (onProgress) {
+    progressSub = NativeUtilModule.addListener('onCopyProgress', (event: CopyProgressEvent) => {
+      if (resolvedJobId && event.jobId === resolvedJobId) {
+        onProgress({
+          progress: event.progress,
+          bytesTransferred: event.bytesCopied,
+          totalBytes: event.totalBytes,
+        });
+      }
+    });
+  }
+
+  const jobId = NativeUtilModule.startCopyFileToDirectory(
+    srcUri,
+    directoryUri,
+    fileName,
+    overwrite
+  );
+  resolvedJobId = jobId;
+
+  const abortHandler = () => NativeUtilModule.cancelJob(jobId);
+  signal?.addEventListener('abort', abortHandler);
+
+  try {
+    await NativeUtilModule.waitForJob(jobId);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      ((error as { code?: string }).code === 'CANCELLED' ||
+        error.message === 'Operation was cancelled')
+    ) {
+      const abortError = new Error('Operation was aborted');
+      abortError.name = 'AbortError';
+      throw abortError;
+    }
+    throw error;
+  } finally {
+    signal?.removeEventListener('abort', abortHandler);
+    progressSub?.remove();
+  }
 }
 
 export async function nativeCalculateFileHash(
@@ -326,6 +382,59 @@ export async function nativeZipFiles(
   }
 
   const jobId = NativeUtilModule.startZipFiles(fileUris, destUri);
+  resolvedJobId = jobId;
+
+  const abortHandler = () => NativeUtilModule.cancelJob(jobId);
+  signal?.addEventListener('abort', abortHandler);
+
+  try {
+    await NativeUtilModule.waitForJob(jobId);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      ((error as { code?: string }).code === 'CANCELLED' ||
+        error.message === 'Operation was cancelled')
+    ) {
+      const abortError = new Error('Operation was aborted');
+      abortError.name = 'AbortError';
+      throw abortError;
+    }
+    throw error;
+  } finally {
+    signal?.removeEventListener('abort', abortHandler);
+    progressSub?.remove();
+  }
+}
+
+export async function nativeUnzipFile(
+  zipUri: string,
+  destDirUri: string,
+  signal?: AbortSignal,
+  onProgress?: (info: ProgressInfo) => void
+): Promise<void> {
+  if (Platform.OS !== 'android') {
+    throw new Error('NativeUtilModule is not available on this platform');
+  }
+
+  if (signal?.aborted) {
+    throw new DOMException('Unzip aborted', 'AbortError');
+  }
+
+  let progressSub: EventSubscription | null = null;
+  let resolvedJobId: string | null = null;
+  if (onProgress) {
+    progressSub = NativeUtilModule.addListener('onZipProgress', (event: ZipProgressEvent) => {
+      if (resolvedJobId && event.jobId === resolvedJobId) {
+        onProgress({
+          progress: event.progress,
+          bytesTransferred: event.bytesWritten,
+          totalBytes: event.totalBytes,
+        });
+      }
+    });
+  }
+
+  const jobId = NativeUtilModule.startUnzipFile(zipUri, destDirUri);
   resolvedJobId = jobId;
 
   const abortHandler = () => NativeUtilModule.cancelJob(jobId);

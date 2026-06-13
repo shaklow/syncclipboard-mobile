@@ -12,7 +12,6 @@ import { DedupedOperation } from '@/utils/DedupedOperation';
 import { File } from 'expo-file-system';
 import i18n from '@/i18n';
 import { setJustUploadedHash, setJustSetLocalHash } from './JustSetHash';
-import { saveSyncFileToUserPath } from './SyncFileSaveService';
 
 /** 比较两个 ClipboardContent 是否代表相同内容（用于去重继承判断） */
 function isSameContent(a: ClipboardContent, b: ClipboardContent): boolean {
@@ -114,8 +113,6 @@ export async function downloadRemoteClipboard(
       const cachedFile = new File(cachedItem.fileUri);
       if (cachedFile.exists) {
         const result = { ...actualContent, fileUri: cachedItem.fileUri };
-        // 仍需保存到用户指定目录
-        await saveSyncFileToUserPath(result);
         return result;
       }
     }
@@ -134,11 +131,6 @@ export async function downloadRemoteClipboard(
         sig
       );
       clipboardSyncState.setState({ remoteContent: result });
-
-      // 下载完成后，自动保存到用户指定目录
-      if (result) {
-        await saveSyncFileToUserPath(result);
-      }
 
       return result;
     } finally {
@@ -201,5 +193,6 @@ export async function setLocalClipboardFromRemote(
       setJustSetLocalHash(hash);
     }
   }
+
   return finalContent;
 }

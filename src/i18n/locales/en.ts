@@ -98,6 +98,7 @@ const en: DeepString<typeof zh> = {
     savedToGallery: 'Saved to gallery',
     savedToDevice: 'Saved to device',
     galleryPermissionRequired: 'Gallery permission required to save image',
+    saving: 'Saving...',
     saveFailed: 'Save failed',
     onlyImageToGallery: 'Only images can be saved to gallery',
   },
@@ -193,7 +194,7 @@ const en: DeepString<typeof zh> = {
     remotePollingSet: 'Remote polling interval set to {{seconds}}s',
     localPollingSet: 'Local polling interval set to {{seconds}}s',
     autoSaveSyncFile: 'Auto-save synced files',
-    autoSaveSyncFileDesc: 'Automatically save synced files to a specified path',
+    autoSaveSyncFileDesc: 'Automatically save files to a specified path during quick download',
     autoSaveSyncFileEnabled: 'Auto-save synced files enabled',
     autoSaveSyncFileDisabled: 'Auto-save synced files disabled',
     syncFileSavePath: 'Save path',
@@ -458,6 +459,7 @@ const en: DeepString<typeof zh> = {
     savedToDevice: 'Saved to device',
     galleryPermissionRequired: 'Gallery permission required to save image',
     saveFailed: 'Save failed',
+    savingFile: 'Saving file...',
   },
 
   wordPicker: {
@@ -473,6 +475,8 @@ const en: DeepString<typeof zh> = {
     processingFile: 'Processing file…',
     uploadingText: 'Uploading text…',
     uploadingFile: 'Uploading file…',
+    processingMultipleFiles: 'Processing {{count}} files…',
+    processingFileProgress: 'Processing file {{current}}/{{total}}…',
     resolving: 'Resolving shared content…',
     success: 'Received and uploaded',
     failed: 'Processing failed',

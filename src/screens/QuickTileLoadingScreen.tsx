@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ToastAndroid, Linking } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { SyncDirection } from '@/types/sync';
@@ -9,11 +9,14 @@ import {
   setLocalClipboardFromRemote,
 } from '@/services/sync/ClipboardSyncActions';
 import { localClipboard } from '@/services/clipboard/LocalClipboard';
-import { openFile, shareFile, saveFile, saveToGallery } from '@/utils/fileActions';
-import { isTextInvalid } from '@/utils/index';
+import { openFile, shareFile, saveToGallery } from '@/utils/fileActions';
+import { isTextInvalid, formatFileSize } from '@/utils/index';
 import { QuickLoadingPage, SuccessButtonConfig } from '@/components/QuickLoadingPage';
+import { saveContentDataToDirectory } from '@/utils/clipboard/clipboardContentUtils';
+import { saveSyncFileToUserPath } from '@/services/sync/SyncFileSaveService';
 import type { ProgressInfo } from 'native-util';
 import * as Clipboard from 'expo-clipboard';
+import * as FileSystem from 'expo-file-system/legacy';
 
 interface QuickTileLoadingScreenProps {
   direction: SyncDirection;
@@ -33,6 +36,21 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
   const [fileContent, setFileContent] = useState<ClipboardContent | null>(null);
   const [progress, setProgress] = useState<ProgressInfo | null>(null);
   const [previewText, setPreviewText] = useState<string | undefined>(undefined);
+  const [loadingText, setLoadingText] = useState<string>(
+    isUpload ? t('quickTile.uploadingClipboard') : t('quickTile.downloadingClipboard')
+  );
+
+  // 保存操作状态
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveProgress, setSaveProgress] = useState<ProgressInfo | null>(null);
+  const saveAbortControllerRef = useRef<AbortController | null>(null);
+
+  // 组件卸载时取消正在进行的保存操作
+  useEffect(() => {
+    return () => {
+      saveAbortControllerRef.current?.abort();
+    };
+  }, []);
 
   const task = useCallback(
     async (signal: AbortSignal) => {
@@ -56,6 +74,11 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
           setPreviewText(content.text);
         }
         content = await setLocalClipboardFromRemote((info) => setProgress(info), signal, content);
+
+        if (content) {
+          setLoadingText(t('quickTile.savingFile'));
+          await saveSyncFileToUserPath(content, signal, (info) => setProgress(info));
+        }
 
         if (content && content.type !== 'Text' && content.fileUri) {
           setFileContent(content);
@@ -91,6 +114,86 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
     return match ? match[0] : null;
   }, [fileContent]);
 
+  // 取消保存
+  const handleCancelSave = useCallback(() => {
+    saveAbortControllerRef.current?.abort();
+  }, []);
+  const handleSavingPress = useCallback(() => {}, []);
+
+  // 统一的保存处理函数（按类型分支）
+  const handleSave = useCallback(async () => {
+    if (!fileContent || !fileContent.fileUri) return;
+
+    try {
+      // 图片类型直接保存到相册
+      if (fileContent.type === 'Image') {
+        setIsSaving(true);
+        await saveToGallery(fileContent.fileUri);
+        ToastAndroid.show(t('clipboard.savedToGallery'), ToastAndroid.SHORT);
+        return;
+      }
+
+      // Group / File 类型：选择目录后保存（Group 自动解压）
+      const permissions =
+        await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+      if (!permissions.granted) {
+        ToastAndroid.show(t('history.saveCanceled'), ToastAndroid.SHORT);
+        return;
+      }
+
+      const abortController = new AbortController();
+      saveAbortControllerRef.current = abortController;
+      setIsSaving(true);
+      setSaveProgress(null);
+
+      await saveContentDataToDirectory(
+        fileContent,
+        permissions.directoryUri,
+        abortController.signal,
+        (info) => setSaveProgress(info)
+      );
+      ToastAndroid.show(t('quickTile.savedToDevice'), ToastAndroid.SHORT);
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        // 用户取消，不显示错误
+        return;
+      }
+      console.error('[QuickTileLoadingScreen] Failed to save file:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      ToastAndroid.show(`${t('quickTile.saveFailed')}: ${errorMessage}`, ToastAndroid.LONG);
+    } finally {
+      setIsSaving(false);
+      setSaveProgress(null);
+      saveAbortControllerRef.current = null;
+    }
+  }, [fileContent, t]);
+
+  // 动态保存按钮配置（根据保存状态切换 label 和行为）
+  const saveButtonConfig = useMemo((): SuccessButtonConfig => {
+    if (isSaving) {
+      const canCancelSave = !!saveAbortControllerRef.current;
+      let label: string;
+      if (saveProgress && saveProgress.totalBytes > 0) {
+        const pct = (saveProgress.progress * 100).toFixed(0);
+        const transferred = formatFileSize(saveProgress.bytesTransferred);
+        const total = formatFileSize(saveProgress.totalBytes);
+        label = `${pct}% ${transferred} / ${total}`;
+      } else {
+        label = t('clipboard.saving');
+      }
+      return {
+        label,
+        primary: true,
+        onPress: canCancelSave ? handleCancelSave : handleSavingPress,
+      };
+    }
+    return {
+      label: t('clipboard.save'),
+      primary: true,
+      onPress: handleSave,
+    };
+  }, [isSaving, saveProgress, handleCancelSave, handleSavingPress, handleSave, t]);
+
   const successButtons: SuccessButtonConfig[] | undefined = fileContent
     ? fileContent.type === 'Text' && textUrl
       ? [
@@ -114,56 +217,35 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
             },
           },
         ]
-      : [
-          {
-            label: t('clipboard.open'),
-            primary: true,
-            onPress: async () => {
-              try {
-                await openFile(fileContent.fileUri!);
-              } catch {}
+      : fileContent.type === 'Group'
+        ? [saveButtonConfig]
+        : [
+            {
+              label: t('clipboard.open'),
+              primary: true,
+              onPress: async () => {
+                try {
+                  await openFile(fileContent.fileUri!);
+                } catch {}
+              },
             },
-          },
-          {
-            label: t('clipboard.save'),
-            primary: true,
-            onPress: async () => {
-              try {
-                if (fileContent.type === 'Image') {
-                  await saveToGallery(fileContent.fileUri!);
-                  ToastAndroid.show(t('quickTile.savedToGallery'), ToastAndroid.SHORT);
-                } else {
-                  await saveFile(fileContent.fileUri!, fileContent.fileName);
-                  ToastAndroid.show(t('quickTile.savedToDevice'), ToastAndroid.SHORT);
-                }
-              } catch (error) {
-                console.error('[QuickTileLoadingScreen] Failed to save file:', error);
-                if (error instanceof Error && error.message === 'Media library permission denied') {
-                  ToastAndroid.show(t('quickTile.galleryPermissionRequired'), ToastAndroid.SHORT);
-                  return;
-                }
-                ToastAndroid.show(t('quickTile.saveFailed'), ToastAndroid.SHORT);
-              }
+            saveButtonConfig,
+            {
+              label: t('clipboard.share'),
+              primary: true,
+              onPress: async () => {
+                try {
+                  await shareFile(fileContent.fileUri!, fileContent.fileName);
+                } catch {}
+              },
             },
-          },
-          {
-            label: t('clipboard.share'),
-            primary: true,
-            onPress: async () => {
-              try {
-                await shareFile(fileContent.fileUri!, fileContent.fileName);
-              } catch {}
-            },
-          },
-        ]
+          ]
     : undefined;
 
   return (
     <QuickLoadingPage
       task={task}
-      loadingText={
-        isUpload ? t('quickTile.uploadingClipboard') : t('quickTile.downloadingClipboard')
-      }
+      loadingText={loadingText}
       successText={isUpload ? t('quickTile.uploadSuccess') : t('quickTile.syncSuccess')}
       failureText={isUpload ? t('quickTile.uploadFailed') : t('quickTile.syncFailed')}
       onComplete={onLoadingComplete}
@@ -172,6 +254,7 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
       progress={progress}
       previewText={previewText}
       overlayMode={overlayMode}
+      disableBackdropClose={isSaving}
     />
   );
 };

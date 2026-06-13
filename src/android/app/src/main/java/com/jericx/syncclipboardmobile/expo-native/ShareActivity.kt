@@ -4,7 +4,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
-import android.util.Log
+import expo.modules.nativeutil.NativeLogger
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -71,7 +71,7 @@ class ShareActivity : ReactActivity() {
         val type = intent.type
         val action = intent.action
         
-        Log.d(TAG, "Parsing intent: action=$action, type=$type")
+        NativeLogger.d(TAG, "Parsing intent: action=$action, type=$type")
         
         return when (action) {
             Intent.ACTION_SEND -> parseSendAction(intent, type)
@@ -86,7 +86,7 @@ class ShareActivity : ReactActivity() {
         // Check if it's a text share
         val text = intent.getStringExtra(Intent.EXTRA_TEXT)
         if (text != null) {
-            Log.d(TAG, "Text share: $text")
+            NativeLogger.d(TAG, "Text share: $text")
             bundle.putString("type", "text")
             bundle.putString("text", text)
             bundle.putString("mimeType", type ?: "text/plain")
@@ -94,55 +94,77 @@ class ShareActivity : ReactActivity() {
         }
         
         // Check if it's a file share
-        val uri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+        val uri = intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
         if (uri != null) {
-            Log.d(TAG, "File share URI: $uri")
+            NativeLogger.d(TAG, "File share URI: $uri")
             
             // Copy file to cache directory
             val copiedFile = copyUriToCache(uri, type)
             if (copiedFile != null) {
-                Log.d(TAG, "File copied to: ${copiedFile.absolutePath}")
+                NativeLogger.d(TAG, "File copied to: ${copiedFile.absolutePath}")
                 bundle.putString("type", "file")
                 bundle.putString("uri", "file://${copiedFile.absolutePath}")
                 bundle.putString("mimeType", type ?: "application/octet-stream")
                 bundle.putString("fileName", copiedFile.name)
                 return bundle
             } else {
-                Log.e(TAG, "Failed to copy file from URI: $uri")
+                NativeLogger.e(TAG, "Failed to copy file from URI: $uri")
                 return bundle
             }
         }
         
-        Log.w(TAG, "No text or file found in SEND intent")
+        NativeLogger.w(TAG, "No text or file found in SEND intent")
         return bundle
     }
 
     private fun parseSendMultipleAction(intent: Intent, type: String?): Bundle {
-        val uris = intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+        val uris = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
         if (uris.isNullOrEmpty()) {
-            Log.w(TAG, "No files found in SEND_MULTIPLE intent")
+            NativeLogger.w(TAG, "No files found in SEND_MULTIPLE intent")
             return Bundle()
         }
-        
-        Log.d(TAG, "Multiple files share: ${uris.size} files")
-        
-        // Copy all files to cache directory
+
+        NativeLogger.d(TAG, "Multiple files share: ${uris.size} files")
+
+        // Copy all files to cache directory and collect per-file metadata
+        // 同名文件去重：跟踪已使用的文件名，冲突时追加 " (1)", " (2)" 等后缀
         val copiedPaths = ArrayList<String>()
+        val fileNames = ArrayList<String>()
+        val usedNames = HashMap<String, Int>()
+
         for (uri in uris) {
-            val copiedFile = copyUriToCache(uri, type)
+            var fileName = getFileName(uri, type)
+
+            // 去重：如果文件名已被使用，追加数字后缀
+            val count = usedNames[fileName]
+            if (count != null) {
+                usedNames[fileName] = count + 1
+                val dotIndex = fileName.lastIndexOf('.')
+                if (dotIndex > 0) {
+                    fileName = "${fileName.substring(0, dotIndex)} (${count + 1})${fileName.substring(dotIndex)}"
+                } else {
+                    fileName = "$fileName (${count + 1})"
+                }
+            } else {
+                usedNames[fileName] = 1
+            }
+
+            val copiedFile = copyUriToCache(uri, type, fileName)
             if (copiedFile != null) {
                 copiedPaths.add("file://${copiedFile.absolutePath}")
+                fileNames.add(fileName)
             }
         }
-        
+
         if (copiedPaths.isEmpty()) {
-            Log.e(TAG, "Failed to copy any files")
+            NativeLogger.e(TAG, "Failed to copy any files")
             return Bundle()
         }
-        
+
         val bundle = Bundle()
         bundle.putString("type", "multiple")
         bundle.putStringArrayList("uris", copiedPaths)
+        bundle.putStringArrayList("fileNames", fileNames)
         bundle.putString("mimeType", type ?: "application/octet-stream")
         return bundle
     }
@@ -151,17 +173,17 @@ class ShareActivity : ReactActivity() {
      * Copy content from URI to cache directory.
      * Returns the copied file, or null if failed.
      */
-    private fun copyUriToCache(uri: Uri, mimeType: String?): File? {
+    private fun copyUriToCache(uri: Uri, mimeType: String?, desiredName: String? = null): File? {
         return try {
             // Open input stream from content provider
             val inputStream: InputStream? = contentResolver.openInputStream(uri)
             if (inputStream == null) {
-                Log.e(TAG, "Cannot open input stream for URI: $uri")
+                NativeLogger.e(TAG, "Cannot open input stream for URI: $uri")
                 return null
             }
             
-            // Get file name from URI or generate one
-            val fileName = getFileName(uri, mimeType)
+            // Get file name from URI or generate one (use desiredName if provided for dedup)
+            val fileName = desiredName ?: getFileName(uri, mimeType)
             
             // Create file in cache directory
             val cacheDir = cacheDir
@@ -178,10 +200,10 @@ class ShareActivity : ReactActivity() {
                 }
             }
             
-            Log.d(TAG, "File copied successfully: ${outputFile.absolutePath} (${outputFile.length()} bytes)")
+            NativeLogger.d(TAG, "File copied successfully: ${outputFile.absolutePath} (${outputFile.length()} bytes)")
             outputFile
         } catch (e: Exception) {
-            Log.e(TAG, "Error copying file from URI: $uri", e)
+            NativeLogger.e(TAG, "Error copying file from URI: $uri", e)
             null
         }
     }
@@ -247,28 +269,29 @@ class ShareActivity : ReactActivity() {
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun logIntentDetails(intent: Intent?, shareData: Bundle) {
         if (intent == null) return
         
-        Log.d(TAG, "=== Share Intent Details ===")
-        Log.d(TAG, "Action: ${intent.action}")
-        Log.d(TAG, "Type: ${intent.type}")
-        Log.d(TAG, "Flags: ${intent.flags}")
+        NativeLogger.d(TAG, "=== Share Intent Details ===")
+        NativeLogger.d(TAG, "Action: ${intent.action}")
+        NativeLogger.d(TAG, "Type: ${intent.type}")
+        NativeLogger.d(TAG, "Flags: ${intent.flags}")
         
         // Log extras
         val extras = intent.extras
         if (extras != null) {
-            Log.d(TAG, "Extras count: ${extras.size()}")
+            NativeLogger.d(TAG, "Extras count: ${extras.size()}")
             for (key in extras.keySet()) {
                 val value = extras.get(key)
-                Log.d(TAG, "Extra[$key]: $value (type: ${value?.javaClass?.simpleName})")
+                NativeLogger.d(TAG, "Extra[$key]: $value (type: ${value?.javaClass?.simpleName})")
             }
         } else {
-            Log.d(TAG, "No extras")
+            NativeLogger.d(TAG, "No extras")
         }
         
         // Log parsed data
-        Log.d(TAG, "Parsed share data: $shareData")
-        Log.d(TAG, "===========================")
+        NativeLogger.d(TAG, "Parsed share data: $shareData")
+        NativeLogger.d(TAG, "===========================")
     }
 }
