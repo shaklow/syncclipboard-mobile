@@ -211,4 +211,5 @@ export async function xxxLogic(input: InputType, deps: XxxDeps): Promise<OutputT
 - **Explicit any**: Warn level — discouraged but not banned
 - **Module aliases**: Must be kept in sync between `tsconfig.json` paths and `babel.config.js` aliases
 - **File naming**: PascalCase for components/screens, camelCase for stores/services/utils
+- **临时 import 禁止**: 严禁使用临时 import（即在函数体内或代码块中使用 `require()` 或 `await import()` 动态导入模块）。所有 import 必须放在文件顶部、模块作用域中。临时 import 会导致模块加载不可预测、破坏 tree-shaking、增加运行时开销，并且通常是调试遗留代码。如需条件加载，应使用模块顶层的静态 import 配合 `Platform.OS` 守卫或依赖注入模式。
 - **Comments**: JSDoc block comments used on classes, interfaces, and exported functions; comments written in Chinese on architecture-level files

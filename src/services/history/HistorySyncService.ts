@@ -404,6 +404,8 @@ export class HistorySyncService {
     // 先收集所有需要添加和更新的记录
     const itemsToAdd: HistoryItem[] = [];
     const itemsToUpdate: { profileHash: string; updates: Partial<HistoryItem> }[] = [];
+    // 收集需要删除本地文件的记录（用于后续清空 fileUri）
+    const hashesToDeleteFiles = new Set<string>();
 
     // 统计计数
     let remoteAddedCount = 0;
@@ -456,6 +458,11 @@ export class HistorySyncService {
 
         if (shouldUpdateFromRemote) {
           // 远程更新，更新本地数据
+          // 如果远程标记为删除，标记需要删除文件
+          if (remoteRecord.isDeleted) {
+            hashesToDeleteFiles.add(localItem.profileHash.toLowerCase());
+          }
+
           itemsToUpdate.push({
             profileHash: localItem.profileHash,
             updates: {
@@ -465,7 +472,7 @@ export class HistorySyncService {
               version: remoteVersion,
               lastModified: remoteModified,
               syncStatus: HistorySyncStatus.Synced,
-              fileUri: localItem.fileUri,
+              fileUri: remoteRecord.isDeleted ? undefined : localItem.fileUri,
               isDeleted: remoteRecord.isDeleted || false,
             },
           });
@@ -508,6 +515,14 @@ export class HistorySyncService {
     }
     if (itemsToUpdate.length > 0) {
       await this.historyStorage.updateItems(itemsToUpdate);
+    }
+
+    // 删除本地物理文件
+    for (const hash of hashesToDeleteFiles) {
+      const localItem = localMap.get(hash);
+      if (localItem) {
+        await HistoryStorage.deleteHistoryFile(localItem.type, localItem.profileHash);
+      }
     }
 
     console.log(
@@ -862,12 +877,16 @@ export class HistorySyncService {
     if (record.isDeleted) {
       const localItem = await this.historyStorage.getItem(record.hash);
       if (localItem) {
-        // 标记本地为软删除
+        // 删除本地物理文件
+        await HistoryStorage.deleteHistoryFile(localItem.type, localItem.profileHash);
+
+        // 标记本地为软删除，清空 fileUri
         await this.historyStorage.updateItem(localItem.profileHash, {
           isDeleted: true,
           version: record.version || 0,
           lastModified: record.lastModified ? new Date(record.lastModified).getTime() : Date.now(),
           syncStatus: HistorySyncStatus.Synced,
+          fileUri: undefined,
         });
         console.log(`[HistorySyncService] Remote record deleted: ${record.hash}`);
       }

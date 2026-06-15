@@ -6,7 +6,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { HistoryItem, HistorySyncStatus, isLocalFileReady } from '../types/clipboard';
 import { HistoryFilter, HistorySort, STORAGE_KEYS } from '../types/storage';
-import { getHistoryFileDir } from '../utils/fileStorage';
+import { getHistoryFileDir, deleteHistoryFileDir } from '../utils/fileStorage';
 import { File, Directory } from 'expo-file-system';
 
 /**
@@ -829,6 +829,28 @@ export class HistoryStorage {
   }
 
   /**
+   * 删除历史记录关联的物理文件
+   * 公共方法，供软删除、物理删除和同步服务复用
+   * @param type 记录类型
+   * @param profileHash 记录hash
+   * @returns 是否成功删除（文件存在且删除成功）
+   */
+  public static async deleteHistoryFile(type: string, profileHash: string): Promise<boolean> {
+    if (!type || !profileHash) {
+      return false;
+    }
+
+    try {
+      await deleteHistoryFileDir(type, profileHash);
+      console.log('[HistoryStorage] History file deleted:', type, profileHash);
+      return true;
+    } catch (error) {
+      console.error('[HistoryStorage] Failed to delete history file:', type, profileHash, error);
+      return false;
+    }
+  }
+
+  /**
    * 软删除历史记录项
    * 标记为已删除，保留记录用于同步，30天后物理删除
    */
@@ -844,32 +866,20 @@ export class HistoryStorage {
     if (index >= 0) {
       const item = this.history[index];
 
-      // 更新为软删除状态
+      // 删除本地文件
+      await HistoryStorage.deleteHistoryFile(item.type, item.profileHash);
+
+      // 更新为软删除状态，清空 fileUri
       this.history[index] = {
         ...item,
         isDeleted: true,
         lastModified: Date.now(),
         version: item.version + 1,
         syncStatus: HistorySyncStatus.NeedSync,
+        fileUri: undefined,
       };
 
       await this.saveHistory();
-
-      // 删除本地文件
-      try {
-        const { deleteHistoryFileDir } = await import('../utils/fileStorage');
-        if (item.type && item.profileHash) {
-          await deleteHistoryFileDir(item.type, item.profileHash);
-          console.log(
-            '[HistoryStorage] Soft deleted, file directory removed:',
-            item.type,
-            item.profileHash
-          );
-        }
-      } catch (error) {
-        console.error('[HistoryStorage] Failed to delete history file directory:', error);
-      }
-
       this.notifyChange(this.history[index], 'update');
     }
   }
@@ -888,12 +898,16 @@ export class HistoryStorage {
     for (let i = 0; i < this.history.length; i++) {
       const item = this.history[i];
       if (profileHashes.some((hash) => hash.toLowerCase() === item.profileHash.toLowerCase())) {
+        // 删除本地文件
+        await HistoryStorage.deleteHistoryFile(item.type, item.profileHash);
+
         this.history[i] = {
           ...item,
           isDeleted: true,
           lastModified: now,
           version: (item.version || 0) + 1,
           syncStatus: HistorySyncStatus.NeedSync,
+          fileUri: undefined,
         };
         updatedItems.push(this.history[i]);
       }
@@ -901,28 +915,6 @@ export class HistoryStorage {
 
     if (updatedItems.length > 0) {
       await this.saveHistory();
-
-      // 批量删除本地文件
-      try {
-        const { deleteHistoryFileDir } = await import('../utils/fileStorage');
-        for (const item of updatedItems) {
-          if (item.type && item.profileHash) {
-            try {
-              await deleteHistoryFileDir(item.type, item.profileHash);
-            } catch (error) {
-              console.error(
-                '[HistoryStorage] Failed to delete history file directory:',
-                item.type,
-                item.profileHash,
-                error
-              );
-            }
-          }
-        }
-      } catch (error) {
-        console.error('[HistoryStorage] Failed to delete history file directories:', error);
-      }
-
       this.notifyChangeBatch(updatedItems, 'update');
     }
   }
@@ -942,19 +934,8 @@ export class HistoryStorage {
 
       this.notifyChange(item, 'delete');
 
-      try {
-        const { deleteHistoryFileDir } = await import('../utils/fileStorage');
-        if (item.type && item.profileHash) {
-          await deleteHistoryFileDir(item.type, item.profileHash);
-          console.log(
-            '[HistoryStorage] History file directory deleted:',
-            item.type,
-            item.profileHash
-          );
-        }
-      } catch (error) {
-        console.error('[HistoryStorage] Failed to delete history file directory:', error);
-      }
+      // 删除本地文件
+      await HistoryStorage.deleteHistoryFile(item.type, item.profileHash);
     }
   }
 
@@ -981,15 +962,9 @@ export class HistoryStorage {
       await this.saveHistory();
       this.notifyChangeBatch(deletedItems, 'delete');
 
+      // 删除本地文件
       for (const item of deletedItems) {
-        try {
-          const { deleteHistoryFileDir } = await import('../utils/fileStorage');
-          if (item.type && item.profileHash) {
-            await deleteHistoryFileDir(item.type, item.profileHash);
-          }
-        } catch (error) {
-          console.error('[HistoryStorage] Failed to delete history file directory:', error);
-        }
+        await HistoryStorage.deleteHistoryFile(item.type, item.profileHash);
       }
     }
 
@@ -1427,15 +1402,9 @@ export class HistoryStorage {
 
     await this.saveHistory();
 
+    // 删除本地文件
     for (const item of itemsToDelete) {
-      try {
-        const { deleteHistoryFileDir } = await import('../utils/fileStorage');
-        if (item.type && item.profileHash) {
-          await deleteHistoryFileDir(item.type, item.profileHash);
-        }
-      } catch (error) {
-        console.error('[HistoryStorage] Failed to delete history file directory:', error);
-      }
+      await HistoryStorage.deleteHistoryFile(item.type, item.profileHash);
     }
 
     if (itemsToDelete.length > 0) {
