@@ -66,7 +66,7 @@ function ServiceRestartContent({ systemTheme }: ServiceRestartAppProps) {
 
 export default function ServiceRestartApp({ systemTheme }: ServiceRestartAppProps) {
   return (
-    <GestureHandlerRootView style={styles.container}>
+    <GestureHandlerRootView style={styles.root}>
       <I18nProvider>
         <ThemeProvider systemColorSchemeOverride={systemTheme}>
           <ServiceRestartContent systemTheme={systemTheme} />
@@ -87,6 +87,9 @@ const COLORS = {
 };
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     justifyContent: 'center',
