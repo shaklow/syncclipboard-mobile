@@ -296,13 +296,24 @@ export class LocalClipboard {
   /**
    * 设置文本到剪贴板
    */
+  private async readTextFromFileUri(fileUri: string): Promise<string> {
+    try {
+      const file = new FileSystem.File(fileUri);
+      return await file.text();
+    } catch (fileSystemError) {
+      console.warn('[ClipboardManager] Failed to read text via File API:', fileSystemError);
+
+      const response = await fetch(fileUri);
+      return await response.text();
+    }
+  }
+
   async setTextContent(content: ClipboardContent): Promise<void> {
     try {
       let text = content.text;
       if (content.type === 'Text' && content.fileUri && content.hasData) {
         try {
-          const response = await fetch(content.fileUri);
-          text = await response.text();
+          text = await this.readTextFromFileUri(content.fileUri);
           console.log(
             `[ClipboardManager] Read complete text from file for profileHash: ${content.profileHash}, length: ${text.length}`
           );
