@@ -70,7 +70,6 @@ fun SettingsScreen() {
  * 语言切换卡片
  */
 @Composable
-@Composable
 fun LanguageCard(context: android.content.Context, activity: Activity?) {
     val prefs = context.defaultSharedPreferences
     var language by rememberStringPreference(prefs, "language", "")
@@ -123,7 +122,6 @@ fun LanguageCard(context: android.content.Context, activity: Activity?) {
     }
 }
 
-@Composable
 @Composable
 fun LanguageDialog(
     currentValue: String,
