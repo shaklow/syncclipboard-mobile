@@ -4,6 +4,10 @@
  *
  * 优先级：Root > 悬浮窗 > 直接调用
  *
+ * 性能优化：
+ * - Root 可用性缓存 5 分钟，避免每轮轮询都 spawn su 进程检测
+ * - 首次 Root 可用时自动执行省电优化绕过
+ *
  * 当启用后台同步+悬浮窗模式时，悬浮窗按需显示（不可见的 1px 窗口），
  * 每次读取剪贴板时只是 focus 到悬浮窗读取后 unfocus，而非反复创建/销毁。
  * 若持续 10 秒无后台剪贴板调用，自动关闭悬浮窗以节省资源，下次需要时再打开。
@@ -20,20 +24,49 @@ const OVERLAY_IDLE_TIMEOUT_MS = 10_000;
 /** 空闲计时器的固定 tag */
 const IDLE_TIMER_TAG = 'clipboard_overlay_idle';
 
+// ─── 模块引用 ─────────────────────────────────────────────────
+
 let overlayModule: typeof import('clipboard-overlay') | null = null;
 let rootClipboardModule: typeof import('root-clipboard') | null = null;
 
+// ─── Root 状态缓存 ────────────────────────────────────────────
+
 /**
- * 重置空闲计时器：每次悬浮窗被使用时调用，
- * 10 秒内无新调用则自动关闭悬浮窗。
- * 使用 native-timer 以确保后台可靠运行。
+ * 关键优化：Shizuku 方案成功的关键在于 `isShizukuAvailable()` 和
+ * `hasShizukuPermission()` 是纯本地状态检查（零进程开销）。Root 方案的
+ * `isRootAvailable()` 和 `checkRootPermission()` 每次都要 spawn `su -c id`，
+ * 1000ms 轮询间隔内 3 次 su spawn 根本来不及。
+ *
+ * 解决方案：缓存 Root 可用性状态，5 分钟内不重新检测。
+ * 仅在实际读剪贴板时才 spawn su 进程（1 次而非 3 次）。
  */
+let _rootAvailableCache: boolean | null = null;
+let _rootCacheTimestamp = 0;
+const ROOT_CACHE_TTL_MS = 5 * 60 * 1000;
+
+/** 省电优化是否已执行过 */
+let _batteryOptimizationBypassed = false;
+
+/** 缓存 Root 可用性（仅首次或缓存过期时执行 su 检测） */
+function isRootAvailableCached(): boolean {
+  if (!rootClipboardModule) return false;
+  const now = Date.now();
+  if (_rootAvailableCache !== null && now - _rootCacheTimestamp < ROOT_CACHE_TTL_MS) {
+    return _rootAvailableCache;
+  }
+  // 仅在这里 spawn su 进程，且只做一次（合并 isRootAvailable + checkRootPermission）
+  _rootAvailableCache =
+    rootClipboardModule.isRootAvailable() && rootClipboardModule.checkRootPermission();
+  _rootCacheTimestamp = now;
+  return _rootAvailableCache;
+}
+
+// ─── 空闲计时器 ───────────────────────────────────────────────
+
 function resetIdleTimer(): void {
-  // 先清除已有的计时器，再重新启动
   clearTimer(IDLE_TIMER_TAG);
   setTimer(
     () => {
-      // 触发一次后立即清除自身（模拟 setTimeout）
       clearTimer(IDLE_TIMER_TAG);
       if (overlayModule?.isOverlayShowing()) {
         overlayModule.hideOverlayWindow().catch((e) => {
@@ -46,16 +79,16 @@ function resetIdleTimer(): void {
   );
 }
 
-/** 清除空闲计时器（应用回前台或手动关闭时） */
 function clearIdleTimer(): void {
   clearTimer(IDLE_TIMER_TAG);
 }
+
+// ─── Android 初始化 ───────────────────────────────────────────
 
 if (Platform.OS === 'android') {
   overlayModule = require('clipboard-overlay');
   rootClipboardModule = require('root-clipboard');
 
-  // 当应用回到前台时，自动销毁常驻悬浮窗并清除空闲计时器
   AppState.addEventListener('change', (nextAppState) => {
     if (nextAppState === 'active') {
       clearIdleTimer();
@@ -68,9 +101,8 @@ if (Platform.OS === 'android') {
   });
 }
 
-/**
- * 确保悬浮窗已显示（仅在需要时创建）
- */
+// ─── 悬浮窗管理 ───────────────────────────────────────────────
+
 async function ensureOverlayShowing(): Promise<void> {
   if (!overlayModule) return;
   if (!overlayModule.isOverlayShowing()) {
@@ -82,9 +114,6 @@ async function ensureOverlayShowing(): Promise<void> {
   }
 }
 
-/**
- * 隐藏悬浮窗
- */
 export async function dismissOverlay(): Promise<void> {
   if (!overlayModule) return;
   if (overlayModule.isOverlayShowing()) {
@@ -96,46 +125,71 @@ export async function dismissOverlay(): Promise<void> {
   }
 }
 
-/**
- * 判断是否应该使用悬浮窗获取剪贴板
- * 条件：Android + 后台 + 设置启用 + 权限已授予
- * 如果条件满足，确保悬浮窗已常驻显示
- */
 async function shouldUseOverlay(): Promise<boolean> {
   if (Platform.OS !== 'android' || !overlayModule) return false;
   if (AppState.currentState !== 'background') return false;
   const config = await configService.getConfig();
   if (!(config?.enableClipboardOverlay ?? false)) return false;
-  // Sync overlay visibility and retry count to native module
   const isDebug = config?.debugMode ?? false;
   const showOverlay = isDebug && (config?.debugOverlayVisible ?? false);
   overlayModule.setDebugMode(showOverlay);
   overlayModule.setMaxRetries(isDebug ? 20 : 5);
   if (!overlayModule.hasOverlayPermission()) return false;
-  // Ensure persistent overlay is showing before reading clipboard
   await ensureOverlayShowing();
-  // Reset idle timer: 10 seconds without calls will auto-hide overlay
   resetIdleTimer();
   return true;
 }
 
+// ─── Root 方案 ────────────────────────────────────────────────
+
 /**
- * 判断是否应该使用 Root 获取剪贴板
- * 条件：Android + 设置启用 + Root 可用
- * Root 优先级高于悬浮窗
+ * 判断是否应该使用 Root 获取剪贴板。
+ *
+ * 关键优化：使用 isRootAvailableCached() 替代原来的两次独立 su 调用，
+ * Root 可用性检测结果缓存 5 分钟。实际剪贴板读取仍需 spawn su，
+ * 但从 3 次降至 1 次。
+ *
+ * 副作用：首次 Root 可用时自动执行省电优化绕过。
  */
 async function shouldUseRoot(): Promise<boolean> {
   if (Platform.OS !== 'android' || !rootClipboardModule) return false;
   const config = await configService.getConfig();
   if (!(config?.enableRootClipboard ?? false)) return false;
-  if (!rootClipboardModule.isRootAvailable()) return false;
-  if (!rootClipboardModule.checkRootPermission()) return false;
+  if (!isRootAvailableCached()) return false;
+
+  // 首次 Root 可用时自动绕过省电优化
+  if (!_batteryOptimizationBypassed) {
+    _batteryOptimizationBypassed = true;
+    try {
+      const { bypassBatteryOptimization } = require('root-clipboard');
+      const result = bypassBatteryOptimization();
+      console.log(
+        '[ClipboardProxy] Auto battery optimization bypass:',
+        result ? 'success' : 'partial'
+      );
+    } catch (e) {
+      console.warn('[ClipboardProxy] Battery optimization bypass failed:', e);
+    }
+  }
+
   return true;
 }
 
 /**
- * 获取剪贴板文本
+ * 检查 Root 剪贴板模式是否完全激活。
+ *
+ * 供 ClipboardSyncService / LongRunningTaskManager 判断：
+ * Root 模式激活时，隐式启用后台轮询和同步。
  */
+export async function isRootClipboardActive(): Promise<boolean> {
+  if (Platform.OS !== 'android' || !rootClipboardModule) return false;
+  const config = await configService.getConfig();
+  if (!(config?.enableRootClipboard ?? false)) return false;
+  return isRootAvailableCached();
+}
+
+// ─── 公共剪贴板 API ───────────────────────────────────────────
+
 export async function getStringAsync(options?: Clipboard.GetStringOptions): Promise<string> {
   if (await shouldUseRoot()) {
     try {
@@ -158,9 +212,6 @@ export async function getStringAsync(options?: Clipboard.GetStringOptions): Prom
   return Clipboard.getStringAsync(options);
 }
 
-/**
- * 设置剪贴板文本
- */
 export async function setStringAsync(
   text: string,
   options?: Clipboard.SetStringOptions
@@ -168,76 +219,47 @@ export async function setStringAsync(
   return Clipboard.setStringAsync(text, options);
 }
 
-/**
- * 检查剪贴板是否有文本
- */
 export async function hasStringAsync(): Promise<boolean> {
   if (await shouldUseRoot()) {
     try {
       return await rootClipboardModule!.hasStringViaRoot();
-    } catch (e) {
-      console.warn('[ClipboardProxy] Root hasStringAsync failed, falling back:', e);
-    }
+    } catch {}
   }
   if (await shouldUseOverlay()) {
     try {
       return await overlayModule!.hasStringViaOverlay();
-    } catch (e) {
-      console.warn('[ClipboardProxy] Overlay hasStringAsync failed, falling back:', e);
-    }
+    } catch {}
   }
   return Clipboard.hasStringAsync();
 }
 
-/**
- * 检查剪贴板是否有图片
- */
 export async function hasImageAsync(): Promise<boolean> {
   if (await shouldUseRoot()) {
     try {
       return await rootClipboardModule!.hasImageViaRoot();
-    } catch (e) {
-      console.warn('[ClipboardProxy] Root hasImageAsync failed, falling back:', e);
-    }
+    } catch {}
   }
   if (await shouldUseOverlay()) {
     try {
       return await overlayModule!.hasImageViaOverlay();
-    } catch (e) {
-      console.warn('[ClipboardProxy] Overlay hasImageAsync failed, falling back:', e);
-    }
+    } catch {}
   }
   return Clipboard.hasImageAsync();
 }
 
-/**
- * 获取剪贴板图片（旧接口，返回 base64）
- */
 export async function getImageAsync(
   options: Clipboard.GetImageOptions
 ): Promise<Clipboard.ClipboardImage | null> {
   if (await shouldUseOverlay()) {
     try {
       const result = await overlayModule!.getImageViaOverlay();
-      if (result) {
-        return {
-          data: result.data,
-          size: result.size,
-        };
-      }
+      if (result) return { data: result.data, size: result.size };
       return null;
-    } catch (e) {
-      console.warn('[ClipboardProxy] Overlay getImageAsync failed, falling back:', e);
-    }
+    } catch {}
   }
   return Clipboard.getImageAsync(options);
 }
 
-/**
- * 获取剪贴板图片并直接保存到文件（不经过 JS 内存）
- * @param destFileUri 目标文件 URI（file:// 格式）
- * @returns 成功返回 true，剪贴板无图片或失败返回 false
- */
 export async function saveImageToFileAsync(
   destDirPath: string
 ): Promise<{ filePath: string; mimeType: string } | null> {
@@ -245,12 +267,8 @@ export async function saveImageToFileAsync(
     try {
       const result = await overlayModule!.saveImageToFileViaOverlay(destDirPath);
       if (result) return { filePath: result.filePath, mimeType: result.mimeType };
-      // fallback if overlay failed
-    } catch (e) {
-      console.warn('[ClipboardProxy] Overlay saveImageToFileAsync failed, falling back:', e);
-    }
+    } catch {}
   }
-  // 前台模式：使用 native-util 直接读取系统剪贴板并写入文件
   if (Platform.OS === 'android') {
     const result = await nativeSaveClipboardImageToFile(destDirPath);
     return result ? { filePath: result.filePath, mimeType: result.mimeType } : null;
@@ -258,9 +276,6 @@ export async function saveImageToFileAsync(
   return null;
 }
 
-/**
- * 设置剪贴板图片
- */
 export async function setImageAsync(base64Image: string): Promise<void> {
   return Clipboard.setImageAsync(base64Image);
 }

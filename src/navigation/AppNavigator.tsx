@@ -1,18 +1,74 @@
 /**
  * App Navigation
+ * 底部 Tab 导航 + 设置页二级 Stack 导航
  */
 
 import React from 'react';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from 'react-i18next';
 import { HomeScreen } from '@/screens/HomeScreen';
 import { HistoryScreen } from '@/screens/HistoryScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
+import { ServerSettingsScreen } from '@/screens/ServerSettingsScreen';
+import { ClipboardHistorySettingsScreen } from '@/screens/ClipboardHistorySettingsScreen';
+import { AboutScreen } from '@/screens/AboutScreen';
 
 const Tab = createBottomTabNavigator();
+const SettingsStack = createNativeStackNavigator();
+
+/**
+ * 设置页 Stack 导航器
+ * 主设置页 → 服务器设置 / 剪贴板历史 / 关于 三个二级页面
+ */
+function SettingsNavigator() {
+  const { theme } = useTheme();
+  const { t } = useTranslation();
+
+  return (
+    <SettingsStack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: theme.colors.surface,
+        },
+        headerTintColor: theme.colors.text,
+        headerTitleStyle: {
+          fontWeight: '600',
+          fontSize: 17,
+        },
+        headerShadowVisible: false,
+        headerBackTitle: t('common.back'),
+        contentStyle: {
+          backgroundColor: theme.colors.background,
+        },
+      }}
+    >
+      <SettingsStack.Screen
+        name="SettingsMain"
+        component={SettingsScreen}
+        options={{ title: t('nav.settings') }}
+      />
+      <SettingsStack.Screen
+        name="ServerSettings"
+        component={ServerSettingsScreen}
+        options={{ title: t('settings.serverSection') }}
+      />
+      <SettingsStack.Screen
+        name="ClipboardHistorySettings"
+        component={ClipboardHistorySettingsScreen}
+        options={{ title: t('settings.historySection') }}
+      />
+      <SettingsStack.Screen
+        name="About"
+        component={AboutScreen}
+        options={{ title: t('settings.aboutSection') }}
+      />
+    </SettingsStack.Navigator>
+  );
+}
 
 export const AppNavigator = () => {
   const { theme } = useTheme();
@@ -91,8 +147,11 @@ export const AppNavigator = () => {
         />
         <Tab.Screen
           name="Settings"
-          component={SettingsScreen}
-          options={{ title: t('nav.settings') }}
+          component={SettingsNavigator}
+          options={{
+            title: t('nav.settings'),
+            headerShown: false,
+          }}
         />
       </Tab.Navigator>
     </NavigationContainer>

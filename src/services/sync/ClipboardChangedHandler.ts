@@ -19,6 +19,7 @@ import {
 import { updateForegroundNotification } from '../notification/ForegroundNotification';
 import { historyService } from '../history/HistoryService';
 import { calculateTextHash } from '../../utils/hash';
+import { isRootClipboardActive } from '../../utils/clipboardProxy';
 import i18n from '@/i18n';
 
 class ClipboardChangedHandler {
@@ -145,8 +146,10 @@ class ClipboardChangedHandler {
 
     const autoSyncEnabled = config?.autoSync ?? false;
     const bgDownloadEnabled = !!(config?.enableBackgroundTasks && config?.enableBackgroundDownload);
+    const rootActive = await isRootClipboardActive();
     const isAppActive = AppState.currentState === 'active';
-    const shouldAutoCopy = autoSyncEnabled || (!isAppActive && bgDownloadEnabled);
+    // Root 模式激活时，后台也能自动复制（Root 可在后台写剪贴板）
+    const shouldAutoCopy = autoSyncEnabled || (!isAppActive && (bgDownloadEnabled || rootActive));
 
     if (!shouldAutoCopy) return;
 
@@ -196,7 +199,9 @@ class ClipboardChangedHandler {
 
     const autoSync = config?.autoSync ?? false;
     const bgUpload = config?.enableBackgroundTasks && config?.enableBackgroundUpload;
-    if (!autoSync && !bgUpload) return;
+    // Root 模式激活时，后台也能自动上传（Root 可在后台读剪贴板）
+    const rootActive = await isRootClipboardActive();
+    if (!autoSync && !bgUpload && !rootActive) return;
 
     const activeServer = await configService.getActiveServer();
     if (!activeServer) return;

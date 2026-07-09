@@ -1,6 +1,7 @@
 /**
  * 设置页面
- * 提供主题切换功能、服务器配置、多用户切换
+ * 提供主题切换、同步设置、后台任务、权限管理等功能的入口
+ * 服务器设置、剪贴板历史、关于 已迁移至独立子页面
  */
 
 import React, { useEffect, useState, useRef } from 'react';
@@ -24,7 +25,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import type { ThemeMode } from '@/theme';
 import { useSettingsStore } from '@/stores';
-import { ServerConfigModal, ServerListItem, MessageToast } from '@/components';
+import { MessageToast } from '@/components';
 import {
   SettingsSection,
   SettingItem,
@@ -32,57 +33,49 @@ import {
   SettingInput,
   SettingDropdown,
   SettingAction,
+  SettingNavigationItem,
 } from '@/components/settings';
-import { ServerConfig } from '@/types/api';
 import { useMessageToast } from '@/hooks/useMessageToast';
 import {
   shortcut,
-  checkForUpdate,
   calculateLogSize,
   clearLogs,
   saveLogsToFile,
   setLogLevel as setLoggerLogLevel,
   type LogLevel,
-  getPreferredAbi,
-  findAssetForAbi,
-  checkApkCache,
-  downloadApk,
-  installApk,
-  cleanOldApkCache,
-  type ReleaseAssetInfo,
   formatFileSize,
 } from '@/utils';
-import { Plus, RefreshCw, ChevronDown, ChevronUp } from 'react-native-feather';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { RefreshCw } from 'react-native-feather';
 import { hasOverlayPermission, requestOverlayPermission } from 'clipboard-overlay';
-import {
-  isRootAvailable,
-  checkRootPermission,
-} from 'root-clipboard';
+import { isRootAvailable, checkRootPermission } from 'root-clipboard';
 import { extractVerificationCode } from '@/tasks/SmsUploadTask';
 import { useTranslation } from 'react-i18next';
 import { useI18n } from '@/hooks/useI18n';
 import type { Language } from '@/i18n';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
+/** 设置页 Stack 导航参数 */
+type SettingsStackParamList = {
+  SettingsMain: undefined;
+  ServerSettings: undefined;
+  ClipboardHistorySettings: undefined;
+  About: undefined;
+};
 
 export const SettingsScreen = () => {
   const { theme, themeMode, setThemeMode } = useTheme();
   const { t } = useTranslation();
   const { language: currentLanguage, systemLanguage, setLanguage } = useI18n();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<SettingsStackParamList, 'SettingsMain'>>();
   const {
     config,
     isLoaded,
     loadConfig,
-    addServer,
-    updateServer,
-    deleteServer,
-    setActiveServer,
     setAutoSync,
     setAutoDownloadMaxSize,
     updateConfig,
-    setAutoCheckUpdate,
-    setLastUpdateCheckDate,
-    setUpdateToBeta,
-    setEnableHistorySync,
     setLogLevel,
     setRemotePollingInterval,
     setLocalPollingInterval,
@@ -98,23 +91,11 @@ export const SettingsScreen = () => {
     setSyncFileSavePath,
   } = useSettingsStore();
 
-  const [showServerModal, setShowServerModal] = useState(false);
-  const [editingServerIndex, setEditingServerIndex] = useState<number | null>(null);
-  const [serversCollapsed, setServersCollapsed] = useState(true);
   const { message, showMessage, handleMessageShown } = useMessageToast();
 
   // 本地状态用于跟踪Switch的当前值，避免闪烁
   const [localAutoSyncEnabled, setLocalAutoSyncEnabled] = useState(config?.autoSync ?? false);
   const [localDebugModeEnabled, setLocalDebugModeEnabled] = useState(config?.debugMode ?? false);
-  const [localAutoCheckUpdateEnabled, setLocalAutoCheckUpdateEnabled] = useState(
-    config?.autoCheckUpdate ?? true
-  );
-  const [localUpdateToBetaEnabled, setLocalUpdateToBetaEnabled] = useState(
-    config?.updateToBeta ?? false
-  );
-  const [localHistorySyncEnabled, setLocalHistorySyncEnabled] = useState(
-    config?.enableHistorySync ?? false
-  );
   const [localBackgroundDownloadEnabled, setLocalBackgroundDownloadEnabled] = useState(
     config?.enableBackgroundDownload ?? false
   );
@@ -158,23 +139,7 @@ export const SettingsScreen = () => {
     config?.hideFromRecents ?? false
   );
   const [showStatsModal, setShowStatsModal] = useState(false);
-  const [localImageAutoDownload, setLocalImageAutoDownload] = useState<'wifi' | 'always' | 'off'>(
-    config?.historyImageAutoDownload ?? 'wifi'
-  );
   const [statsText, setStatsText] = useState('');
-
-  // 更新检查状态
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-  const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [latestVersion, setLatestVersion] = useState<string | null>(null);
-  // APK 下载状态
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState(0);
-  const downloadAbortRef = useRef<AbortController | null>(null);
-  const updateCheckAbortRef = useRef<AbortController | null>(null);
-  const latestAssetsRef = useRef<ReleaseAssetInfo[]>([]);
-  const latestTagRef = useRef<string>('');
-  const releaseNotesRef = useRef<string | undefined>(undefined);
 
   const appVersion = APP_VERSION;
 
@@ -194,19 +159,6 @@ export const SettingsScreen = () => {
   useEffect(() => {
     setLocalDebugModeEnabled(config?.debugMode ?? false);
   }, [config?.debugMode]);
-
-  // 当配置中的autoCheckUpdate值变化时，更新本地状态
-  useEffect(() => {
-    setLocalAutoCheckUpdateEnabled(config?.autoCheckUpdate ?? true);
-  }, [config?.autoCheckUpdate]);
-
-  useEffect(() => {
-    setLocalUpdateToBetaEnabled(config?.updateToBeta ?? false);
-  }, [config?.updateToBeta]);
-
-  useEffect(() => {
-    setLocalHistorySyncEnabled(config?.enableHistorySync ?? true);
-  }, [config?.enableHistorySync]);
 
   useEffect(() => {
     setLocalBackgroundDownloadEnabled(config?.enableBackgroundDownload ?? false);
@@ -254,10 +206,6 @@ export const SettingsScreen = () => {
     setLocalHideFromRecents(config?.hideFromRecents ?? false);
   }, [config?.hideFromRecents]);
 
-  useEffect(() => {
-    setLocalImageAutoDownload(config?.historyImageAutoDownload ?? 'wifi');
-  }, [config?.historyImageAutoDownload]);
-
   // 计算存储大小
   useEffect(() => {
     calculateStorageSizes();
@@ -292,19 +240,6 @@ export const SettingsScreen = () => {
     refreshPermissions();
   }, []);
 
-  // 自动检查更新（每天一次）
-  useEffect(() => {
-    if (!isLoaded) return;
-    if (!(config?.autoCheckUpdate ?? true)) return;
-    const today = new Date().toISOString().slice(0, 10);
-    if (
-      !(config?.debugUpdateCheckNoLimit ?? false) &&
-      (config?.lastUpdateCheckDate ?? '') === today
-    )
-      return;
-    runUpdateCheck(false, config?.updateToBeta ?? false);
-  }, [isLoaded]);
-
   const themeOptions: { label: string; value: ThemeMode }[] = [
     { label: t('settings.themeAuto'), value: 'auto' },
     { label: t('settings.themeLight'), value: 'light' },
@@ -325,13 +260,7 @@ export const SettingsScreen = () => {
     { label: 'English', value: 'en' },
   ];
 
-  const imageAutoDownloadOptions: { label: string; value: 'wifi' | 'always' | 'off' }[] = [
-    { label: t('settings.imageAutoDownloadWifi'), value: 'wifi' },
-    { label: t('settings.imageAutoDownloadAlways'), value: 'always' },
-    { label: t('settings.imageAutoDownloadOff'), value: 'off' },
-  ];
-
-  // 获取服务器列表
+  // 获取服务器列表（用于导航项描述）
   const servers = config?.servers || [];
   const activeServerIndex = config?.activeServerIndex ?? -1;
   const activeServer = activeServerIndex >= 0 ? servers[activeServerIndex] : null;
@@ -341,9 +270,6 @@ export const SettingsScreen = () => {
 
   // 本地 state 用于输入框
   const [maxSizeInput, setMaxSizeInput] = useState(autoDownloadMaxSizeMB.toString());
-  const [maxHistoryItemsInput, setMaxHistoryItemsInput] = useState(
-    (config?.maxHistoryItems ?? 1000).toString()
-  );
   const [remotePollingInput, setRemotePollingInput] = useState(
     ((config?.remotePollingInterval ?? 3000) / 1000).toString()
   );
@@ -384,73 +310,6 @@ export const SettingsScreen = () => {
       console.error('Error checking directories:', error);
     }
   }, []);
-
-  // 处理添加服务器
-  const handleAddServer = () => {
-    setEditingServerIndex(null);
-    setShowServerModal(true);
-  };
-
-  // 处理编辑服务器
-  const handleEditServer = (index: number) => {
-    setEditingServerIndex(index);
-    setShowServerModal(true);
-  };
-
-  // 处理保存服务器
-  const handleSaveServer = async (serverConfig: ServerConfig) => {
-    try {
-      if (editingServerIndex !== null) {
-        await updateServer(editingServerIndex, serverConfig);
-        showMessage(t('settings.serverUpdated'), 'success');
-      } else {
-        await addServer(serverConfig);
-        showMessage(t('settings.serverAdded'), 'success');
-      }
-    } catch (error: unknown) {
-      showMessage(error instanceof Error ? error.message : t('common.operationFailed'), 'error');
-    }
-  };
-
-  // 处理删除服务器
-  const handleDeleteServer = async (index: number) => {
-    try {
-      await deleteServer(index);
-      showMessage(t('settings.serverDeleted'), 'success');
-    } catch (error: unknown) {
-      showMessage(error instanceof Error ? error.message : t('common.operationFailed'), 'error');
-    }
-  };
-
-  // 处理切换激活服务器
-  const handleSetActiveServer = async (index: number) => {
-    if (index === activeServerIndex) {
-      if (servers.length > 1) {
-        setServersCollapsed(true);
-      }
-      return;
-    }
-
-    if (servers.length > 1) {
-      setServersCollapsed(true);
-    }
-
-    try {
-      const { getHistorySyncService } = await import('@/services/history/HistorySyncService');
-      const syncService = getHistorySyncService();
-      syncService.cancelAll();
-    } catch {
-      // ignore
-    }
-
-    try {
-      await setActiveServer(index);
-      await updateConfig({ needsHistoryReorganize: true });
-      showMessage(t('settings.serverSwitched'), 'success');
-    } catch (error: unknown) {
-      showMessage(error instanceof Error ? error.message : t('common.operationFailed'), 'error');
-    }
-  };
 
   // 处理切换自动复制
   const handleToggleAutoSync = async (enabled: boolean) => {
@@ -811,27 +670,6 @@ export const SettingsScreen = () => {
     }
   };
 
-  // 处理历史记录最大保留条数输入
-  const handleMaxHistoryItemsBlur = async () => {
-    try {
-      const maxItems = parseInt(maxHistoryItemsInput, 10);
-      if (isNaN(maxItems) || maxItems < 10) {
-        setMaxHistoryItemsInput((config?.maxHistoryItems ?? 1000).toString());
-        showMessage(t('settings.numberMin10'), 'error');
-        return;
-      }
-      await updateConfig({ maxHistoryItems: maxItems });
-      showMessage(t('settings.maxHistoryItemsSet', { count: maxItems }), 'success');
-
-      // 更新历史记录存储的最大大小
-      const { historyStorage } = await import('@/storage');
-      historyStorage.setMaxHistorySize(maxItems);
-    } catch (error: unknown) {
-      setMaxHistoryItemsInput((config?.maxHistoryItems ?? 1000).toString());
-      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
-    }
-  };
-
   // 处理远程轮询间隔输入
   const handleRemotePollingBlur = async () => {
     try {
@@ -960,69 +798,6 @@ export const SettingsScreen = () => {
     showMessage(t('settings.statisticsCopied'), 'success');
   };
 
-  // 处理切换自动检查更新
-  const handleToggleAutoCheckUpdate = async (enabled: boolean) => {
-    setLocalAutoCheckUpdateEnabled(enabled);
-    try {
-      await setAutoCheckUpdate(enabled);
-    } catch (error: unknown) {
-      setLocalAutoCheckUpdateEnabled(!enabled);
-      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
-    }
-  };
-
-  // 处理切换更新到测试版
-  const handleToggleUpdateToBeta = async (enabled: boolean) => {
-    setLocalUpdateToBetaEnabled(enabled);
-    try {
-      await setUpdateToBeta(enabled);
-    } catch (error: unknown) {
-      setLocalUpdateToBetaEnabled(!enabled);
-      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
-    }
-  };
-
-  const handleToggleHistorySync = async (enabled: boolean) => {
-    try {
-      const { getHistorySyncService } = await import('@/services/history/HistorySyncService');
-      const syncService = getHistorySyncService();
-      syncService.cancelAll();
-
-      if (!enabled) {
-        await syncService.resetSyncCursor();
-      }
-    } catch {
-      // ignore
-    }
-
-    setLocalHistorySyncEnabled(enabled);
-    try {
-      await setEnableHistorySync(enabled);
-
-      if (!enabled) {
-        await updateConfig({ needsHistoryReorganize: true });
-      }
-
-      showMessage(
-        enabled ? t('settings.historySyncEnabled') : t('settings.historySyncDisabled'),
-        'success'
-      );
-    } catch (error: unknown) {
-      setLocalHistorySyncEnabled(!enabled);
-      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
-    }
-  };
-
-  // 处理历史记录图片自动下载设置变更
-  const handleImageAutoDownloadChange = async (value: 'wifi' | 'always' | 'off') => {
-    setLocalImageAutoDownload(value);
-    try {
-      await updateConfig({ historyImageAutoDownload: value });
-    } catch {
-      setLocalImageAutoDownload(config?.historyImageAutoDownload ?? 'wifi');
-    }
-  };
-
   // 处理切换同步 Toast 通知
   const handleToggleSyncToast = async (enabled: boolean) => {
     setLocalSyncToastEnabled(enabled);
@@ -1047,200 +822,6 @@ export const SettingsScreen = () => {
       setLocalHideFromRecents(!enabled);
       showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
-  };
-
-  // 执行更新检查逻辑
-  const runUpdateCheck = async (showNoUpdateToast: boolean, includeBeta?: boolean) => {
-    // 取消之前的检查
-    if (updateCheckAbortRef.current) {
-      updateCheckAbortRef.current.abort();
-    }
-    updateCheckAbortRef.current = new AbortController();
-
-    setIsCheckingUpdate(true);
-    try {
-      const today = new Date().toISOString().slice(0, 10);
-      await setLastUpdateCheckDate(today);
-      const useBeta = includeBeta ?? config?.updateToBeta ?? false;
-      const result = await checkForUpdate(
-        appVersion,
-        useBeta,
-        updateCheckAbortRef.current.signal
-      );
-      if (result.hasUpdate) {
-        setUpdateAvailable(true);
-        setLatestVersion(result.latestVersion);
-        latestAssetsRef.current = result.assets;
-        latestTagRef.current = result.tagName;
-        releaseNotesRef.current = result.releaseNotes;
-        showUpdateDialog(result.latestVersion, result.assets, result.releaseNotes);
-      } else {
-        setUpdateAvailable(false);
-        setLatestVersion(null);
-        if (showNoUpdateToast) {
-          showMessage(t('settings.alreadyLatest'), 'success');
-        }
-      }
-      cleanOldApkCache(appVersion);
-    } catch (e) {
-      // 如果是用户取消，不显示错误
-      if (e instanceof Error && e.name === 'AbortError') {
-        return;
-      }
-      if (showNoUpdateToast) {
-        showMessage(t('settings.checkUpdateFailed'), 'error');
-      }
-    } finally {
-      setIsCheckingUpdate(false);
-      updateCheckAbortRef.current = null;
-    }
-  };
-
-  // 取消更新检查
-  const handleCancelUpdateCheck = () => {
-    if (updateCheckAbortRef.current) {
-      updateCheckAbortRef.current.abort();
-      setIsCheckingUpdate(false);
-      updateCheckAbortRef.current = null;
-      showMessage(t('settings.updateCheckCancelled'), 'info');
-    }
-  };
-
-  // 点击"更新"按钮：先检查缓存，有则直接安装，否则弹渠道选择
-  const handleUpdateButtonPress = async (
-    version: string,
-    assets: ReleaseAssetInfo[],
-    releaseNotes?: string
-  ) => {
-    if (isDownloading) return;
-
-    let preferredAbi: string = 'universal';
-    try {
-      const { getSupportedAbis } = await import('native-util');
-      const abis = getSupportedAbis();
-      preferredAbi = getPreferredAbi(abis);
-    } catch (e) {
-      console.warn('[UpdateDownload] getSupportedAbis failed:', e);
-    }
-
-    const asset = findAssetForAbi(assets, preferredAbi as Parameters<typeof findAssetForAbi>[1]);
-    if (!asset) {
-      showUpdateDialog(version, assets, releaseNotes);
-      return;
-    }
-
-    const cached = await checkApkCache(version, asset);
-    console.log(`[UpdateDownload] pre-check cache=${cached ?? 'miss'}`);
-    if (cached) {
-      await installApk(cached);
-    } else {
-      showUpdateDialog(version, assets, releaseNotes);
-    }
-  };
-
-  const showUpdateDialog = (version: string, assets: ReleaseAssetInfo[], releaseNotes?: string) => {
-    const body = releaseNotes
-      ? t('settings.newVersionMessageWithNotes', {
-        newVersion: version,
-        currentVersion: appVersion,
-        notes: releaseNotes,
-      })
-      : t('settings.newVersionMessageNoNotes', {
-        newVersion: version,
-        currentVersion: appVersion,
-      });
-    Alert.alert(t('settings.newVersionTitle'), body, [
-      { text: t('common.later'), style: 'cancel' },
-      {
-        text: t('settings.updateNow'),
-        onPress: () => handleDownloadApk(version, assets),
-      },
-    ]);
-  };
-
-  // 下载 APK
-  const handleDownloadApk = async (
-    version: string,
-    assets: ReleaseAssetInfo[]
-  ) => {
-    if (isDownloading) return;
-
-    // 检测设备 ABI
-    let preferredAbi: string = 'universal';
-    try {
-      const { getSupportedAbis } = await import('native-util');
-      const abis = getSupportedAbis();
-      preferredAbi = getPreferredAbi(abis);
-      console.log(
-        `[UpdateDownload] supportedAbis=${JSON.stringify(abis)} preferred=${preferredAbi}`
-      );
-    } catch (e) {
-      console.warn('[UpdateDownload] getSupportedAbis failed:', e);
-    }
-
-    const asset = findAssetForAbi(assets, preferredAbi as Parameters<typeof findAssetForAbi>[1]);
-    console.log(
-      `[UpdateDownload] version=${version} assets=${assets
-        .map((a) => a.name)
-        .join(',')} selectedAsset=${asset?.name ?? 'none'}`
-    );
-    if (!asset) {
-      showMessage(t('settings.noSuitableApk'), 'error');
-      return;
-    }
-
-    setIsDownloading(true);
-    setDownloadProgress(0);
-
-    const abortController = new AbortController();
-    downloadAbortRef.current = abortController;
-
-    try {
-      // 检查是否已有缓存
-      const cached = await checkApkCache(version, asset);
-      console.log(`[UpdateDownload] cache check result=${cached ?? 'miss'}`);
-      if (cached) {
-        await installApk(cached);
-        return;
-      }
-
-      const fileUri = await downloadApk({
-        asset,
-        version,
-        signal: abortController.signal,
-        onProgress: (info) => {
-          setDownloadProgress(info.progress);
-        },
-      });
-
-      console.log(`[UpdateDownload] download finished fileUri=${fileUri}`);
-      setUpdateAvailable(false);
-      setLatestVersion(null);
-      await installApk(fileUri);
-    } catch (err) {
-      console.error('[UpdateDownload] error:', err);
-      if (err instanceof Error && err.name === 'AbortError') {
-        showMessage(t('settings.downloadCanceled'), 'info');
-      } else {
-        showMessage(err instanceof Error ? err.message : t('common.operationFailed'), 'error');
-      }
-    } finally {
-      setIsDownloading(false);
-      setDownloadProgress(0);
-      downloadAbortRef.current = null;
-    }
-  };
-
-  // 取消下载对话框
-  const handleCancelDownload = () => {
-    Alert.alert(t('settings.cancelDownloadTitle'), t('settings.cancelDownloadMessage'), [
-      { text: t('settings.continueDownload'), style: 'cancel' },
-      {
-        text: t('settings.cancelDownloadTitle'),
-        style: 'destructive',
-        onPress: () => downloadAbortRef.current?.abort(),
-      },
-    ]);
   };
 
   // 计算存储大小
@@ -1378,64 +959,24 @@ export const SettingsScreen = () => {
       edges={[]}
     >
       <ScrollView style={styles.scrollView}>
-        {/* 服务器配置部分 */}
-        <View style={styles.section}>
-          <View style={[styles.sectionHeaderBase, styles.sectionHeaderRow]}>
-            <TouchableOpacity
-              style={styles.sectionTitleContainer}
-              onPress={() => servers.length > 1 && setServersCollapsed(!serversCollapsed)}
-              disabled={servers.length <= 1}
-            >
-              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-                {t('settings.serverSection')}
-              </Text>
-              {servers.length > 1 && (
-                <View style={styles.collapseIcon}>
-                  {serversCollapsed ? (
-                    <ChevronDown color={theme.colors.textSecondary} width={18} height={18} />
-                  ) : (
-                    <ChevronUp color={theme.colors.textSecondary} width={18} height={18} />
-                  )}
-                </View>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton} onPress={handleAddServer}>
-              <Plus color={theme.colors.primary} width={20} height={20} />
-            </TouchableOpacity>
-          </View>
+        {/* 服务器配置 - 导航项 */}
+        <SettingsSection title={t('settings.serverSection')}>
+          <SettingNavigationItem
+            label={activeServer ? activeServer.name || activeServer.url : t('settings.noServers')}
+            description={activeServer ? activeServer.url || undefined : undefined}
+            onPress={() => navigation.navigate('ServerSettings')}
+          />
+        </SettingsSection>
 
-          {servers.length === 0 ? (
-            <View style={[styles.emptyCard, { backgroundColor: theme.colors.surface }]}>
-              <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
-                {t('settings.noServers')}
-              </Text>
-              <Text style={[styles.emptyHint, { color: theme.colors.textTertiary }]}>
-                {t('settings.noServersHint')}
-              </Text>
-            </View>
-          ) : serversCollapsed && servers.length > 1 ? (
-            activeServer && (
-              <ServerListItem
-                config={activeServer}
-                isActive={true}
-                onPress={() => { }}
-                onEdit={() => handleEditServer(activeServerIndex)}
-                onDelete={() => handleDeleteServer(activeServerIndex)}
-              />
-            )
-          ) : (
-            servers.map((server, index) => (
-              <ServerListItem
-                key={index}
-                config={server}
-                isActive={index === activeServerIndex}
-                onPress={() => handleSetActiveServer(index)}
-                onEdit={() => handleEditServer(index)}
-                onDelete={() => handleDeleteServer(index)}
-              />
-            ))
-          )}
-        </View>
+        {/* 语言切换 - 优先显示，方便快速切换 */}
+        <SettingsSection title={t('settings.language')}>
+          <SettingDropdown
+            label={t('settings.language')}
+            options={languageOptions}
+            value={currentLanguage}
+            onChange={(value) => setLanguage(value)}
+          />
+        </SettingsSection>
 
         {/* 同步设置部分 */}
         <SettingsSection title={t('settings.syncSection')}>
@@ -1505,43 +1046,16 @@ export const SettingsScreen = () => {
           )}
         </SettingsSection>
 
-        {/* 历史记录部分 */}
+        {/* 剪贴板历史 - 导航项 */}
         <SettingsSection title={t('settings.historySection')}>
-          <SettingSwitch
-            label={t('settings.historySync')}
+          <SettingNavigationItem
+            label={t('settings.historySection')}
             description={
-              activeServer?.type !== 'syncclipboard'
-                ? t('settings.historySyncNotSupported')
-                : t('settings.historySyncDesc')
+              config?.enableHistorySync
+                ? t('settings.historySyncEnabled')
+                : t('settings.historySyncDisabled')
             }
-            value={localHistorySyncEnabled && activeServer?.type === 'syncclipboard'}
-            onChange={handleToggleHistorySync}
-            disabled={activeServer?.type !== 'syncclipboard'}
-          />
-
-          <SettingInput
-            label={t('settings.maxHistoryItems')}
-            description={t('settings.maxHistoryItemsDesc')}
-            value={maxHistoryItemsInput}
-            onChangeText={setMaxHistoryItemsInput}
-            onBlur={handleMaxHistoryItemsBlur}
-            unit={t('settings.unitItem')}
-            keyboardType="number-pad"
-            placeholder="100"
-          />
-
-          <SettingDropdown
-            label={t('settings.imageAutoDownload')}
-            options={imageAutoDownloadOptions}
-            value={localImageAutoDownload}
-            onChange={handleImageAutoDownloadChange}
-          />
-
-          <SettingSwitch
-            label={t('settings.showImageCopyButton')}
-            description={t('settings.showImageCopyButtonDesc')}
-            value={config?.showImageCopyButton ?? false}
-            onChange={(enabled) => updateConfig({ showImageCopyButton: enabled })}
+            onPress={() => navigation.navigate('ClipboardHistorySettings')}
           />
         </SettingsSection>
 
@@ -1771,13 +1285,6 @@ export const SettingsScreen = () => {
         {/* 外观设置部分 */}
         <SettingsSection title={t('settings.appearanceSection')}>
           <SettingDropdown
-            label={t('settings.language')}
-            options={languageOptions}
-            value={currentLanguage}
-            onChange={(value) => setLanguage(value)}
-          />
-
-          <SettingDropdown
             label={t('settings.theme')}
             options={themeOptions}
             value={themeMode}
@@ -1794,57 +1301,13 @@ export const SettingsScreen = () => {
           )}
         </SettingsSection>
 
-        {/* 应用信息部分 */}
+        {/* 关于 - 导航项 */}
         <SettingsSection title={t('settings.aboutSection')}>
-          <SettingAction
+          <SettingNavigationItem
             label={`${t('settings.version')} ${appVersion}`}
-            buttonText={
-              isCheckingUpdate
-                ? t('settings.checkingUpdate')
-                : isDownloading
-                  ? t('settings.downloadingUpdate', { percent: Math.round(downloadProgress * 100) })
-                  : updateAvailable
-                    ? t('settings.updateAvailable', { version: latestVersion })
-                    : t('settings.checkUpdate')
-            }
-            buttonStyle={isDownloading || updateAvailable ? 'primary' : 'secondary'}
-            onPress={() => {
-              if (isCheckingUpdate) {
-                handleCancelUpdateCheck();
-              } else if (isDownloading) {
-                handleCancelDownload();
-              } else if (updateAvailable) {
-                handleUpdateButtonPress(
-                  latestVersion ?? '',
-                  latestAssetsRef.current,
-                  releaseNotesRef.current
-                );
-              } else {
-                runUpdateCheck(true, localUpdateToBetaEnabled);
-              }
-            }}
+            description={t('settings.openSource')}
+            onPress={() => navigation.navigate('About')}
           />
-
-          <SettingSwitch
-            label={t('settings.autoCheckUpdate')}
-            value={localAutoCheckUpdateEnabled}
-            onChange={handleToggleAutoCheckUpdate}
-          />
-
-          <SettingSwitch
-            label={t('settings.updateToBeta')}
-            value={localUpdateToBetaEnabled}
-            onChange={handleToggleUpdateToBeta}
-          />
-
-          <SettingItem description={t('settings.openSource')}>
-            <TouchableOpacity
-              onPress={() => Linking.openURL('https://github.com/shaklow/syncclipboard-mobile')}
-              hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-            >
-              <MaterialCommunityIcons name="github" size={24} color={theme.colors.textTertiary} />
-            </TouchableOpacity>
-          </SettingItem>
         </SettingsSection>
 
         {/* 调试部分 */}
@@ -1906,15 +1369,6 @@ export const SettingsScreen = () => {
 
       {/* 消息提示 */}
       <MessageToast message={message} onMessageShown={handleMessageShown} />
-
-      {/* 服务器配置模态框 */}
-      <ServerConfigModal
-        visible={showServerModal}
-        onClose={() => setShowServerModal(false)}
-        onSave={handleSaveServer}
-        initialConfig={editingServerIndex !== null ? servers[editingServerIndex] : undefined}
-        isEditing={editingServerIndex !== null}
-      />
 
       {/* 测试验证码短信模态框 */}
       <Modal

@@ -20,3 +20,6 @@ export type { SettingDropdownProps } from './SettingDropdown';
 
 export { SettingAction } from './SettingAction';
 export type { SettingActionProps } from './SettingAction';
+
+export { SettingNavigationItem } from './SettingNavigationItem';
+export type { SettingNavigationItemProps } from './SettingNavigationItem';

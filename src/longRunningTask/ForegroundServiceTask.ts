@@ -18,6 +18,7 @@ import * as ForegroundService from 'foreground-service';
 import { LongRunningTask } from './LongRunningTask';
 import { configService } from '../services/ConfigService';
 import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
+import { isRootClipboardActive } from '../utils/clipboardProxy';
 
 class ForegroundServiceTask extends LongRunningTask {
   readonly name = 'foregroundService';
@@ -73,10 +74,15 @@ class ForegroundServiceTask extends LongRunningTask {
   private async _shouldRunForegroundService(): Promise<boolean> {
     const config = await configService.getConfig();
     const tempDisabled = backgroundRuntimeState.isTempDisabled();
+    // Root 模式激活时，即使后台上传/下载未显式启用，也应保持前台服务运行，
+    // 以维持进程存活并防止被系统杀后台。
+    const rootActive = await isRootClipboardActive();
+    const hasBgSync =
+      !!(config?.enableBackgroundDownload || config?.enableBackgroundUpload) || rootActive;
     return (
       !tempDisabled &&
       !!config?.enableBackgroundTasks &&
-      !!(config?.enableBackgroundDownload || config?.enableBackgroundUpload) &&
+      hasBgSync &&
       !!config?.enableForegroundNotification
     );
   }

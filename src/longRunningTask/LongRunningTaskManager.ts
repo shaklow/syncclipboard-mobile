@@ -21,6 +21,7 @@ import { remoteClipboardMonitorTask } from './RemoteClipboardMonitorTask';
 import { heartbeatTask } from './HeartbeatTask';
 import { configService } from '../services/ConfigService';
 import { backgroundRuntimeState } from '../services/BackgroundRuntimeState';
+import { isRootClipboardActive } from '../utils/clipboardProxy';
 import { AppState, type AppStateStatus } from 'react-native';
 
 class LongRunningTaskManager {
@@ -158,16 +159,22 @@ class LongRunningTaskManager {
 
   /**
    * 后台时根据当前配置同步任务运行状态：
-   * - 若应停止（总开关关闭或临时禁用），停止所有非 keepAlive 任务
-   * - 若应运行（总开关开启且未临时禁用），启动所有非 keepAlive 任务
+   * - 若应停止（总开关关闭且 Root 未激活，或临时禁用），停止所有非 keepAlive 任务
+   * - 若应运行（总开关开启或 Root 激活，且未临时禁用），启动所有非 keepAlive 任务
+   *
+   * Root 模式特殊处理：当 Root 剪贴板激活时，即使 enableBackgroundTasks 未开启，
+   * 也允许同步任务在后台运行（Root 可以在后台读写剪贴板）。
    */
   private _syncBackgroundTaskState(): void {
     if (this._appState !== 'background') return;
     configService
       .getConfig()
-      .then((config) => {
-        const shouldStop =
-          backgroundRuntimeState.isTempDisabled() || !config?.enableBackgroundTasks;
+      .then(async (config) => {
+        const tempDisabled = backgroundRuntimeState.isTempDisabled();
+        const rootActive = await isRootClipboardActive();
+        // Root 激活时，等同于隐式开启后台任务（Root 可在后台读写剪贴板）
+        const effectiveBgEnabled = !!config?.enableBackgroundTasks || rootActive;
+        const shouldStop = tempDisabled || !effectiveBgEnabled;
         if (shouldStop) {
           this._stopNonKeepAlive();
         } else {
