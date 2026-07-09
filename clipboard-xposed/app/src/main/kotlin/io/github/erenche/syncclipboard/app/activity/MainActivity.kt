@@ -1,18 +1,18 @@
 package io.github.erenche.syncclipboard.app.activity
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.erenche.syncclipboard.app.R
 import io.github.erenche.syncclipboard.app.SyncClipboardApp
 import io.github.erenche.syncclipboard.app.compose.AppToolBarListContainer
@@ -47,7 +47,7 @@ class MainActivity : BaseActivity(), SyncClipboardApp.XposedServiceStateListener
 @Composable
 fun MainScreen(viewModel: MainViewModel) {
     AppToolBarListContainer(
-        title = "SyncClipboard",
+        title = stringResource(R.string.app_name),
         actions = {}
     ) {
         // 1. Status Card
@@ -92,14 +92,17 @@ fun StatusCard(viewModel: MainViewModel) {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = if (isActive) "Module Activated" else "Module Not Activated",
+                text = stringResource(
+                    if (isActive) R.string.module_status_activated
+                    else R.string.module_status_not_activated
+                ),
                 color = Color.White,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Sync Status: $syncStatus",
+                text = stringResource(R.string.main_sync_status, syncStatus),
                 color = Color.White.copy(alpha = 0.8f),
                 fontSize = 14.sp
             )
@@ -111,7 +114,7 @@ fun StatusCard(viewModel: MainViewModel) {
 
 @Composable
 fun AutoSyncToggle() {
-    val prefs = androidx.compose.ui.platform.LocalContext.current.defaultSharedPreferences
+    val prefs = LocalContext.current.defaultSharedPreferences
     var autoSync by rememberBooleanPreference(prefs, "auto_sync_enabled", true)
 
     Card(
@@ -119,8 +122,8 @@ fun AutoSyncToggle() {
     ) {
         SwitchPreference(
             checked = autoSync,
-            title = "Auto Sync",
-            summary = "Automatically sync clipboard in background",
+            title = stringResource(R.string.setting_auto_sync),
+            summary = stringResource(R.string.setting_auto_sync_summary),
             onCheckedChange = { autoSync = it }
         )
     }
@@ -134,13 +137,13 @@ fun SyncControlsCard(viewModel: MainViewModel) {
         modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp).fillMaxWidth()
     ) {
         ArrowPreference(
-            title = "Sync Now",
-            summary = "Manually trigger clipboard sync",
+            title = stringResource(R.string.action_sync_now),
+            summary = stringResource(R.string.main_sync_now_desc),
             onClick = { viewModel.triggerSync() }
         )
         ArrowPreference(
-            title = "Upload Now",
-            summary = "Push current clipboard to server",
+            title = stringResource(R.string.action_upload_now),
+            summary = stringResource(R.string.main_upload_now_desc),
             onClick = { viewModel.uploadNow() }
         )
     }
@@ -150,37 +153,37 @@ fun SyncControlsCard(viewModel: MainViewModel) {
 
 @Composable
 fun NavigationCard() {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
 
     Card(
         modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp).fillMaxWidth()
     ) {
         ArrowPreference(
-            title = "Server Configuration",
-            summary = "Add and manage sync servers",
+            title = stringResource(R.string.item_server_settings),
+            summary = stringResource(R.string.item_server_settings_summary),
             onClick = {
-                context.startActivity(android.content.Intent(context, ServerConfigActivity::class.java))
+                context.startActivity(Intent(context, ServerConfigActivity::class.java))
             }
         )
         ArrowPreference(
-            title = "Settings",
-            summary = "Configure sync behavior",
+            title = stringResource(R.string.item_sync_settings),
+            summary = stringResource(R.string.item_sync_settings_summary),
             onClick = {
-                context.startActivity(android.content.Intent(context, SettingsActivity::class.java))
+                context.startActivity(Intent(context, SettingsActivity::class.java))
             }
         )
         ArrowPreference(
-            title = "Clipboard History",
-            summary = "View synced clipboard history",
+            title = stringResource(R.string.item_history),
+            summary = stringResource(R.string.item_history_summary),
             onClick = {
-                context.startActivity(android.content.Intent(context, HistoryActivity::class.java))
+                context.startActivity(Intent(context, HistoryActivity::class.java))
             }
         )
         ArrowPreference(
-            title = "About",
-            summary = "Version and license info",
+            title = stringResource(R.string.item_about_app),
+            summary = stringResource(R.string.item_about_app_summary),
             onClick = {
-                context.startActivity(android.content.Intent(context, AboutActivity::class.java))
+                context.startActivity(Intent(context, AboutActivity::class.java))
             }
         )
     }
@@ -195,15 +198,13 @@ fun InfoCard() {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "How it works",
+                text = stringResource(R.string.main_how_it_works_title),
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "This LSPosed module hooks into ClipboardManager to detect " +
-                        "clipboard changes instantly without polling. Changes are synced " +
-                        "to your configured server (SyncClipboard, WebDAV, or S3).",
+                text = stringResource(R.string.main_how_it_works_text),
                 fontSize = 14.sp,
                 color = MiuixTheme.colorScheme.onSurface
             )
