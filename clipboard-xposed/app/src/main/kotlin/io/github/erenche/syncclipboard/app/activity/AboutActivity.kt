@@ -36,9 +36,10 @@ fun AboutScreen() {
     val context = LocalContext.current
     val activity = context as? Activity
 
-    val versionName = remember {
+    val versionName: String = remember {
         try {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
+                ?: "1.0.0"
         } catch (_: Exception) {
             "1.0.0"
         }
