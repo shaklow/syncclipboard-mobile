@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SyncClipboard</string>
+    <string name="app_description">LSPosed module for silent clipboard sync</string>
+
+    <!-- Activities -->
+    <string name="activity_settings">Settings</string>
+    <string name="activity_server_config">Server Configuration</string>
+    <string name="activity_history">Clipboard History</string>
+    <string name="activity_about">About</string>
+
+    <!-- Module Status -->
+    <string name="module_status_activated">Module activated</string>
+    <string name="module_status_not_activated">Module not activated</string>
+    <string name="module_status_connecting">Connecting...</string>
+    <string name="module_status_waiting_for_reboot">Update installed - reboot required</string>
+    <string name="module_status_system_ui_safe_mode">System UI safe mode - hooks disabled</string>
+    <string name="module_status_summary">Version %s</string>
+
+    <!-- Actions -->
+    <string name="action_restart">Restart</string>
+    <string name="action_sync_now">Sync Now</string>
+    <string name="action_test_connection">Test Connection</string>
+
+    <!-- Restart -->
+    <string name="restart_system_ui">Restart System UI</string>
+    <string name="restart_app">Restart App</string>
+    <string name="restart_fail">Restart Failed</string>
+    <string name="message_app_restart_fail">Failed to restart. Please try manually.</string>
+    <string name="ok">OK</string>
+
+    <!-- Server Config -->
+    <string name="server_type_syncclipboard">SyncClipboard Server</string>
+    <string name="server_type_webdav">WebDAV</string>
+    <string name="server_type_s3">S3 Compatible</string>
+    <string name="server_url">Server URL</string>
+    <string name="server_username">Username</string>
+    <string name="server_password">Password</string>
+    <string name="server_name">Display Name</string>
+    <string name="server_region">Region</string>
+    <string name="server_bucket">Bucket Name</string>
+    <string name="server_prefix">Object Prefix</string>
+    <string name="server_path_style">Force Path Style</string>
+    <string name="server_add">Add Server</string>
+    <string name="server_delete">Delete Server</string>
+    <string name="server_test_success">Connection successful</string>
+    <string name="server_test_fail">Connection failed</string>
+    <string name="no_server_configured">No server configured</string>
+
+    <!-- Sync Settings -->
+    <string name="setting_background_upload">Background Upload</string>
+    <string name="setting_background_upload_summary">Auto-upload clipboard changes</string>
+    <string name="setting_background_download">Background Download</string>
+    <string name="setting_background_download_summary">Auto-download remote clipboard</string>
+    <string name="setting_history_sync">History Sync</string>
+    <string name="setting_history_sync_summary">Sync clipboard history with server</string>
+    <string name="setting_auto_download_max_size">Auto-download Max Size</string>
+    <string name="setting_auto_download_max_size_summary">Maximum file size for auto-download (MB)</string>
+    <string name="setting_log_level">Log Level</string>
+
+    <!-- Items -->
+    <string name="item_server_settings">Server Configuration</string>
+    <string name="item_server_settings_summary">Add and manage sync servers</string>
+    <string name="item_sync_settings">Sync Settings</string>
+    <string name="item_sync_settings_summary">Configure sync behavior</string>
+    <string name="item_history">Clipboard History</string>
+    <string name="item_history_summary">View synced clipboard history</string>
+    <string name="item_about_app">About</string>
+    <string name="item_about_app_summary">Version and license info</string>
+
+    <!-- Sync Status -->
+    <string name="sync_status_connected">Connected</string>
+    <string name="sync_status_disconnected">Disconnected</string>
+    <string name="sync_status_syncing">Syncing...</string>
+    <string name="sync_status_last_sync">Last sync: %s</string>
+    <string name="sync_status_never">Never synced</string>
+
+    <!-- History -->
+    <string name="history_empty">No clipboard history yet</string>
+    <string name="history_copy">Copy to clipboard</string>
+    <string name="history_delete">Delete</string>
+    <string name="history_star">Star</string>
+    <string name="history_pin">Pin</string>
+    <string name="history_search">Search history...</string>
+</resources>
