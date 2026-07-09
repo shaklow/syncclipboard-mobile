@@ -103,13 +103,13 @@ fun ServerConfigScreen() {
                             text = stringResource(R.string.no_server_configured),
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Medium,
-                            color = MiuixTheme.colorScheme.onSurfaceVariant
+                            color = MiuixTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = stringResource(R.string.no_server_hint),
                             fontSize = 14.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
                     }
                 }
@@ -136,7 +136,7 @@ fun ServerConfigScreen() {
                             if (index < servers.lastIndex) {
                                 HorizontalDivider(
                                     modifier = Modifier.padding(horizontal = 16.dp),
-                                    color = MiuixTheme.colorScheme.outlineVariant
+                                    color = MiuixTheme.colorScheme.outline
                                 )
                             }
                         }
@@ -311,7 +311,7 @@ fun ServerEditDialog(
                     text = stringResource(R.string.server_type_label),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MiuixTheme.colorScheme.onSurfaceVariant
+                    color = MiuixTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -345,14 +345,14 @@ fun ServerEditDialog(
                                     ServerType.s3 -> stringResource(R.string.server_type_s3_desc)
                                 },
                                 fontSize = 12.sp,
-                                color = MiuixTheme.colorScheme.onSurfaceVariant
+                                color = MiuixTheme.colorScheme.onSurface
                             )
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = MiuixTheme.colorScheme.outlineVariant)
+                HorizontalDivider(color = MiuixTheme.colorScheme.outline)
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // ── 连接信息字段 ───────────────────────────────

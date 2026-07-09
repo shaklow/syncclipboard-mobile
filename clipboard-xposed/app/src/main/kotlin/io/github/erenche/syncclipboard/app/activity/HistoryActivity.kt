@@ -75,7 +75,7 @@ fun HistoryScreen(
                         Text(
                             text = stringResource(R.string.history_empty),
                             fontSize = 15.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariant
+                            color = MiuixTheme.colorScheme.onSurface
                         )
                     }
                 }
@@ -118,7 +118,7 @@ fun HistoryItemCard(item: HistoryDisplayItem, context: Context) {
                 Text(
                     text = "${item.type} · ${dateFormat.format(Date(item.timestamp))}",
                     fontSize = 12.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariant
+                    color = MiuixTheme.colorScheme.onSurface
                 )
                 Text(
                     text = stringResource(R.string.action_copy),

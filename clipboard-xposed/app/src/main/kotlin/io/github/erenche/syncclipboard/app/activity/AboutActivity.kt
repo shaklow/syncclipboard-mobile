@@ -67,7 +67,7 @@ fun AboutScreen() {
                     Text(
                         text = stringResource(R.string.about_version, versionName),
                         fontSize = 14.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariant
+                        color = MiuixTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
@@ -79,7 +79,7 @@ fun AboutScreen() {
                     Text(
                         text = stringResource(R.string.about_supported_backends),
                         fontSize = 13.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                     )
                 }
             }
@@ -103,7 +103,7 @@ fun AboutScreen() {
                     Text(
                         text = stringResource(R.string.about_how_it_works_text),
                         fontSize = 14.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariant
+                        color = MiuixTheme.colorScheme.onSurface
                     )
                 }
             }
@@ -127,7 +127,7 @@ fun AboutScreen() {
                     Text(
                         text = stringResource(R.string.about_license_text),
                         fontSize = 14.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariant
+                        color = MiuixTheme.colorScheme.onSurface
                     )
                 }
             }
