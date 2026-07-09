@@ -57,10 +57,9 @@ import { Plus, RefreshCw, ChevronDown, ChevronUp } from 'react-native-feather';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { hasOverlayPermission, requestOverlayPermission } from 'clipboard-overlay';
 import {
-  isShizukuAvailable,
-  hasShizukuPermission,
-  requestShizukuPermission,
-} from 'shizuku-clipboard';
+  isRootAvailable,
+  checkRootPermission,
+} from 'root-clipboard';
 import { extractVerificationCode } from '@/tasks/SmsUploadTask';
 import { useTranslation } from 'react-i18next';
 import { useI18n } from '@/hooks/useI18n';
@@ -94,7 +93,7 @@ export const SettingsScreen = () => {
     setEnableClipboardOverlay,
     setEnableBackgroundTasks,
     setEnableSmsForwarding,
-    setEnableShizukuClipboard,
+    setEnableRootClipboard,
     isTempDisabledBackgroundTasks,
     setTempDisabledBackgroundTasks,
     setAutoSaveSyncFile,
@@ -133,8 +132,8 @@ export const SettingsScreen = () => {
   const [localClipboardOverlayEnabled, setLocalClipboardOverlayEnabled] = useState(
     config?.enableClipboardOverlay ?? false
   );
-  const [localShizukuClipboardEnabled, setLocalShizukuClipboardEnabled] = useState(
-    config?.enableShizukuClipboard ?? false
+  const [localRootClipboardEnabled, setLocalRootClipboardEnabled] = useState(
+    config?.enableRootClipboard ?? false
   );
   const [localSmsForwardingEnabled, setLocalSmsForwardingEnabled] = useState(
     config?.enableSmsForwarding ?? false
@@ -237,8 +236,8 @@ export const SettingsScreen = () => {
   }, [config?.enableClipboardOverlay]);
 
   useEffect(() => {
-    setLocalShizukuClipboardEnabled(config?.enableShizukuClipboard ?? false);
-  }, [config?.enableShizukuClipboard]);
+    setLocalRootClipboardEnabled(config?.enableRootClipboard ?? false);
+  }, [config?.enableRootClipboard]);
 
   useEffect(() => {
     setLocalSmsForwardingEnabled(config?.enableSmsForwarding ?? false);
@@ -288,9 +287,9 @@ export const SettingsScreen = () => {
       setPermSms(sms);
       const { isIgnoringBatteryOptimizations } = await import('native-util');
       setPermBattery(isIgnoringBatteryOptimizations());
-      const shizukuUp = isShizukuAvailable();
-      setShizukuAvailable(shizukuUp);
-      setPermShizuku(shizukuUp && hasShizukuPermission());
+      const rootUp = isRootAvailable();
+      setRootAvailable(rootUp);
+      setPermRoot(rootUp && checkRootPermission());
     } catch (e) {
       console.warn('[Settings] Failed to check permissions:', e);
     } finally {
@@ -374,8 +373,8 @@ export const SettingsScreen = () => {
   const [permOverlay, setPermOverlay] = useState<boolean>(false);
   const [permSms, setPermSms] = useState<boolean>(false);
   const [permBattery, setPermBattery] = useState<boolean>(false);
-  const [permShizuku, setPermShizuku] = useState<boolean>(false);
-  const [shizukuAvailable, setShizukuAvailable] = useState<boolean>(false);
+  const [permRoot, setPermRoot] = useState<boolean>(false);
+  const [rootAvailable, setRootAvailable] = useState<boolean>(false);
   const [isRefreshingPermissions, setIsRefreshingPermissions] = useState<boolean>(false);
   const hasBatteryOptRequested = useRef<boolean>(false);
 
@@ -636,60 +635,51 @@ export const SettingsScreen = () => {
     }
   };
 
-  // 处理切换 Shizuku 获取剪贴板
-  const handleToggleShizukuClipboard = async (enabled: boolean) => {
+  // 处理切换 Root 获取剪贴板
+  const handleToggleRootClipboard = async (enabled: boolean) => {
     if (enabled && Platform.OS === 'android') {
-      // 检查 Shizuku 是否可用
-      if (!isShizukuAvailable()) {
-        Alert.alert(t('settings.shizukuNotRunningTitle'), t('settings.shizukuNotRunningMessage'), [
-          { text: t('common.cancel'), style: 'cancel' },
-          {
-            text: t('common.learnMore'),
-            onPress: () => Linking.openURL('https://shizuku.rikka.app/guide/setup/'),
-          },
+      // 检查 Root 是否可用
+      if (!isRootAvailable()) {
+        Alert.alert(t('settings.rootNotAvailableTitle'), t('settings.rootNotAvailableMessage'), [
+          { text: t('common.ok') },
         ]);
         return;
       }
 
-      // 检查 Shizuku 权限
-      if (!hasShizukuPermission()) {
-        const requested = requestShizukuPermission();
-        if (!requested) {
-          Alert.alert(
-            t('settings.permissionRequestFailed'),
-            t('settings.shizukuPermissionRequestFailed')
-          );
-          return;
-        }
-        showMessage(t('settings.shizukuGrantThenEnable'), 'info');
+      // 检查 Root 权限
+      if (!checkRootPermission()) {
+        Alert.alert(
+          t('settings.permissionRequestFailed'),
+          t('settings.rootPermissionRequestFailed')
+        );
         return;
       }
 
-      setLocalShizukuClipboardEnabled(true);
+      setLocalRootClipboardEnabled(true);
       try {
-        // 启用 Shizuku 时自动关闭悬浮窗方式
+        // 启用 Root 时自动关闭悬浮窗方式
         if (localClipboardOverlayEnabled) {
           setLocalClipboardOverlayEnabled(false);
           await setEnableClipboardOverlay(false);
         }
-        await setEnableShizukuClipboard(true);
-        showMessage(t('settings.shizukuClipboardEnabled'), 'success');
+        await setEnableRootClipboard(true);
+        showMessage(t('settings.rootClipboardEnabled'), 'success');
       } catch (error: unknown) {
-        setLocalShizukuClipboardEnabled(false);
+        setLocalRootClipboardEnabled(false);
         showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
       }
       return;
     }
 
-    setLocalShizukuClipboardEnabled(enabled);
+    setLocalRootClipboardEnabled(enabled);
     try {
-      await setEnableShizukuClipboard(enabled);
+      await setEnableRootClipboard(enabled);
       showMessage(
-        enabled ? t('settings.shizukuClipboardEnabled') : t('settings.shizukuClipboardDisabled'),
+        enabled ? t('settings.rootClipboardEnabled') : t('settings.rootClipboardDisabled'),
         'success'
       );
     } catch (error: unknown) {
-      setLocalShizukuClipboardEnabled(!enabled);
+      setLocalRootClipboardEnabled(!enabled);
       showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
     }
   };
@@ -1642,13 +1632,9 @@ export const SettingsScreen = () => {
             />
 
             <SettingSwitch
-              label={t('settings.shizukuClipboard')}
-              descriptionLink={{
-                text: t('settings.shizukuWebsite'),
-                onPress: () => Linking.openURL('https://shizuku.rikka.app/'),
-              }}
-              value={localBackgroundTasksEnabled && localShizukuClipboardEnabled}
-              onChange={handleToggleShizukuClipboard}
+              label={t('settings.rootClipboard')}
+              value={localBackgroundTasksEnabled && localRootClipboardEnabled}
+              onChange={handleToggleRootClipboard}
               disabled={!localBackgroundTasksEnabled}
             />
           </SettingsSection>
@@ -1700,30 +1686,27 @@ export const SettingsScreen = () => {
             />
 
             <SettingSwitch
-              label={t('settings.permissionShizuku')}
+              label={t('settings.permissionRoot')}
               description={
-                shizukuAvailable
-                  ? t('settings.permissionShizukuDesc')
-                  : t('settings.shizukuNotRunningDesc')
+                rootAvailable
+                  ? t('settings.permissionRootDesc')
+                  : t('settings.rootNotAvailableDesc')
               }
-              value={permShizuku}
+              value={permRoot}
               onChange={async () => {
-                if (!shizukuAvailable) {
+                if (!rootAvailable) {
                   Alert.alert(
-                    t('settings.shizukuNotRunningTitle'),
-                    t('settings.shizukuNotRunningMessage'),
-                    [
-                      {
-                        text: t('common.learnMore'),
-                        onPress: () => Linking.openURL('https://shizuku.rikka.app/guide/setup/'),
-                      },
-                      { text: t('common.cancel'), style: 'cancel' },
-                    ]
+                    t('settings.rootNotAvailableTitle'),
+                    t('settings.rootNotAvailableMessage'),
+                    [{ text: t('common.ok') }]
                   );
                   return;
                 }
-                if (!permShizuku) {
-                  requestShizukuPermission();
+                if (!permRoot) {
+                  Alert.alert(
+                    t('settings.rootPermissionRequestFailed'),
+                    t('settings.rootPermissionCheckFailed')
+                  );
                   setTimeout(refreshPermissions, 2000);
                 }
               }}
@@ -1909,7 +1892,7 @@ export const SettingsScreen = () => {
 
           <SettingItem description={t('settings.openSource')}>
             <TouchableOpacity
-              onPress={() => Linking.openURL('https://github.com/Jeric-X/syncclipboard-mobile')}
+              onPress={() => Linking.openURL('https://github.com/shaklow/syncclipboard-mobile')}
               hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
             >
               <MaterialCommunityIcons name="github" size={24} color={theme.colors.textTertiary} />

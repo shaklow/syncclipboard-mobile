@@ -1,0 +1,7 @@
+{
+  "platforms": ["android"],
+  "name": "root-clipboard",
+  "android": {
+    "modules": ["expo.modules.rootclipboard.RootClipboardModule"]
+  }
+}

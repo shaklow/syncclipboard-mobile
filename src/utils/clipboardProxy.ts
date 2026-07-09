@@ -1,8 +1,8 @@
 /**
  * Clipboard Proxy
- * 剪贴板代理 - 在 Android 后台时通过 Shizuku 或悬浮窗获取剪贴板，其他情况直接调用 expo-clipboard
+ * 剪贴板代理 - 在 Android 后台时通过 Root 或悬浮窗获取剪贴板，其他情况直接调用 expo-clipboard
  *
- * 优先级：Shizuku > 悬浮窗 > 直接调用
+ * 优先级：Root > 悬浮窗 > 直接调用
  *
  * 当启用后台同步+悬浮窗模式时，悬浮窗按需显示（不可见的 1px 窗口），
  * 每次读取剪贴板时只是 focus 到悬浮窗读取后 unfocus，而非反复创建/销毁。
@@ -21,7 +21,7 @@ const OVERLAY_IDLE_TIMEOUT_MS = 10_000;
 const IDLE_TIMER_TAG = 'clipboard_overlay_idle';
 
 let overlayModule: typeof import('clipboard-overlay') | null = null;
-let shizukuModule: typeof import('shizuku-clipboard') | null = null;
+let rootClipboardModule: typeof import('root-clipboard') | null = null;
 
 /**
  * 重置空闲计时器：每次悬浮窗被使用时调用，
@@ -53,7 +53,7 @@ function clearIdleTimer(): void {
 
 if (Platform.OS === 'android') {
   overlayModule = require('clipboard-overlay');
-  shizukuModule = require('shizuku-clipboard');
+  rootClipboardModule = require('root-clipboard');
 
   // 当应用回到前台时，自动销毁常驻悬浮窗并清除空闲计时器
   AppState.addEventListener('change', (nextAppState) => {
@@ -120,16 +120,16 @@ async function shouldUseOverlay(): Promise<boolean> {
 }
 
 /**
- * 判断是否应该使用 Shizuku 获取剪贴板
- * 条件：Android + 设置启用 + Shizuku 可用且有权限
- * Shizuku 优先级高于悬浮窗
+ * 判断是否应该使用 Root 获取剪贴板
+ * 条件：Android + 设置启用 + Root 可用
+ * Root 优先级高于悬浮窗
  */
-async function shouldUseShizuku(): Promise<boolean> {
-  if (Platform.OS !== 'android' || !shizukuModule) return false;
+async function shouldUseRoot(): Promise<boolean> {
+  if (Platform.OS !== 'android' || !rootClipboardModule) return false;
   const config = await configService.getConfig();
-  if (!(config?.enableShizukuClipboard ?? false)) return false;
-  if (!shizukuModule.isShizukuAvailable()) return false;
-  if (!shizukuModule.hasShizukuPermission()) return false;
+  if (!(config?.enableRootClipboard ?? false)) return false;
+  if (!rootClipboardModule.isRootAvailable()) return false;
+  if (!rootClipboardModule.checkRootPermission()) return false;
   return true;
 }
 
@@ -137,13 +137,13 @@ async function shouldUseShizuku(): Promise<boolean> {
  * 获取剪贴板文本
  */
 export async function getStringAsync(options?: Clipboard.GetStringOptions): Promise<string> {
-  if (await shouldUseShizuku()) {
+  if (await shouldUseRoot()) {
     try {
-      const result = await shizukuModule!.getStringViaShizuku();
+      const result = await rootClipboardModule!.getStringViaRoot();
       if (result && result.length > 0) return result;
-      console.warn('[ClipboardProxy] Shizuku getStringAsync returned empty, falling back');
+      console.warn('[ClipboardProxy] Root getStringAsync returned empty, falling back');
     } catch (e) {
-      console.warn('[ClipboardProxy] Shizuku getStringAsync failed, falling back:', e);
+      console.warn('[ClipboardProxy] Root getStringAsync failed, falling back:', e);
     }
   }
   if (await shouldUseOverlay()) {
@@ -172,11 +172,11 @@ export async function setStringAsync(
  * 检查剪贴板是否有文本
  */
 export async function hasStringAsync(): Promise<boolean> {
-  if (await shouldUseShizuku()) {
+  if (await shouldUseRoot()) {
     try {
-      return await shizukuModule!.hasStringViaShizuku();
+      return await rootClipboardModule!.hasStringViaRoot();
     } catch (e) {
-      console.warn('[ClipboardProxy] Shizuku hasStringAsync failed, falling back:', e);
+      console.warn('[ClipboardProxy] Root hasStringAsync failed, falling back:', e);
     }
   }
   if (await shouldUseOverlay()) {
@@ -193,11 +193,11 @@ export async function hasStringAsync(): Promise<boolean> {
  * 检查剪贴板是否有图片
  */
 export async function hasImageAsync(): Promise<boolean> {
-  if (await shouldUseShizuku()) {
+  if (await shouldUseRoot()) {
     try {
-      return await shizukuModule!.hasImageViaShizuku();
+      return await rootClipboardModule!.hasImageViaRoot();
     } catch (e) {
-      console.warn('[ClipboardProxy] Shizuku hasImageAsync failed, falling back:', e);
+      console.warn('[ClipboardProxy] Root hasImageAsync failed, falling back:', e);
     }
   }
   if (await shouldUseOverlay()) {

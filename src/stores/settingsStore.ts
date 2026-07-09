@@ -131,8 +131,8 @@ interface SettingsState {
   /** 设置悬浮窗获取剪贴板 */
   setEnableClipboardOverlay: (enabled: boolean) => Promise<void>;
 
-  /** 设置 Shizuku 获取剪贴板 */
-  setEnableShizukuClipboard: (enabled: boolean) => Promise<void>;
+  /** 设置 Root 获取剪贴板 */
+  setEnableRootClipboard: (enabled: boolean) => Promise<void>;
 
   /** 设置自动上传短信验证码 */
   setEnableSmsForwarding: (enabled: boolean) => Promise<void>;
@@ -373,8 +373,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     await get().updateConfig({ enableClipboardOverlay: enabled });
   },
 
-  setEnableShizukuClipboard: async (enabled: boolean) => {
-    await get().updateConfig({ enableShizukuClipboard: enabled });
+  setEnableRootClipboard: async (enabled: boolean) => {
+    await get().updateConfig({ enableRootClipboard: enabled });
   },
 
   setEnableSmsForwarding: async (enabled: boolean) => {

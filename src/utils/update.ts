@@ -5,12 +5,12 @@
 
 import i18n from '@/i18n';
 
-const GITHUB_RELEASES_API = 'https://api.github.com/repos/Jeric-X/syncclipboard-mobile/releases';
+const GITHUB_RELEASES_API = 'https://api.github.com/repos/shaklow/syncclipboard-mobile/releases';
 const GITEE_RELEASES_API =
-  'https://gitee.com/api/v5/repos/JericX/syncclipboard-mobile/releases?page=1&per_page=20&direction=desc';
-const RELEASES_PAGE_URL = 'https://github.com/Jeric-X/syncclipboard-mobile/releases';
-const GITEE_RELEASES_PAGE_URL = 'https://gitee.com/JericX/syncclipboard-mobile/releases';
-const GITEE_DOWNLOAD_BASE = 'https://gitee.com/JericX/syncclipboard-mobile/releases/download';
+  'https://gitee.com/api/v5/repos/shaklow/syncclipboard-mobile/releases?page=1&per_page=20&direction=desc';
+const RELEASES_PAGE_URL = 'https://github.com/shaklow/syncclipboard-mobile/releases';
+const GITEE_RELEASES_PAGE_URL = 'https://gitee.com/shaklow/syncclipboard-mobile/releases';
+const GITEE_DOWNLOAD_BASE = 'https://gitee.com/shaklow/syncclipboard-mobile/releases/download';
 
 export interface ParsedVersion {
   major: number;
@@ -179,7 +179,7 @@ async function checkForUpdateFromGitHub(
       latestVersion: latest.tag_name,
       tagName: latest.tag_name,
       releaseUrl: latest.html_url,
-      giteeReleaseUrl: `https://gitee.com/JericX/syncclipboard-mobile/releases/tag/${latest.tag_name}`,
+      giteeReleaseUrl: `https://gitee.com/shaklow/syncclipboard-mobile/releases/tag/${latest.tag_name}`,
       assets: apkAssets,
       releaseNotes: latest.body,
     };
@@ -193,7 +193,7 @@ async function checkForUpdateFromGitHub(
     latestVersion: versionToStr(latestParsed),
     tagName: latest.tag_name,
     releaseUrl: latest.html_url,
-    giteeReleaseUrl: `https://gitee.com/JericX/syncclipboard-mobile/releases/tag/${latest.tag_name}`,
+    giteeReleaseUrl: `https://gitee.com/shaklow/syncclipboard-mobile/releases/tag/${latest.tag_name}`,
     assets: apkAssets,
     releaseNotes: latest.body,
   };
@@ -270,7 +270,7 @@ async function checkForUpdateFromGitee(
     .filter((a) => a.name.endsWith('.apk'))
     .map((a) => ({
       name: a.name,
-      githubDownloadUrl: `https://github.com/Jeric-X/syncclipboard-mobile/releases/download/${latest.tag_name}/${a.name}`,
+      githubDownloadUrl: `https://github.com/shaklow/syncclipboard-mobile/releases/download/${latest.tag_name}/${a.name}`,
       giteeDownloadUrl: a.browser_download_url,
       sha256: undefined,
     }));
@@ -283,7 +283,7 @@ async function checkForUpdateFromGitee(
       hasUpdate: false,
       latestVersion: latest.tag_name,
       tagName: latest.tag_name,
-      releaseUrl: `https://github.com/Jeric-X/syncclipboard-mobile/releases/tag/${latest.tag_name}`,
+      releaseUrl: `https://github.com/shaklow/syncclipboard-mobile/releases/tag/${latest.tag_name}`,
       giteeReleaseUrl: latest.html_url,
       assets: apkAssets,
       releaseNotes: latest.body,
@@ -297,7 +297,7 @@ async function checkForUpdateFromGitee(
     hasUpdate,
     latestVersion: versionToStr(latestParsed),
     tagName: latest.tag_name,
-    releaseUrl: `https://github.com/Jeric-X/syncclipboard-mobile/releases/tag/${latest.tag_name}`,
+    releaseUrl: `https://github.com/shaklow/syncclipboard-mobile/releases/tag/${latest.tag_name}`,
     giteeReleaseUrl: latest.html_url,
     assets: apkAssets,
     releaseNotes: latest.body,
