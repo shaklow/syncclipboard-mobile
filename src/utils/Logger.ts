@@ -6,6 +6,7 @@ import { nativeZipFiles } from 'native-util';
 import * as Application from 'expo-application';
 import { saveFile } from './fileActions';
 import i18n from '@/i18n';
+import { configStorage } from '@/storage/ConfigStorage';
 
 const LOG_DIR = new Directory(Paths.document, 'logs');
 const MAX_LOG_DAYS = 3;
@@ -51,6 +52,9 @@ interface CustomTransportOptions {
 let isInitialized = false;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let logInstance: any = null;
+let currentLogLevel: LogLevel = 'info';
+let hasLoadedConfigLogLevel = false;
+let hasLoggedSystemInfo = false;
 
 const customFileTransport = (props: {
   msg: string;
@@ -84,15 +88,39 @@ const customFileTransport = (props: {
   }
 };
 
+function loadConfiguredLogLevel(): void {
+  if (hasLoadedConfigLogLevel) {
+    return;
+  }
+
+  hasLoadedConfigLogLevel = true;
+  configStorage
+    .getConfig()
+    .then((config) => {
+      setLogLevel(config.logLevel);
+      logSystemInfoOnce();
+    })
+    .catch((error) => {
+      console.error('Failed to load configured log level:', error);
+      logSystemInfoOnce();
+    });
+}
+
 export function initLogger(config?: Partial<LogConfig>): void {
   if (isInitialized) {
+    if (config?.level) {
+      setLogLevel(config.level);
+    } else {
+      loadConfiguredLogLevel();
+    }
     return;
   }
 
   const logConfig = {
-    level: config?.level ?? 'debug',
+    level: config?.level ?? currentLogLevel,
     enableConsole: config?.enableConsole ?? true,
   };
+  currentLogLevel = logConfig.level;
 
   const transports = logConfig.enableConsole
     ? [consoleTransport, customFileTransport]
@@ -117,10 +145,17 @@ export function initLogger(config?: Partial<LogConfig>): void {
   isInitialized = true;
 
   cleanOldLogs();
-  logSystemInfo();
+  if (!config?.level) {
+    loadConfiguredLogLevel();
+  } else {
+    logSystemInfoOnce();
+  }
 }
 
-function logSystemInfo(): void {
+function logSystemInfoOnce(): void {
+  if (hasLoggedSystemInfo) return;
+  hasLoggedSystemInfo = true;
+
   if (Platform.OS !== 'android') return;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const c = (Platform as any).constants;
@@ -145,6 +180,7 @@ export function getLogger(): any {
 }
 
 export function setLogLevel(level: LogLevel): void {
+  currentLogLevel = level;
   if (logInstance) {
     logInstance.setSeverity(level);
   }

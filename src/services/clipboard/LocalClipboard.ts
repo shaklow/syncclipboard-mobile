@@ -145,7 +145,7 @@ export class LocalClipboard {
           console.log(`[ClipboardManager] Text saved to file: ${fileName}, length: ${text.length}`);
         } else {
           // 文件已存在，直接使用
-          console.log(
+          console.debug(
             `[ClipboardManager] Text file already exists: ${fileName}, length: ${text.length}`
           );
         }
