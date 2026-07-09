@@ -84,12 +84,10 @@ fun LanguageCard(context: android.content.Context, activity: Activity?) {
         }
     }
 
-    val currentLangLabel = remember(language) {
-        when (language) {
-            "zh" -> stringResource(R.string.setting_language_zh)
-            "en" -> stringResource(R.string.setting_language_en)
-            else -> "${stringResource(R.string.setting_language_auto)}（$systemLang）"
-        }
+    val currentLangLabel = when (language) {
+        "zh" -> stringResource(R.string.setting_language_zh)
+        "en" -> stringResource(R.string.setting_language_en)
+        else -> "${stringResource(R.string.setting_language_auto)}（$systemLang）"
     }
 
     Card(
@@ -136,13 +134,11 @@ fun LanguageDialog(
         }
     }
 
-    val options = remember {
-        listOf(
-            "" to "${stringResource(R.string.setting_language_auto)}（$systemLang）",
-            "zh" to stringResource(R.string.setting_language_zh),
-            "en" to stringResource(R.string.setting_language_en)
-        )
-    }
+    val options = listOf(
+        "" to "${stringResource(R.string.setting_language_auto)}（$systemLang）",
+        "zh" to stringResource(R.string.setting_language_zh),
+        "en" to stringResource(R.string.setting_language_en)
+    )
 
     AlertDialog(
         onDismissRequest = onDismiss,
