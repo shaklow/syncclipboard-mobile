@@ -641,7 +641,7 @@ export const SettingsScreen = () => {
       // 检查 Root 是否可用
       if (!isRootAvailable()) {
         Alert.alert(t('settings.rootNotAvailableTitle'), t('settings.rootNotAvailableMessage'), [
-          { text: t('common.ok') },
+          { text: t('common.confirm') },
         ]);
         return;
       }
@@ -1698,7 +1698,7 @@ export const SettingsScreen = () => {
                   Alert.alert(
                     t('settings.rootNotAvailableTitle'),
                     t('settings.rootNotAvailableMessage'),
-                    [{ text: t('common.ok') }]
+                    [{ text: t('common.confirm') }]
                   );
                   return;
                 }
