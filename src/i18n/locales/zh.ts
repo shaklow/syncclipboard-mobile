@@ -329,20 +329,16 @@ const zh = {
     newVersionTitle: '发现新版本',
     newVersionMessage:
       '最新版本：{{newVersion}}\n当前版本：{{currentVersion}}\n\n更新说明：\n{{notes}}\n\n请选择下载渠道',
+    newVersionMessageWithNotes:
+      '最新版本：{{newVersion}}\n当前版本：{{currentVersion}}\n\n更新说明：\n{{notes}}',
     newVersionMessageNoNotes:
-      '最新版本：{{newVersion}}\n当前版本：{{currentVersion}}\n\n请选择下载渠道',
-    newVersionMessageWithChannel:
-      '最新版本：{{newVersion}}\n当前版本：{{currentVersion}}\n下载通道：{{channel}}\n\n更新说明：\n{{notes}}',
-    newVersionMessageNoNotesWithChannel:
-      '最新版本：{{newVersion}}\n当前版本：{{currentVersion}}\n下载通道：{{channel}}',
-    downloadGitee: 'Gitee 下载',
+      '最新版本：{{newVersion}}\n当前版本：{{currentVersion}}',
     downloadGitHub: 'GitHub 下载',
     updateNow: '立即更新',
     noSuitableApk: '找不到适合当前设备的 APK',
     downloadCanceled: '已取消下载',
     autoCheckUpdate: '自动检查更新',
     updateToBeta: '更新到测试版',
-    updateChannel: '更新通道',
     openSource: 'SyncClipboard 是开源软件',
     cancelDownloadTitle: '取消下载',
     cancelDownloadMessage: '确定要取消下载吗？',
@@ -496,7 +492,6 @@ const zh = {
     parseShareFailed: '解析分享内容失败: {{message}}',
     noShareContent: '没有可处理的分享内容',
     githubApiFailed: 'GitHub API 请求失败: {{status}}',
-    giteeApiFailed: 'Gitee API 请求失败: {{status}}',
     apkHashMismatch: 'APK 哈希校验失败：期望 {{expected}}，实际 {{actual}}',
   },
 } as const;

@@ -65,9 +65,6 @@ export interface AppConfig {
   /** 是否更新到测试版（beta） */
   updateToBeta: boolean;
 
-  /** 更新通道 */
-  updateChannel: 'github' | 'gitee';
-
   /** 是否启用历史记录同步 */
   enableHistorySync: boolean;
 
@@ -316,7 +313,6 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   autoCheckUpdate: true,
   lastUpdateCheckDate: '',
   updateToBeta: false,
-  updateChannel: 'github',
   enableHistorySync: false, // 默认关闭历史记录同步
   logLevel: 'info', // 默认 info 级别
   remotePollingInterval: 3000, // 默认 3 秒

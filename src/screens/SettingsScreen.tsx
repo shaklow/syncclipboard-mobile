@@ -50,7 +50,6 @@ import {
   installApk,
   cleanOldApkCache,
   type ReleaseAssetInfo,
-  type ApkSource,
   formatFileSize,
 } from '@/utils';
 import { Plus, RefreshCw, ChevronDown, ChevronUp } from 'react-native-feather';
@@ -83,7 +82,6 @@ export const SettingsScreen = () => {
     setAutoCheckUpdate,
     setLastUpdateCheckDate,
     setUpdateToBeta,
-    setUpdateChannel,
     setEnableHistorySync,
     setLogLevel,
     setRemotePollingInterval,
@@ -113,9 +111,6 @@ export const SettingsScreen = () => {
   );
   const [localUpdateToBetaEnabled, setLocalUpdateToBetaEnabled] = useState(
     config?.updateToBeta ?? false
-  );
-  const [localUpdateChannel, setLocalUpdateChannel] = useState<'github' | 'gitee'>(
-    config?.updateChannel ?? 'github'
   );
   const [localHistorySyncEnabled, setLocalHistorySyncEnabled] = useState(
     config?.enableHistorySync ?? false
@@ -208,10 +203,6 @@ export const SettingsScreen = () => {
   useEffect(() => {
     setLocalUpdateToBetaEnabled(config?.updateToBeta ?? false);
   }, [config?.updateToBeta]);
-
-  useEffect(() => {
-    setLocalUpdateChannel(config?.updateChannel ?? 'github');
-  }, [config?.updateChannel]);
 
   useEffect(() => {
     setLocalHistorySyncEnabled(config?.enableHistorySync ?? true);
@@ -991,32 +982,6 @@ export const SettingsScreen = () => {
     }
   };
 
-  const handleToggleUpdateChannel = async (channel: 'github' | 'gitee') => {
-    // 静默取消正在进行的检查更新
-    if (updateCheckAbortRef.current) {
-      updateCheckAbortRef.current.abort();
-      updateCheckAbortRef.current = null;
-    }
-    // 静默取消正在进行的下载
-    if (downloadAbortRef.current) {
-      downloadAbortRef.current.abort();
-      downloadAbortRef.current = null;
-    }
-    // 重置状态
-    setIsCheckingUpdate(false);
-    setIsDownloading(false);
-    setUpdateAvailable(false);
-    setLatestVersion(null);
-
-    setLocalUpdateChannel(channel);
-    try {
-      await setUpdateChannel(channel);
-    } catch (error: unknown) {
-      setLocalUpdateChannel(channel === 'github' ? 'gitee' : 'github');
-      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
-    }
-  };
-
   const handleToggleHistorySync = async (enabled: boolean) => {
     try {
       const { getHistorySyncService } = await import('@/services/history/HistorySyncService');
@@ -1097,11 +1062,9 @@ export const SettingsScreen = () => {
       const today = new Date().toISOString().slice(0, 10);
       await setLastUpdateCheckDate(today);
       const useBeta = includeBeta ?? config?.updateToBeta ?? false;
-      const channel = config?.updateChannel ?? 'github';
       const result = await checkForUpdate(
         appVersion,
         useBeta,
-        channel,
         updateCheckAbortRef.current.signal
       );
       if (result.hasUpdate) {
@@ -1176,32 +1139,27 @@ export const SettingsScreen = () => {
   };
 
   const showUpdateDialog = (version: string, assets: ReleaseAssetInfo[], releaseNotes?: string) => {
-    const channel = config?.updateChannel ?? 'github';
-    const channelName = channel === 'github' ? 'GitHub' : 'Gitee';
     const body = releaseNotes
-      ? t('settings.newVersionMessageWithChannel', {
-          newVersion: version,
-          currentVersion: appVersion,
-          channel: channelName,
-          notes: releaseNotes,
-        })
-      : t('settings.newVersionMessageNoNotesWithChannel', {
-          newVersion: version,
-          currentVersion: appVersion,
-          channel: channelName,
-        });
+      ? t('settings.newVersionMessageWithNotes', {
+        newVersion: version,
+        currentVersion: appVersion,
+        notes: releaseNotes,
+      })
+      : t('settings.newVersionMessageNoNotes', {
+        newVersion: version,
+        currentVersion: appVersion,
+      });
     Alert.alert(t('settings.newVersionTitle'), body, [
       { text: t('common.later'), style: 'cancel' },
       {
         text: t('settings.updateNow'),
-        onPress: () => handleDownloadApk(channel, version, assets),
+        onPress: () => handleDownloadApk(version, assets),
       },
     ]);
   };
 
   // 下载 APK
   const handleDownloadApk = async (
-    source: ApkSource,
     version: string,
     assets: ReleaseAssetInfo[]
   ) => {
@@ -1222,7 +1180,7 @@ export const SettingsScreen = () => {
 
     const asset = findAssetForAbi(assets, preferredAbi as Parameters<typeof findAssetForAbi>[1]);
     console.log(
-      `[UpdateDownload] source=${source} version=${version} assets=${assets
+      `[UpdateDownload] version=${version} assets=${assets
         .map((a) => a.name)
         .join(',')} selectedAsset=${asset?.name ?? 'none'}`
     );
@@ -1248,7 +1206,6 @@ export const SettingsScreen = () => {
 
       const fileUri = await downloadApk({
         asset,
-        source,
         version,
         signal: abortController.signal,
         onProgress: (info) => {
@@ -1461,7 +1418,7 @@ export const SettingsScreen = () => {
               <ServerListItem
                 config={activeServer}
                 isActive={true}
-                onPress={() => {}}
+                onPress={() => { }}
                 onEdit={() => handleEditServer(activeServerIndex)}
                 onDelete={() => handleDeleteServer(activeServerIndex)}
               />
@@ -1878,16 +1835,6 @@ export const SettingsScreen = () => {
             label={t('settings.updateToBeta')}
             value={localUpdateToBetaEnabled}
             onChange={handleToggleUpdateToBeta}
-          />
-
-          <SettingDropdown
-            label={t('settings.updateChannel')}
-            options={[
-              { label: 'Gitee', value: 'gitee' as const },
-              { label: 'GitHub', value: 'github' as const },
-            ]}
-            value={localUpdateChannel}
-            onChange={(value) => handleToggleUpdateChannel(value)}
           />
 
           <SettingItem description={t('settings.openSource')}>

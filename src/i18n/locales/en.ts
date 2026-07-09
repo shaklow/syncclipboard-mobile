@@ -340,20 +340,16 @@ const en: DeepString<typeof zh> = {
     newVersionTitle: 'New version available',
     newVersionMessage:
       'Latest: {{newVersion}}\nCurrent: {{currentVersion}}\n\nRelease notes:\n{{notes}}\n\nSelect download source',
+    newVersionMessageWithNotes:
+      'Latest: {{newVersion}}\nCurrent: {{currentVersion}}\n\nRelease notes:\n{{notes}}',
     newVersionMessageNoNotes:
-      'Latest: {{newVersion}}\nCurrent: {{currentVersion}}\n\nSelect download source',
-    newVersionMessageWithChannel:
-      'Latest: {{newVersion}}\nCurrent: {{currentVersion}}\nChannel: {{channel}}\n\nRelease notes:\n{{notes}}',
-    newVersionMessageNoNotesWithChannel:
-      'Latest: {{newVersion}}\nCurrent: {{currentVersion}}\nChannel: {{channel}}',
-    downloadGitee: 'Download from Gitee',
+      'Latest: {{newVersion}}\nCurrent: {{currentVersion}}',
     downloadGitHub: 'Download from GitHub',
     updateNow: 'Update Now',
     noSuitableApk: 'No suitable APK found for this device',
     downloadCanceled: 'Download canceled',
     autoCheckUpdate: 'Auto-check for updates',
     updateToBeta: 'Update to beta',
-    updateChannel: 'Update Channel',
     openSource: 'SyncClipboard is open source software',
     cancelDownloadTitle: 'Cancel Download',
     cancelDownloadMessage: 'Cancel the current download?',
@@ -507,7 +503,6 @@ const en: DeepString<typeof zh> = {
     parseShareFailed: 'Failed to parse shared content: {{message}}',
     noShareContent: 'No shared content to process',
     githubApiFailed: 'GitHub API request failed: {{status}}',
-    giteeApiFailed: 'Gitee API request failed: {{status}}',
     apkHashMismatch: 'APK hash mismatch: expected {{expected}}, got {{actual}}',
   },
 };

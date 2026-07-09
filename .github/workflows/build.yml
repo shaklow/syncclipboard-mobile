@@ -25,9 +25,3 @@ jobs:
     if: ${{ startsWith(github.ref, 'refs/tags/') }}
     needs: [code-style, android-build, unit-tests]
     uses: ./.github/workflows/publish-github-release.yml
-
-  publish-gitee-release:
-    name: Publish Gitee Release
-    needs: [code-style, android-build, unit-tests]
-    uses: ./.github/workflows/publish-gitee-release.yml
-    secrets: inherit

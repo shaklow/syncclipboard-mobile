@@ -16,7 +16,6 @@ function getUpdateCacheDir(version: string): Directory {
 
 /** 确保 APK 缓存目录链存在 */
 function ensureUpdateDirExists(version: string): void {
-  // 逐级创建：temp_files → updates → v{version}
   const dirs = [
     new Directory(Paths.cache, 'temp_files'),
     new Directory(Paths.cache, 'temp_files', 'updates'),
@@ -27,7 +26,7 @@ function ensureUpdateDirExists(version: string): void {
       try {
         dir.create();
       } catch (e) {
-        if (!dir.exists) throw e; // 真实错误才抛出
+        if (!dir.exists) throw e;
       }
     }
   }
@@ -39,7 +38,6 @@ export function getApkCachePath(version: string, fileName: string): File {
 
 /**
  * 清除当前版本及更旧版本的 APK 缓存目录
- * @param currentVersion 当前 app 版本字符串（如 "1.0.11"）
  */
 export function cleanOldApkCache(currentVersion: string): void {
   const updatesDir = new Directory(Paths.cache, 'temp_files', 'updates');
@@ -50,13 +48,11 @@ export function cleanOldApkCache(currentVersion: string): void {
 
   try {
     for (const item of updatesDir.list()) {
-      // 目录名格式为 v{version}
       const name = item.uri.split('/').filter(Boolean).pop() ?? '';
       if (!name.startsWith('v')) continue;
       const versionStr = name.slice(1);
       const parsed = parseVersion(versionStr);
       if (!parsed) continue;
-      // 删除 <= 当前版本的目录
       if (compareVersions(parsed, currentParsed) <= 0) {
         try {
           (item as Directory).delete();
@@ -70,8 +66,6 @@ export function cleanOldApkCache(currentVersion: string): void {
     console.warn('[ApkCache] cleanOldApkCache error:', e);
   }
 }
-
-export type ApkSource = 'github' | 'gitee';
 
 const SUPPORTED_ABI_NAMES = ['arm64-v8a', 'armeabi-v7a', 'x86_64'] as const;
 type ApkAbi = (typeof SUPPORTED_ABI_NAMES)[number] | 'universal';
@@ -90,7 +84,6 @@ export function getPreferredAbi(supportedAbis: string[]): ApkAbi {
 
 /**
  * 从 assets 列表中找到匹配指定 ABI 的 APK 资产
- * 优先精确匹配，找不到时回退到 universal
  */
 export function findAssetForAbi(
   assets: ReleaseAssetInfo[],
@@ -109,7 +102,6 @@ export interface ApkDownloadProgress {
 
 export interface ApkDownloadOptions {
   asset: ReleaseAssetInfo;
-  source: ApkSource;
   version: string;
   onProgress?: (info: ApkDownloadProgress) => void;
   signal?: AbortSignal;
@@ -117,7 +109,6 @@ export interface ApkDownloadOptions {
 
 /**
  * 检查 APK 是否已缓存且哈希匹配
- * @returns 缓存文件的 URI（file://...），或 null
  */
 export async function checkApkCache(
   version: string,
@@ -126,7 +117,6 @@ export async function checkApkCache(
   const file = getApkCachePath(version, asset.name);
   if (!file.exists) return null;
 
-  // 若没有期望哈希则认为缓存有效
   if (!asset.sha256) return file.uri;
 
   try {
@@ -135,7 +125,6 @@ export async function checkApkCache(
     if (hash.toLowerCase() === asset.sha256.toLowerCase()) {
       return file.uri;
     }
-    // 哈希不匹配，删除旧文件
     file.delete();
     return null;
   } catch {
@@ -145,64 +134,44 @@ export async function checkApkCache(
 
 /**
  * 下载 APK 并验证哈希
- * @returns 下载后文件的 URI（file://...）
- * @throws 下载失败、哈希校验失败或被取消时抛出异常
  */
 export async function downloadApk(options: ApkDownloadOptions): Promise<string> {
-  const { asset, source, version, onProgress, signal } = options;
-  const url = source === 'github' ? asset.githubDownloadUrl : asset.giteeDownloadUrl;
-  console.log(`[ApkDownload] start source=${source} url=${url}`);
+  const { asset, version, onProgress, signal } = options;
+  const url = asset.downloadUrl;
+  console.log(`[ApkDownload] start url=${url}`);
 
-  // 确保缓存目录存在（含父目录）
   const cacheDir = getUpdateCacheDir(version);
-  console.log(`[ApkDownload] cacheDir=${cacheDir.uri} exists=${cacheDir.exists}`);
   ensureUpdateDirExists(version);
-  console.log('[ApkDownload] cacheDir ready');
 
   const destFile = getApkCachePath(version, asset.name);
-  console.log(`[ApkDownload] destFile=${destFile.uri} exists=${destFile.exists}`);
-  // 删除已有的不完整文件
   if (destFile.exists) {
     destFile.delete();
-    console.log('[ApkDownload] deleted stale file');
   }
 
   const { nativeDownloadFile } = await import('native-util');
-  console.log('[ApkDownload] starting nativeDownloadFile...');
-  try {
-    await nativeDownloadFile(
-      url,
-      {},
-      destFile.uri,
-      signal,
-      onProgress
-        ? (info) =>
-            onProgress({
-              progress: info.progress,
-              bytesReceived: info.bytesTransferred,
-              totalBytes: info.totalBytes,
-            })
-        : undefined
-    );
-  } catch (e) {
-    console.error('[ApkDownload] nativeDownloadFile failed:', e);
-    throw e;
-  }
-  console.log('[ApkDownload] download completed, file exists:', destFile.exists);
+  await nativeDownloadFile(
+    url,
+    {},
+    destFile.uri,
+    signal,
+    onProgress
+      ? (info) =>
+          onProgress({
+            progress: info.progress,
+            bytesReceived: info.bytesTransferred,
+            totalBytes: info.totalBytes,
+          })
+      : undefined
+  );
 
   // 校验哈希
   if (asset.sha256) {
-    console.log(`[ApkDownload] verifying hash, expected=${asset.sha256}`);
     const { nativeCalculateFileHash } = await import('native-util');
     const hash = await nativeCalculateFileHash(destFile.uri, signal);
-    console.log(`[ApkDownload] actual hash=${hash}`);
     if (hash.toLowerCase() !== asset.sha256.toLowerCase()) {
       destFile.delete();
       throw new Error(i18n.t('error.apkHashMismatch', { expected: asset.sha256, actual: hash }));
     }
-    console.log('[ApkDownload] hash verified OK');
-  } else {
-    console.log('[ApkDownload] no expected hash, skipping verification');
   }
 
   return destFile.uri;
