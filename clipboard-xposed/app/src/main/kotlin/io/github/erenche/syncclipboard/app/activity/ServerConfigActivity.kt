@@ -29,6 +29,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import io.github.erenche.syncclipboard.app.R
 import io.github.erenche.syncclipboard.app.compose.AppToolBarListContainer
 import io.github.erenche.syncclipboard.bridge.BridgeKeys
@@ -300,7 +302,36 @@ fun ServerEditDialog(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // 表单状态 — 只在首次弹出时初始化，关闭时不重置 (key by serverIndex to reset on different server)
+    val isEditing = server != null
+
+    if (!show) return
+
+    // key() ensures form state resets for different serverIndex
+    key(serverIndex) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp)
+            ) {
+                // 标题
+                Text(
+                    text = stringResource(if (isEditing) R.string.server_edit else R.string.server_add),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+    // 表单状态
     var serverType by remember {
         mutableStateOf(server?.type ?: ServerType.syncclipboard)
     }
@@ -315,18 +346,6 @@ fun ServerEditDialog(
 
     var showPassword by remember { mutableStateOf(false) }
     var isTesting by remember { mutableStateOf(false) }
-
-    val isEditing = server != null
-
-    OverlayDialog(
-        show = show,
-        title = stringResource(if (isEditing) R.string.server_edit else R.string.server_add),
-        onDismissRequest = onDismiss
-    ) {
-        Column(
-            modifier = Modifier
-                .verticalScroll(rememberScrollState())
-        ) {
             // ── 服务器类型选择 ─────────────────────────────
             Text(
                 text = stringResource(R.string.server_type_label),
@@ -695,6 +714,8 @@ fun ServerEditDialog(
                 )
             }
         }
+    }
+    }
     }
 }
 
