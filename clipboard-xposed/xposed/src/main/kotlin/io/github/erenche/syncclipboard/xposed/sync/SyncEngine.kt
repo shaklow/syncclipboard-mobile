@@ -57,6 +57,9 @@ class SyncEngine private constructor() {
     private var appContext: Context? = null
     private var historyService: HistoryService? = null
 
+    /** 当前进程名 — 用于日志区分 app 进程和 systemui 进程的实例 */
+    private var processName: String = "unknown"
+
     // 哈希去重 — @Volatile 保证跨线程可见性
     @Volatile
     private var lastLocalHash: String? = null
@@ -105,15 +108,15 @@ class SyncEngine private constructor() {
      * 必须在 Application.onCreate() 之后调用。
      */
     fun initialize(context: Context) {
-        val processName = getProcessName(context)
-        android.util.Log.w("SyncClipboard", "[SyncEngine] initialize() called, process=$processName, appContext=$appContext")
+        android.util.Log.w("SyncClipboard", "[SyncEngine] initialize() called, process=${getProcessName(context)}, appContext=$appContext")
 
         if (appContext != null) {
             android.util.Log.w("SyncClipboard", "[SyncEngine] Already initialized, skipping")
             return
         }
         appContext = context.applicationContext
-        android.util.Log.w("SyncClipboard", "[SyncEngine] appContext set, package=${appContext?.packageName}")
+        processName = getProcessName(context)
+        android.util.Log.w("SyncClipboard", "[SyncEngine] appContext set, process=$processName")
 
         // 初始化历史记录服务
         historyService = HistoryService(context)
@@ -360,22 +363,26 @@ class SyncEngine private constructor() {
 
     /**
      * 上传剪贴板内容到服务器。
+     * 在发起 HTTP 请求前设置 lastRemoteHash，防止并发轮询检测到相同的 profile 并触发下载。
      */
     private suspend fun uploadContent(content: ClipboardContent) {
         val client = apiClient ?: return
+
+        // 预先计算 profile hash 并设置 lastRemoteHash
+        // 必须在 HTTP 调用前完成，否则轮询协程可能在 PUT 期间检测到变化并触发重复下载
+        val profileHash = HashUtils.computeProfileHash(
+            content.type.name.lowercase(),
+            content.text
+        )
+        lastRemoteHash = profileHash
 
         try {
             client.putContent(content)
             lastSyncTime = System.currentTimeMillis()
             isConnected = true  // 上传成功，服务器可达
-            // 设置 lastRemoteHash，防止轮询循环立即下载刚上传的内容
-            val profileHash = HashUtils.computeProfileHash(
-                content.type.name.lowercase(),
-                content.text
-            )
-            lastRemoteHash = profileHash
-            Logger.info(TAG, "Content uploaded successfully")
+            android.util.Log.w("SyncClipboard", "[SyncEngine/$processName] Content uploaded successfully")
         } catch (e: Exception) {
+            // 上传失败：重置哈希以便后续重试
             Logger.error(TAG, "Upload failed", e)
         }
     }

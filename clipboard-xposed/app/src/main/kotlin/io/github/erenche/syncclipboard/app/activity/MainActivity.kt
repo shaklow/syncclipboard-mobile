@@ -49,15 +49,21 @@ class MainActivity : BaseActivity(), SyncClipboardApp.XposedServiceStateListener
 
     override fun onServiceStateChanged(service: io.github.libxposed.service.XposedService?) {
         viewModel.isModuleActive.value = service != null
-        // Push config to xposed process when service connects
+        // Push config to both processes when service connects
         if (service != null) {
             lifecycleScope.launch {
                 try {
                     val config = Prefs.loadConfig(this@MainActivity)
                     val configJson = Json.encodeToString(AppConfig.serializer(), config)
+                    val payload = android.os.Bundle().apply { putString("config", configJson) }
                     SyncClipboardBridge.with(this@MainActivity)
-                                                .key(BridgeKeys.PUSH_CONFIG)
-                        .payload(android.os.Bundle().apply { putString("config", configJson) })
+                        .key(BridgeKeys.PUSH_CONFIG)
+                        .payload(payload)
+                        .send()
+                    SyncClipboardBridge.with(this@MainActivity)
+                        .to("com.android.systemui")
+                        .key(BridgeKeys.PUSH_CONFIG)
+                        .payload(payload)
                         .send()
                 } catch (_: Exception) {}
             }
@@ -70,15 +76,24 @@ fun MainScreen(viewModel: MainViewModel) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // Push current config to xposed process on startup
+    // Push current config to both app process and systemui process on startup
     LaunchedEffect(Unit) {
         try {
             val config = Prefs.loadConfig(context)
             val configJson = Json.encodeToString(AppConfig.serializer(), config)
+            val payload = android.os.Bundle().apply { putString("config", configJson) }
+            // Push to local SyncEngine
             SyncClipboardBridge.with(context)
-                                .key(BridgeKeys.PUSH_CONFIG)
-                .payload(android.os.Bundle().apply { putString("config", configJson) })
+                .key(BridgeKeys.PUSH_CONFIG)
+                .payload(payload)
                 .send()
+            // Also push to systemui SyncEngine (for background clipboard monitoring)
+            SyncClipboardBridge.with(context)
+                .to("com.android.systemui")
+                .key(BridgeKeys.PUSH_CONFIG)
+                .payload(payload)
+                .send()
+            android.util.Log.w("SyncClipboard", "[MainScreen] Config pushed to both app and systemui")
         } catch (_: Exception) {}
     }
 

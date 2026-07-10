@@ -73,14 +73,13 @@ fun ServerConfigScreen() {
     var editingIndex by remember { mutableIntStateOf(-1) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
-    // Push current config to xposed process on screen load
+    // Push current config to both app and systemui process on screen load
     LaunchedEffect(Unit) {
         try {
             val configJson = Json.encodeToString(AppConfig.serializer(), appConfig)
-            SyncClipboardBridge.with(context)
-                                .key(BridgeKeys.PUSH_CONFIG)
-                .payload(android.os.Bundle().apply { putString("config", configJson) })
-                .send()
+            val payload = android.os.Bundle().apply { putString("config", configJson) }
+            SyncClipboardBridge.with(context).key(BridgeKeys.PUSH_CONFIG).payload(payload).send()
+            SyncClipboardBridge.with(context).to("com.android.systemui").key(BridgeKeys.PUSH_CONFIG).payload(payload).send()
         } catch (_: Exception) {}
     }
 
@@ -91,14 +90,13 @@ fun ServerConfigScreen() {
     fun saveConfig(config: AppConfig) {
         Prefs.saveConfig(context, config)
         appConfig = config
-        // Push config to xposed process so SyncEngine can use it
+        // Push config to both processes so SyncEngine can use it
         scope.launch {
             try {
                 val configJson = Json.encodeToString(AppConfig.serializer(), config)
-                SyncClipboardBridge.with(context)
-                                        .key(BridgeKeys.PUSH_CONFIG)
-                    .payload(android.os.Bundle().apply { putString("config", configJson) })
-                    .send()
+                val payload = android.os.Bundle().apply { putString("config", configJson) }
+                SyncClipboardBridge.with(context).key(BridgeKeys.PUSH_CONFIG).payload(payload).send()
+                SyncClipboardBridge.with(context).to("com.android.systemui").key(BridgeKeys.PUSH_CONFIG).payload(payload).send()
             } catch (_: Exception) {}
         }
     }
