@@ -100,6 +100,31 @@ object SyncClipboardBridge {
      */
     fun with(context: Context) = RequestTask(context.applicationContext)
 
+    /**
+     * 直接在当前进程中查找并调用处理器（绕过广播）。
+     * 用于同一进程内的通信，避免广播投递失败。
+     */
+    fun invokeHandler(
+        key: String,
+        data: Bundle,
+        onReply: (Bundle) -> Unit
+    ) {
+        val handler = handlers[key]
+        if (handler == null) {
+            onReply(Bundle.EMPTY)
+            return
+        }
+        bridgeScope.launch {
+            try {
+                val result = handler(data) ?: Bundle.EMPTY
+                onReply(result)
+            } catch (e: Exception) {
+                onReply(Bundle.EMPTY)
+                e.printStackTrace()
+            }
+        }
+    }
+
     // ─── 内部作用域类 ──────────────────────────────────────────────
 
     /**
@@ -199,6 +224,17 @@ object SyncClipboardBridge {
         private fun executeInternal(onReplyAction: ((Bundle) -> Unit)?) {
             val targetKey = key
                 ?: throw IllegalArgumentException("SyncClipboardBridge: key missing")
+
+            // 同一进程内通信 — 直接调用处理器，绕过广播
+            if (targetPkg == context.packageName) {
+                SyncClipboardBridge.invokeHandler(
+                    key = targetKey,
+                    data = data,
+                    onReply = { bundle -> onReplyAction?.invoke(bundle) }
+                )
+                return
+            }
+
             val intent = Intent(ACTION_IPC).apply {
                 `package` = targetPkg
                 putExtra(EXTRA_KEY, targetKey)
