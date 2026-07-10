@@ -50,6 +50,7 @@ configure<LibraryExtension> {
 dependencies {
     implementation(project(":bridge"))
     implementation(project(":common"))
+    implementation(project(":xposed"))
 
     implementation(libs.libxposed.service)
 

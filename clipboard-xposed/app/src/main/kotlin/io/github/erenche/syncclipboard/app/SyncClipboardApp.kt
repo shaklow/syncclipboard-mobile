@@ -26,6 +26,16 @@ class SyncClipboardApp : Application() {
         super.onCreate()
         Log.i(TAG, "SyncClipboardApp created")
 
+        // 直接初始化 SyncEngine，不依赖 LSPosed 钩子
+        // 确保 bridge 处理器在 app 进程中始终可用
+        android.util.Log.w("SyncClipboard", "[SyncClipboardApp] Initializing SyncEngine directly...")
+        try {
+            io.github.erenche.syncclipboard.xposed.sync.SyncEngine.getInstance().initialize(this)
+            android.util.Log.w("SyncClipboard", "[SyncClipboardApp] SyncEngine initialized successfully")
+        } catch (e: Exception) {
+            android.util.Log.w("SyncClipboard", "[SyncClipboardApp] SyncEngine init failed: ${e.message}", e)
+        }
+
         XposedServiceHelper.registerListener(object : XposedServiceHelper.OnServiceListener {
             override fun onServiceBind(service: XposedService) {
                 Log.i(TAG, "XposedService bind")
