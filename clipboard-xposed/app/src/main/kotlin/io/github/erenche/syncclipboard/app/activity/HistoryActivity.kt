@@ -7,6 +7,7 @@ import android.content.Context
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -127,12 +128,12 @@ fun HistoryItemCard(item: HistoryDisplayItem, context: Context) {
                     color = MiuixTheme.colorScheme.primary,
                     modifier = Modifier
                         .padding(start = 8.dp)
-                        .then(
-                            Modifier.let { mod ->
-                                // 简单点击复制 — 使用 clickable modifier 的替代方案
-                                mod
-                            }
-                        )
+                        .clickable {
+                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                            val clip = ClipData.newPlainText("SyncClipboard", item.text)
+                            cm?.setPrimaryClip(clip)
+                            Toast.makeText(context, R.string.history_copied, Toast.LENGTH_SHORT).show()
+                        }
                 )
             }
         }

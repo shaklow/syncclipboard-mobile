@@ -181,58 +181,55 @@ fun ServerConfigScreen() {
     }
 
     // ── 编辑/添加对话框 ────────────────────────────────────────
-    if (showEditDialog) {
-        ServerEditDialog(
-            server = editingServer,
-            serverIndex = editingIndex,
-            existingServers = appConfig.servers,
-            activeServerIndex = appConfig.activeServerIndex,
-            onSave = { newServer ->
-                val servers = appConfig.servers.toMutableList()
-                if (editingIndex >= 0) {
-                    servers[editingIndex] = newServer
-                } else {
-                    servers.add(newServer)
-                }
-                var newConfig = appConfig.copy(servers = servers)
-                // 如果是第一个添加的服务器，自动设为激活
-                if (appConfig.activeServerIndex < 0) {
-                    newConfig = newConfig.copy(activeServerIndex = 0)
-                }
-                saveConfig(newConfig)
-                showEditDialog = false
-                Toast.makeText(
-                    context,
-                    if (editingIndex >= 0) context.getString(R.string.server_test_success)
-                        .replace("successful", "updated")
-                    else context.getString(R.string.server_test_success)
-                        .replace("successful", "added"),
-                    Toast.LENGTH_SHORT
-                ).show()
-            },
-            onDelete = if (editingIndex >= 0) {{
-                showDeleteConfirm = true
-            }} else null,
-            onSetActive = if (editingIndex >= 0 && editingIndex != appConfig.activeServerIndex) {{
-                saveConfig(appConfig.copy(activeServerIndex = editingIndex))
-                showEditDialog = false
-            }} else null,
-            onDismiss = { showEditDialog = false }
-        )
-    }
+    ServerEditDialog(
+        show = showEditDialog,
+        server = editingServer,
+        serverIndex = editingIndex,
+        existingServers = appConfig.servers,
+        activeServerIndex = appConfig.activeServerIndex,
+        onSave = { newServer ->
+            val servers = appConfig.servers.toMutableList()
+            if (editingIndex >= 0) {
+                servers[editingIndex] = newServer
+            } else {
+                servers.add(newServer)
+            }
+            var newConfig = appConfig.copy(servers = servers)
+            if (appConfig.activeServerIndex < 0) {
+                newConfig = newConfig.copy(activeServerIndex = 0)
+            }
+            saveConfig(newConfig)
+            showEditDialog = false
+            Toast.makeText(
+                context,
+                if (editingIndex >= 0) context.getString(R.string.server_test_success)
+                    .replace("successful", "updated")
+                else context.getString(R.string.server_test_success)
+                    .replace("successful", "added"),
+                Toast.LENGTH_SHORT
+            ).show()
+        },
+        onDelete = if (editingIndex >= 0) {{
+            showDeleteConfirm = true
+        }} else null,
+        onSetActive = if (editingIndex >= 0 && editingIndex != appConfig.activeServerIndex) {{
+            saveConfig(appConfig.copy(activeServerIndex = editingIndex))
+            showEditDialog = false
+        }} else null,
+        onDismiss = { showEditDialog = false }
+    )
 
     // ── 删除确认对话框 ─────────────────────────────────────────
-    if (showDeleteConfirm && editingIndex >= 0) {
+    OverlayDialog(
+        show = showDeleteConfirm && editingIndex >= 0,
+        title = stringResource(R.string.server_delete),
+        summary = stringResource(
+            R.string.server_delete_confirm,
+            editingServer?.name ?: editingServer?.url ?: ""
+        ),
+        onDismissRequest = { showDeleteConfirm = false }
+    ) {
         val server = editingServer
-        OverlayDialog(
-            show = true,
-            title = stringResource(R.string.server_delete),
-            summary = stringResource(
-                R.string.server_delete_confirm,
-                server?.name ?: server?.url ?: ""
-            ),
-            onDismissRequest = { showDeleteConfirm = false }
-        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -259,15 +256,11 @@ fun ServerConfigScreen() {
                         showEditDialog = false
                         showDeleteConfirm = false
                     },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.textButtonColors(
-                        color = MiuixTheme.colorScheme.error
-                    )
+                    modifier = Modifier.weight(1f)
                 )
             }
         }
     }
-}
 
 /**
  * 构建服务器摘要文本
@@ -294,6 +287,7 @@ private fun buildServerSummary(server: ServerConfig, isActive: Boolean, context:
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ServerEditDialog(
+    show: Boolean,
     server: ServerConfig?,
     serverIndex: Int,
     existingServers: List<ServerConfig>,
@@ -306,7 +300,7 @@ fun ServerEditDialog(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // 表单状态
+    // 表单状态 — 只在首次弹出时初始化，关闭时不重置 (key by serverIndex to reset on different server)
     var serverType by remember {
         mutableStateOf(server?.type ?: ServerType.syncclipboard)
     }
@@ -325,7 +319,7 @@ fun ServerEditDialog(
     val isEditing = server != null
 
     OverlayDialog(
-        show = true,
+        show = show,
         title = stringResource(if (isEditing) R.string.server_edit else R.string.server_add),
         onDismissRequest = onDismiss
     ) {
@@ -636,10 +630,7 @@ fun ServerEditDialog(
                     TextButton(
                         text = stringResource(R.string.action_delete),
                         onClick = onDelete,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.textButtonColors(
-                            color = MiuixTheme.colorScheme.error,
-                        )
+                        modifier = Modifier.weight(1f)
                     )
                 }
 
@@ -700,8 +691,7 @@ fun ServerEditDialog(
                             )
                         )
                     },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.textButtonColorsPrimary()
+                    modifier = Modifier.weight(1f)
                 )
             }
         }
