@@ -109,16 +109,21 @@ object SyncClipboardBridge {
         data: Bundle,
         onReply: (Bundle) -> Unit
     ) {
+        android.util.Log.w("SyncClipboard", "[Bridge] invokeHandler key=$key, handlersSize=${handlers.size}")
         val handler = handlers[key]
         if (handler == null) {
+            android.util.Log.w("SyncClipboard", "[Bridge] Handler NOT FOUND for key=$key, available keys=${handlers.keys()}")
             onReply(Bundle.EMPTY)
             return
         }
+        android.util.Log.w("SyncClipboard", "[Bridge] Handler FOUND for key=$key, launching coroutine")
         bridgeScope.launch {
             try {
                 val result = handler(data) ?: Bundle.EMPTY
+                android.util.Log.w("SyncClipboard", "[Bridge] Handler result for key=$key, isEmpty=${result.isEmpty}, running=${result.getBoolean("running", false)}")
                 onReply(result)
             } catch (e: Exception) {
+                android.util.Log.w("SyncClipboard", "[Bridge] Handler error for key=$key: ${e.message}", e)
                 onReply(Bundle.EMPTY)
                 e.printStackTrace()
             }
@@ -225,8 +230,11 @@ object SyncClipboardBridge {
             val targetKey = key
                 ?: throw IllegalArgumentException("SyncClipboardBridge: key missing")
 
+            android.util.Log.w("SyncClipboard", "[Bridge] executeInternal key=$targetKey, targetPkg=$targetPkg, myPkg=${context.packageName}, isSameProcess=${targetPkg == context.packageName}")
+
             // 同一进程内通信 — 直接调用处理器，绕过广播
             if (targetPkg == context.packageName) {
+                android.util.Log.w("SyncClipboard", "[Bridge] Using DIRECT invocation for key=$targetKey")
                 SyncClipboardBridge.invokeHandler(
                     key = targetKey,
                     data = data,

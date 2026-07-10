@@ -24,18 +24,22 @@ class ModuleEntry : XposedModule() {
 
     override fun onModuleLoaded(param: XposedModuleInterface.ModuleLoadedParam) {
         instance = this
+        android.util.Log.w("SyncClipboard", "[ModuleEntry] onModuleLoaded: processName=${param.processName}")
         Logger.info(TAG, "onModuleLoaded: processName=${param.processName}")
     }
 
     override fun onPackageLoaded(param: XposedModuleInterface.PackageLoadedParam) {
         val pkg = param.packageName
+        android.util.Log.w("SyncClipboard", "[ModuleEntry] onPackageLoaded: pkg=$pkg, inScopes=${pkg in scopes}")
         if (pkg !in scopes) return
         Logger.info(TAG, "onPackageLoaded: $pkg")
 
         // 通用 Hook：初始化 SyncEngine（在所有作用域进程中运行）
+        android.util.Log.w("SyncClipboard", "[ModuleEntry] Calling GeneralHooker.hook() for $pkg")
         GeneralHooker.hook(this, param)
 
         // 剪贴板 Hook：拦截 ClipboardManager.setPrimaryClip
+        android.util.Log.w("SyncClipboard", "[ModuleEntry] Calling ClipboardHooker.hook() for $pkg")
         ClipboardHooker.hook(this, param)
     }
 }

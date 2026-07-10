@@ -78,25 +78,46 @@ class SyncEngine private constructor() {
      * 必须在 Application.onCreate() 之后调用。
      */
     fun initialize(context: Context) {
-        if (appContext != null) return
+        val processName = getProcessName(context)
+        android.util.Log.w("SyncClipboard", "[SyncEngine] initialize() called, process=$processName, appContext=$appContext")
+
+        if (appContext != null) {
+            android.util.Log.w("SyncClipboard", "[SyncEngine] Already initialized, skipping")
+            return
+        }
         appContext = context.applicationContext
+        android.util.Log.w("SyncClipboard", "[SyncEngine] appContext set, package=${appContext?.packageName}")
 
         // 初始化历史记录服务
         historyService = HistoryService(context)
+        android.util.Log.w("SyncClipboard", "[SyncEngine] HistoryService created")
 
         // 加载配置
         config = Prefs.loadConfig(context)
+        android.util.Log.w("SyncClipboard", "[SyncEngine] Config loaded, servers=${config.servers.size}, activeIdx=${config.activeServerIndex}")
 
         // 构建 API 客户端
         rebuildApiClient()
+        android.util.Log.w("SyncClipboard", "[SyncEngine] API client rebuilt, client=${apiClient != null}")
 
         // 设置 IPC 路由
         setupBridgeRouting(context)
 
         // 启动同步循环
         start()
+        android.util.Log.w("SyncClipboard", "[SyncEngine] start() called, isRunning=$isRunning")
 
         Logger.info(TAG, "SyncEngine initialized")
+    }
+
+    private fun getProcessName(context: Context): String {
+        return try {
+            val pid = android.os.Process.myPid()
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            am.runningAppProcesses?.find { it.pid == pid }?.processName ?: "unknown"
+        } catch (e: Exception) {
+            "error:${e.message}"
+        }
     }
 
     /**
@@ -323,7 +344,9 @@ class SyncEngine private constructor() {
      * 设置 IPC 桥接路由 — 处理来自 app 进程的查询和指令。
      */
     private fun setupBridgeRouting(context: Context) {
+        android.util.Log.w("SyncClipboard", "[SyncEngine] setupBridgeRouting starting...")
         SyncClipboardBridge.routing(context) {
+            android.util.Log.w("SyncClipboard", "[SyncEngine] Bridge routing block executing, registering handlers...")
             // 配置查询
             onQuery(BridgeKeys.GET_CONFIG) {
                 val configJson = kotlinx.serialization.json.Json.encodeToString(
@@ -351,6 +374,7 @@ class SyncEngine private constructor() {
 
             // 同步状态查询
             onQuery(BridgeKeys.GET_SYNC_STATUS) {
+                android.util.Log.w("SyncClipboard", "[SyncEngine] GET_SYNC_STATUS handler invoked, isRunning=$isRunning, isConnected=$isConnected")
                 val bundle = android.os.Bundle().apply {
                     putBoolean("connected", isConnected)
                     putBoolean("running", isRunning)
@@ -361,6 +385,7 @@ class SyncEngine private constructor() {
 
             // 触发立即同步
             onCommand(BridgeKeys.TRIGGER_SYNC) {
+                android.util.Log.w("SyncClipboard", "[SyncEngine] TRIGGER_SYNC handler invoked")
                 forceSync()
             }
 
@@ -418,8 +443,10 @@ class SyncEngine private constructor() {
 
             // 触发立即上传 — 读取当前剪贴板并上传
             onCommand(BridgeKeys.UPLOAD_NOW) {
+                android.util.Log.w("SyncClipboard", "[SyncEngine] UPLOAD_NOW handler invoked")
                 forceUpload()
             }
         }
+        android.util.Log.w("SyncClipboard", "[SyncEngine] setupBridgeRouting complete, handlers registered")
     }
 }

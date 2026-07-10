@@ -13,7 +13,9 @@ object GeneralHooker : PackageHooker() {
     const val TAG = "GeneralHooker"
 
     override fun onHook() {
+        android.util.Log.w("SyncClipboard", "[GeneralHooker] onHook() called, packageName=$packageName, isMainProcess=${isMainProcess()}")
         doOnAppCreated { app ->
+            android.util.Log.w("SyncClipboard", "[GeneralHooker] doOnAppCreated callback fired: ${app.packageName}")
             Logger.info(TAG, "App created: ${app.packageName}")
 
             // 初始化同步引擎（传入 Context）

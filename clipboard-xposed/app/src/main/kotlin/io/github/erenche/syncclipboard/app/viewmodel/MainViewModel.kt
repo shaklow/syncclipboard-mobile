@@ -29,11 +29,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refreshStatus() {
+        android.util.Log.w("SyncClipboard", "[MainVM] refreshStatus() called")
         viewModelScope.launch {
             try {
+                android.util.Log.w("SyncClipboard", "[MainVM] Sending GET_SYNC_STATUS via bridge...")
                 val bundle = SyncClipboardBridge.with(app)
                                         .key(BridgeKeys.GET_SYNC_STATUS)
                     .await()
+                android.util.Log.w("SyncClipboard", "[MainVM] GET_SYNC_STATUS reply: connected=${bundle.getBoolean("connected", false)}, running=${bundle.getBoolean("running", false)}, isEmpty=${bundle.isEmpty}")
 
                 val connected = bundle.getBoolean("connected", false)
                 val running = bundle.getBoolean("running", false)
@@ -42,7 +45,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     connected -> "Connected"
                     else -> "Disconnected"
                 }
+                android.util.Log.w("SyncClipboard", "[MainVM] syncStatus set to: ${_syncStatus.value}")
             } catch (e: Exception) {
+                android.util.Log.w("SyncClipboard", "[MainVM] Failed to get sync status: ${e.message}", e)
                 Logger.warn("MainVM", "Failed to get sync status: ${e.message}")
                 _syncStatus.value = "Unavailable"
             }
@@ -50,19 +55,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun triggerSync() {
+        android.util.Log.w("SyncClipboard", "[MainVM] triggerSync() called")
         viewModelScope.launch {
             SyncClipboardBridge.with(app)
                                 .key(BridgeKeys.TRIGGER_SYNC)
                 .send()
+            android.util.Log.w("SyncClipboard", "[MainVM] TRIGGER_SYNC send() done, refreshing status...")
             refreshStatus()
         }
     }
 
     fun uploadNow() {
+        android.util.Log.w("SyncClipboard", "[MainVM] uploadNow() called")
         viewModelScope.launch {
             SyncClipboardBridge.with(app)
                                 .key(BridgeKeys.UPLOAD_NOW)
                 .send()
+            android.util.Log.w("SyncClipboard", "[MainVM] UPLOAD_NOW send() done")
         }
     }
 }
