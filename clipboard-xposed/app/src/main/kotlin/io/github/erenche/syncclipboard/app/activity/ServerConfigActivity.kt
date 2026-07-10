@@ -179,86 +179,88 @@ fun ServerConfigScreen() {
                 }
             }
         }
-    }
 
-    // ── 编辑/添加对话框 ────────────────────────────────────────
-    ServerEditDialog(
-        show = showEditDialog,
-        server = editingServer,
-        serverIndex = editingIndex,
-        existingServers = appConfig.servers,
-        activeServerIndex = appConfig.activeServerIndex,
-        onSave = { newServer ->
-            val servers = appConfig.servers.toMutableList()
-            if (editingIndex >= 0) {
-                servers[editingIndex] = newServer
-            } else {
-                servers.add(newServer)
-            }
-            var newConfig = appConfig.copy(servers = servers)
-            if (appConfig.activeServerIndex < 0) {
-                newConfig = newConfig.copy(activeServerIndex = 0)
-            }
-            saveConfig(newConfig)
-            showEditDialog = false
-            Toast.makeText(
-                context,
-                if (editingIndex >= 0) context.getString(R.string.server_test_success)
-                    .replace("successful", "updated")
-                else context.getString(R.string.server_test_success)
-                    .replace("successful", "added"),
-                Toast.LENGTH_SHORT
-            ).show()
-        },
-        onDelete = if (editingIndex >= 0) {{
-            showDeleteConfirm = true
-        }} else null,
-        onSetActive = if (editingIndex >= 0 && editingIndex != appConfig.activeServerIndex) {{
-            saveConfig(appConfig.copy(activeServerIndex = editingIndex))
-            showEditDialog = false
-        }} else null,
-        onDismiss = { showEditDialog = false }
-    )
+        // ── 对话框必须放在 Scaffold 内部才能渲染 OverlayDialog ──
+        item("dialogs") {
+            ServerEditDialog(
+                show = showEditDialog,
+                server = editingServer,
+                serverIndex = editingIndex,
+                existingServers = appConfig.servers,
+                activeServerIndex = appConfig.activeServerIndex,
+                onSave = { newServer ->
+                    val servers = appConfig.servers.toMutableList()
+                    if (editingIndex >= 0) {
+                        servers[editingIndex] = newServer
+                    } else {
+                        servers.add(newServer)
+                    }
+                    var newConfig = appConfig.copy(servers = servers)
+                    if (appConfig.activeServerIndex < 0) {
+                        newConfig = newConfig.copy(activeServerIndex = 0)
+                    }
+                    saveConfig(newConfig)
+                    showEditDialog = false
+                    Toast.makeText(
+                        context,
+                        if (editingIndex >= 0) context.getString(R.string.server_test_success)
+                            .replace("successful", "updated")
+                        else context.getString(R.string.server_test_success)
+                            .replace("successful", "added"),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                },
+                onDelete = if (editingIndex >= 0) {{
+                    showDeleteConfirm = true
+                }} else null,
+                onSetActive = if (editingIndex >= 0 && editingIndex != appConfig.activeServerIndex) {{
+                    saveConfig(appConfig.copy(activeServerIndex = editingIndex))
+                    showEditDialog = false
+                }} else null,
+                onDismiss = { showEditDialog = false }
+            )
 
-    // ── 删除确认对话框 ─────────────────────────────────────────
-    if (showDeleteConfirm && editingIndex >= 0) {
-        OverlayDialog(
-            show = true,
-            title = stringResource(R.string.server_delete),
-            summary = stringResource(
-                R.string.server_delete_confirm,
-                editingServer?.name ?: editingServer?.url ?: ""
-            ),
-            onDismissRequest = { showDeleteConfirm = false }
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                TextButton(
-                    text = stringResource(R.string.action_cancel),
-                    onClick = { showDeleteConfirm = false },
-                    modifier = Modifier.weight(1f)
-                )
-                TextButton(
-                    text = stringResource(R.string.action_delete),
-                    onClick = {
-                        val servers = appConfig.servers.toMutableList()
-                        servers.removeAt(editingIndex)
-                        var newConfig = appConfig.copy(servers = servers)
-                        if (editingIndex == appConfig.activeServerIndex) {
-                            newConfig = newConfig.copy(
-                                activeServerIndex = if (servers.isEmpty()) -1 else 0
-                            )
-                        } else if (editingIndex < appConfig.activeServerIndex) {
-                            newConfig = newConfig.copy(activeServerIndex = appConfig.activeServerIndex - 1)
-                        }
-                        saveConfig(newConfig)
-                        showEditDialog = false
-                        showDeleteConfirm = false
-                    },
-                    modifier = Modifier.weight(1f)
-                )
+            // ── 删除确认对话框 ─────────────────────────────────────────
+            if (showDeleteConfirm && editingIndex >= 0) {
+                OverlayDialog(
+                    show = true,
+                    title = stringResource(R.string.server_delete),
+                    summary = stringResource(
+                        R.string.server_delete_confirm,
+                        editingServer?.name ?: editingServer?.url ?: ""
+                    ),
+                    onDismissRequest = { showDeleteConfirm = false }
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        TextButton(
+                            text = stringResource(R.string.action_cancel),
+                            onClick = { showDeleteConfirm = false },
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(
+                            text = stringResource(R.string.action_delete),
+                            onClick = {
+                                val servers = appConfig.servers.toMutableList()
+                                servers.removeAt(editingIndex)
+                                var newConfig = appConfig.copy(servers = servers)
+                                if (editingIndex == appConfig.activeServerIndex) {
+                                    newConfig = newConfig.copy(
+                                        activeServerIndex = if (servers.isEmpty()) -1 else 0
+                                    )
+                                } else if (editingIndex < appConfig.activeServerIndex) {
+                                    newConfig = newConfig.copy(activeServerIndex = appConfig.activeServerIndex - 1)
+                                }
+                                saveConfig(newConfig)
+                                showEditDialog = false
+                                showDeleteConfirm = false
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
             }
         }
     }
