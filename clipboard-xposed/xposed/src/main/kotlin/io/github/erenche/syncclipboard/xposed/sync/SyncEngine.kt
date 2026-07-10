@@ -57,8 +57,10 @@ class SyncEngine private constructor() {
     private var appContext: Context? = null
     private var historyService: HistoryService? = null
 
-    // 哈希去重
+    // 哈希去重 — @Volatile 保证跨线程可见性
+    @Volatile
     private var lastLocalHash: String? = null
+    @Volatile
     private var lastRemoteHash: String? = null
 
     /**
@@ -208,19 +210,19 @@ class SyncEngine private constructor() {
     }
 
     /**
-     * 当检测到本地剪贴板变化时由 ClipboardHooker 调用。
+     * 当检测到本地剪贴板变化时由 ClipboardHooker/Listener/Polling 调用。
+     * 哈希去重在调用线程同步执行，防止竞态条件导致重复上传。
      */
     fun onLocalClipboardChanged(content: ClipboardContent) {
+        // 同步计算并检查哈希，防止多个调用者（Listener + Polling + Hook）竞态
+        val hash = content.profileHash
+            ?: HashUtils.computeLocalHash(content.text)
+
+        if (hash == lastLocalHash) return
+        lastLocalHash = hash
+
         scope.launch {
             try {
-                // 计算哈希
-                val hash = content.profileHash
-                    ?: HashUtils.computeLocalHash(content.text)
-
-                // 去重：与上次本地哈希相同则跳过
-                if (hash == lastLocalHash) return@launch
-                lastLocalHash = hash
-
                 Logger.debug(TAG, "Local clipboard changed: ${content.text.take(50)}...")
 
                 // 添加到历史记录
@@ -322,20 +324,27 @@ class SyncEngine private constructor() {
 
     /**
      * 拉取远程剪贴板内容。
+     * 只要服务器可达（返回非 null ProfileDto），就视为已连接。
      */
     private suspend fun fetchRemoteClipboard() {
         val client = apiClient ?: return
 
         try {
-            val profile = client.getClipboard() ?: return
-            val hash = profile.hash ?: return
+            val profile = client.getClipboard()
+            if (profile == null) {
+                // 服务器不可达或返回错误 — isConnected 保持原值
+                return
+            }
 
-            // 去重
-            if (hash == lastRemoteHash) return
-            lastRemoteHash = hash
-
+            // 服务器可达 — 标记已连接
             isConnected = true
             lastSyncTime = System.currentTimeMillis()
+
+            // 没有内容变更（hash 为空或与上次相同）
+            val hash = profile.hash ?: return
+            if (hash == lastRemoteHash) return
+
+            lastRemoteHash = hash
 
             Logger.info(TAG, "Remote clipboard changed: ${profile.text.take(50)}...")
 
@@ -358,6 +367,7 @@ class SyncEngine private constructor() {
         try {
             client.putContent(content)
             lastSyncTime = System.currentTimeMillis()
+            isConnected = true  // 上传成功，服务器可达
             // 设置 lastRemoteHash，防止轮询循环立即下载刚上传的内容
             val profileHash = HashUtils.computeProfileHash(
                 content.type.name.lowercase(),

@@ -17,6 +17,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
@@ -64,13 +65,20 @@ class SyncClipboardHttpClient(
 
     override suspend fun getClipboard(): ProfileDto? {
         return try {
-            client.get("$baseUrl$CLIPBOARD_ENDPOINT") {
+            val response = client.get("$baseUrl$CLIPBOARD_ENDPOINT") {
                 if (username != null && password != null) {
                     header(HttpHeaders.Authorization, buildAuthHeader())
                 }
-            }.body<ProfileDto>()
+            }
+            android.util.Log.d("SyncClipboard", "[SyncClipboardHttp] GET $baseUrl$CLIPBOARD_ENDPOINT -> status=${response.status.value}")
+            if (response.status.value !in 200..299) {
+                val body = response.bodyAsText()
+                android.util.Log.w("SyncClipboard", "[SyncClipboardHttp] Server returned ${response.status.value}: ${body.take(300)}")
+                return null
+            }
+            response.body<ProfileDto>()
         } catch (e: Exception) {
-            Logger.error(TAG, "Failed to get clipboard", e)
+            Logger.error(TAG, "Failed to get clipboard: ${e.message}", e)
             null
         }
     }
@@ -147,11 +155,14 @@ class SyncClipboardHttpClient(
     }
 
     override suspend fun testConnection() {
-        // Use the actual clipboard endpoint for a realistic connectivity test
-        client.get("$baseUrl$CLIPBOARD_ENDPOINT") {
+        val response = client.get("$baseUrl$CLIPBOARD_ENDPOINT") {
             if (username != null && password != null) {
                 header(HttpHeaders.Authorization, buildAuthHeader())
             }
+        }
+        if (response.status.value !in 200..299) {
+            val body = response.bodyAsText()
+            throw IllegalStateException("Server returned ${response.status.value}: ${body.take(200)}")
         }
         Logger.info(TAG, "Connection test successful")
     }

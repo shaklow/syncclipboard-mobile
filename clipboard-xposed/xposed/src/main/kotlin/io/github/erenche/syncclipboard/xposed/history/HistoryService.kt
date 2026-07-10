@@ -28,6 +28,7 @@ class HistoryService(context: Context) {
 
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = false }
     private val historyFile = java.io.File(context.filesDir, "clipboard_history.json")
+    private val lock = Any()  // 保证 addOrUpdate 的线程安全
 
     private val _items = MutableStateFlow<List<HistoryItem>>(emptyList())
     val items: Flow<List<HistoryItem>> = _items.asStateFlow()
@@ -52,24 +53,26 @@ class HistoryService(context: Context) {
         val hash = content.profileHash
             ?: HashUtils.computeLocalHash(content.text)
 
-        val existing = _items.value.find { it.profileHash == hash && !it.isDeleted }
-        if (existing != null) {
-            replaceItem(existing.copy(lastAccessed = System.currentTimeMillis()))
-        } else {
-            val newItem = HistoryItem(
-                id = UUID.randomUUID().toString(),
-                type = content.type,
-                text = content.text,
-                profileHash = hash,
-                hasData = content.hasData,
-                dataName = content.fileName,
-                size = content.fileSize,
-                timestamp = content.timestamp,
-                syncStatus = HistorySyncStatus.LocalOnly,
-                fileUri = content.fileUri
-            )
-            addItem(newItem)
-            trimIfNeeded()
+        synchronized(lock) {
+            val existing = _items.value.find { it.profileHash == hash && !it.isDeleted }
+            if (existing != null) {
+                replaceItem(existing.copy(lastAccessed = System.currentTimeMillis()))
+            } else {
+                val newItem = HistoryItem(
+                    id = UUID.randomUUID().toString(),
+                    type = content.type,
+                    text = content.text,
+                    profileHash = hash,
+                    hasData = content.hasData,
+                    dataName = content.fileName,
+                    size = content.fileSize,
+                    timestamp = content.timestamp,
+                    syncStatus = HistorySyncStatus.LocalOnly,
+                    fileUri = content.fileUri
+                )
+                addItem(newItem)
+                trimIfNeeded()
+            }
         }
     }
 
