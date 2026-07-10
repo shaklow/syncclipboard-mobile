@@ -29,8 +29,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+
 import io.github.erenche.syncclipboard.app.R
 import io.github.erenche.syncclipboard.app.compose.AppToolBarListContainer
 import io.github.erenche.syncclipboard.bridge.BridgeKeys
@@ -222,16 +221,16 @@ fun ServerConfigScreen() {
     )
 
     // ── 删除确认对话框 ─────────────────────────────────────────
-    OverlayDialog(
-        show = showDeleteConfirm && editingIndex >= 0,
-        title = stringResource(R.string.server_delete),
-        summary = stringResource(
-            R.string.server_delete_confirm,
-            editingServer?.name ?: editingServer?.url ?: ""
-        ),
-        onDismissRequest = { showDeleteConfirm = false }
-    ) {
-        val server = editingServer
+    if (showDeleteConfirm && editingIndex >= 0) {
+        OverlayDialog(
+            show = true,
+            title = stringResource(R.string.server_delete),
+            summary = stringResource(
+                R.string.server_delete_confirm,
+                editingServer?.name ?: editingServer?.url ?: ""
+            ),
+            onDismissRequest = { showDeleteConfirm = false }
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -263,6 +262,7 @@ fun ServerConfigScreen() {
             }
         }
     }
+}
 
 /**
  * 构建服务器摘要文本
@@ -301,40 +301,12 @@ fun ServerEditDialog(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-
     val isEditing = server != null
 
     if (!show) return
 
-    // key() ensures form state resets for different serverIndex
-    key(serverIndex) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .verticalScroll(rememberScrollState())
-                    .padding(20.dp)
-            ) {
-                // 标题
-                Text(
-                    text = stringResource(if (isEditing) R.string.server_edit else R.string.server_add),
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MiuixTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-
-    // 表单状态
-    var serverType by remember {
-        mutableStateOf(server?.type ?: ServerType.syncclipboard)
-    }
+    // Form state — resets when dialog is removed from composition and recomposed
+    var serverType by remember { mutableStateOf(server?.type ?: ServerType.syncclipboard) }
     var name by remember { mutableStateOf(server?.name ?: "") }
     var url by remember { mutableStateOf(server?.url ?: "") }
     var username by remember { mutableStateOf(server?.username ?: "") }
@@ -343,9 +315,17 @@ fun ServerEditDialog(
     var bucketName by remember { mutableStateOf(server?.bucketName ?: "") }
     var objectPrefix by remember { mutableStateOf(server?.objectPrefix ?: "") }
     var forcePathStyle by remember { mutableStateOf(server?.forcePathStyle ?: false) }
-
     var showPassword by remember { mutableStateOf(false) }
     var isTesting by remember { mutableStateOf(false) }
+
+    OverlayDialog(
+        show = true,
+        title = stringResource(if (isEditing) R.string.server_edit else R.string.server_add),
+        onDismissRequest = onDismiss
+    ) {
+        Column(
+            modifier = Modifier.verticalScroll(rememberScrollState())
+        ) {
             // ── 服务器类型选择 ─────────────────────────────
             Text(
                 text = stringResource(R.string.server_type_label),
@@ -714,8 +694,6 @@ fun ServerEditDialog(
                 )
             }
         }
-    }
-    }
     }
 }
 

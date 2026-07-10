@@ -147,7 +147,8 @@ class SyncClipboardHttpClient(
     }
 
     override suspend fun testConnection() {
-        client.get("$baseUrl/") {
+        // Use the actual clipboard endpoint for a realistic connectivity test
+        client.get("$baseUrl$CLIPBOARD_ENDPOINT") {
             if (username != null && password != null) {
                 header(HttpHeaders.Authorization, buildAuthHeader())
             }

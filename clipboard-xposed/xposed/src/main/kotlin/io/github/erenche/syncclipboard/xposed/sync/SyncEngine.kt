@@ -399,7 +399,8 @@ class SyncEngine private constructor() {
                     return@onQuery
                 }
                 try {
-                    val serverConfig = Json.decodeFromString(
+                    val configJson = Json { ignoreUnknownKeys = true }
+                    val serverConfig = configJson.decodeFromString(
                         io.github.erenche.syncclipboard.common.model.ServerConfig.serializer(),
                         serverJson
                     )
