@@ -8,7 +8,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.erenche.syncclipboard.app.SyncClipboardApp
 import io.github.erenche.syncclipboard.bridge.BridgeKeys
 import io.github.erenche.syncclipboard.bridge.SyncClipboardBridge
-import io.github.erenche.syncclipboard.common.PackageNames
+
 import io.github.erenche.syncclipboard.common.util.Logger
 import kotlinx.coroutines.launch
 
@@ -32,8 +32,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val bundle = SyncClipboardBridge.with(app)
-                    .to(PackageNames.SYSTEM_UI)
-                    .key(BridgeKeys.GET_SYNC_STATUS)
+                                        .key(BridgeKeys.GET_SYNC_STATUS)
                     .await()
 
                 val connected = bundle.getBoolean("connected", false)
@@ -53,8 +52,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun triggerSync() {
         viewModelScope.launch {
             SyncClipboardBridge.with(app)
-                .to(PackageNames.SYSTEM_UI)
-                .key(BridgeKeys.TRIGGER_SYNC)
+                                .key(BridgeKeys.TRIGGER_SYNC)
                 .send()
             refreshStatus()
         }
@@ -63,8 +61,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun uploadNow() {
         viewModelScope.launch {
             SyncClipboardBridge.with(app)
-                .to(PackageNames.SYSTEM_UI)
-                .key(BridgeKeys.UPLOAD_NOW)
+                                .key(BridgeKeys.UPLOAD_NOW)
                 .send()
         }
     }

@@ -34,7 +34,7 @@ import io.github.erenche.syncclipboard.app.R
 import io.github.erenche.syncclipboard.app.compose.AppToolBarListContainer
 import io.github.erenche.syncclipboard.bridge.BridgeKeys
 import io.github.erenche.syncclipboard.bridge.SyncClipboardBridge
-import io.github.erenche.syncclipboard.common.PackageNames
+
 import io.github.erenche.syncclipboard.common.Prefs
 import io.github.erenche.syncclipboard.common.model.AppConfig
 import io.github.erenche.syncclipboard.common.model.ServerConfig
@@ -78,8 +78,7 @@ fun ServerConfigScreen() {
         try {
             val configJson = Json.encodeToString(AppConfig.serializer(), appConfig)
             SyncClipboardBridge.with(context)
-                .to(PackageNames.SYSTEM_UI)
-                .key(BridgeKeys.PUSH_CONFIG)
+                                .key(BridgeKeys.PUSH_CONFIG)
                 .payload(android.os.Bundle().apply { putString("config", configJson) })
                 .send()
         } catch (_: Exception) {}
@@ -97,8 +96,7 @@ fun ServerConfigScreen() {
             try {
                 val configJson = Json.encodeToString(AppConfig.serializer(), config)
                 SyncClipboardBridge.with(context)
-                    .to(PackageNames.SYSTEM_UI)
-                    .key(BridgeKeys.PUSH_CONFIG)
+                                        .key(BridgeKeys.PUSH_CONFIG)
                     .payload(android.os.Bundle().apply { putString("config", configJson) })
                     .send()
             } catch (_: Exception) {}

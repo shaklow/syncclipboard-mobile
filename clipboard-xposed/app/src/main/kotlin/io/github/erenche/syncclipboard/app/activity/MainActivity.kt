@@ -21,7 +21,7 @@ import io.github.erenche.syncclipboard.app.compose.preference.rememberBooleanPre
 import io.github.erenche.syncclipboard.app.viewmodel.MainViewModel
 import io.github.erenche.syncclipboard.bridge.BridgeKeys
 import io.github.erenche.syncclipboard.bridge.SyncClipboardBridge
-import io.github.erenche.syncclipboard.common.PackageNames
+
 import io.github.erenche.syncclipboard.common.Prefs
 import io.github.erenche.syncclipboard.common.extensions.defaultSharedPreferences
 import io.github.erenche.syncclipboard.common.model.AppConfig
@@ -56,8 +56,7 @@ class MainActivity : BaseActivity(), SyncClipboardApp.XposedServiceStateListener
                     val config = Prefs.loadConfig(this@MainActivity)
                     val configJson = Json.encodeToString(AppConfig.serializer(), config)
                     SyncClipboardBridge.with(this@MainActivity)
-                        .to(PackageNames.SYSTEM_UI)
-                        .key(BridgeKeys.PUSH_CONFIG)
+                                                .key(BridgeKeys.PUSH_CONFIG)
                         .payload(android.os.Bundle().apply { putString("config", configJson) })
                         .send()
                 } catch (_: Exception) {}
@@ -77,8 +76,7 @@ fun MainScreen(viewModel: MainViewModel) {
             val config = Prefs.loadConfig(context)
             val configJson = Json.encodeToString(AppConfig.serializer(), config)
             SyncClipboardBridge.with(context)
-                .to(PackageNames.SYSTEM_UI)
-                .key(BridgeKeys.PUSH_CONFIG)
+                                .key(BridgeKeys.PUSH_CONFIG)
                 .payload(android.os.Bundle().apply { putString("config", configJson) })
                 .send()
         } catch (_: Exception) {}
