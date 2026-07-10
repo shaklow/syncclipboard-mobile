@@ -7,6 +7,7 @@ import io.github.erenche.syncclipboard.bridge.SyncClipboardBridge
 import io.github.erenche.syncclipboard.common.Prefs
 import io.github.erenche.syncclipboard.common.model.AppConfig
 import io.github.erenche.syncclipboard.common.model.ClipboardContent
+import io.github.erenche.syncclipboard.common.model.ClipboardContentType
 import io.github.erenche.syncclipboard.common.model.DEFAULT_APP_CONFIG
 import io.github.erenche.syncclipboard.common.model.HistoryItem
 import io.github.erenche.syncclipboard.common.model.ProfileDto
@@ -180,6 +181,36 @@ class SyncEngine private constructor() {
         }
     }
 
+    /**
+     * 手动触发上传 — 读取当前剪贴板内容并上传。
+     */
+    fun forceUpload() {
+        scope.launch {
+            try {
+                val context = appContext ?: return@launch
+                val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                    as? android.content.ClipboardManager ?: return@launch
+                val clipData = cm.primaryClip ?: return@launch
+                if (clipData.itemCount == 0) return@launch
+                val item = clipData.getItemAt(0)
+                val text = item.text?.toString()
+                    ?: item.htmlText?.toString()
+                    ?: item.uri?.toString()
+                    ?: return@launch
+                val content = ClipboardContent(
+                    type = if (item.uri != null) ClipboardContentType.File else ClipboardContentType.Text,
+                    text = text,
+                    fileUri = item.uri?.toString(),
+                    hasData = item.uri != null,
+                    timestamp = System.currentTimeMillis()
+                )
+                onLocalClipboardChanged(content)
+            } catch (e: Exception) {
+                Logger.error(TAG, "Force upload failed", e)
+            }
+        }
+    }
+
     // ─── 私有方法 ────────────────────────────────────────────────
 
     /**
@@ -349,6 +380,44 @@ class SyncEngine private constructor() {
                 val id = data.getString("id") ?: return@onCommand
                 historyService?.delete(id)
                 Logger.info(TAG, "History item deleted: $id")
+            }
+
+            // 测试服务器连接 — 接收临时 ServerConfig JSON，尝试连接并返回结果
+            onQuery(BridgeKeys.TEST_CONNECTION) {
+                val serverJson: String = data.getString("server") ?: run {
+                    reply(android.os.Bundle().apply {
+                        putBoolean("success", false)
+                        putString("error", "No server configuration provided")
+                    })
+                    return@onQuery
+                }
+                if (serverJson.isBlank()) {
+                    reply(android.os.Bundle().apply {
+                        putBoolean("success", false)
+                        putString("error", "Server configuration is empty")
+                    })
+                    return@onQuery
+                }
+                try {
+                    val serverConfig = Json.decodeFromString(
+                        io.github.erenche.syncclipboard.common.model.ServerConfig.serializer(),
+                        serverJson
+                    )
+                    val client = io.github.erenche.syncclipboard.xposed.api.ClientFactory.createClient(serverConfig)
+                    client.testConnection()
+                    reply(android.os.Bundle().apply { putBoolean("success", true) })
+                } catch (e: Exception) {
+                    Logger.error(TAG, "Test connection failed", e)
+                    reply(android.os.Bundle().apply {
+                        putBoolean("success", false)
+                        putString("error", e.message ?: "Connection failed")
+                    })
+                }
+            }
+
+            // 触发立即上传 — 读取当前剪贴板并上传
+            onCommand(BridgeKeys.UPLOAD_NOW) {
+                forceUpload()
             }
         }
     }

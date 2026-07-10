@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -18,7 +19,14 @@ import io.github.erenche.syncclipboard.app.SyncClipboardApp
 import io.github.erenche.syncclipboard.app.compose.AppToolBarListContainer
 import io.github.erenche.syncclipboard.app.compose.preference.rememberBooleanPreference
 import io.github.erenche.syncclipboard.app.viewmodel.MainViewModel
+import io.github.erenche.syncclipboard.bridge.BridgeKeys
+import io.github.erenche.syncclipboard.bridge.SyncClipboardBridge
+import io.github.erenche.syncclipboard.common.PackageNames
+import io.github.erenche.syncclipboard.common.Prefs
 import io.github.erenche.syncclipboard.common.extensions.defaultSharedPreferences
+import io.github.erenche.syncclipboard.common.model.AppConfig
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
@@ -41,11 +49,41 @@ class MainActivity : BaseActivity(), SyncClipboardApp.XposedServiceStateListener
 
     override fun onServiceStateChanged(service: io.github.libxposed.service.XposedService?) {
         viewModel.isModuleActive.value = service != null
+        // Push config to xposed process when service connects
+        if (service != null) {
+            lifecycleScope.launch {
+                try {
+                    val config = Prefs.loadConfig(this@MainActivity)
+                    val configJson = Json.encodeToString(AppConfig.serializer(), config)
+                    SyncClipboardBridge.with(this@MainActivity)
+                        .to(PackageNames.SYSTEM_UI)
+                        .key(BridgeKeys.PUSH_CONFIG)
+                        .payload(android.os.Bundle().apply { putString("config", configJson) })
+                        .send()
+                } catch (_: Exception) {}
+            }
+        }
     }
 }
 
 @Composable
 fun MainScreen(viewModel: MainViewModel) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // Push current config to xposed process on startup
+    LaunchedEffect(Unit) {
+        try {
+            val config = Prefs.loadConfig(context)
+            val configJson = Json.encodeToString(AppConfig.serializer(), config)
+            SyncClipboardBridge.with(context)
+                .to(PackageNames.SYSTEM_UI)
+                .key(BridgeKeys.PUSH_CONFIG)
+                .payload(android.os.Bundle().apply { putString("config", configJson) })
+                .send()
+        } catch (_: Exception) {}
+    }
+
     AppToolBarListContainer(
         title = stringResource(R.string.app_name),
         actions = {}

@@ -3,13 +3,14 @@ package io.github.erenche.syncclipboard.app.activity
 import android.app.Activity
 import android.os.Bundle
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -18,10 +19,12 @@ import io.github.erenche.syncclipboard.app.R
 import io.github.erenche.syncclipboard.app.compose.AppToolBarListContainer
 import io.github.erenche.syncclipboard.app.compose.preference.rememberBooleanPreference
 import io.github.erenche.syncclipboard.app.compose.preference.rememberStringPreference
-import io.github.erenche.syncclipboard.common.Prefs
 import io.github.erenche.syncclipboard.common.extensions.defaultSharedPreferences
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -140,39 +143,69 @@ fun LanguageDialog(
         "en" to stringResource(R.string.setting_language_en)
     )
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.setting_language)) },
-        text = {
-            Column {
-                options.forEach { (value, label) ->
-                    Row(
+    OverlayDialog(
+        show = true,
+        title = stringResource(R.string.setting_language),
+        onDismissRequest = onDismiss
+    ) {
+        Column {
+            options.forEach { (value, label) ->
+                val isSelected = if (currentValue.isBlank()) value.isBlank()
+                    else currentValue == value
+                val textColor = if (isSelected) MiuixTheme.colorScheme.primary
+                    else MiuixTheme.colorScheme.onSurface
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelect(value) }
+                        .padding(vertical = 10.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // MIUIX-style selection indicator
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .size(20.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(
+                                if (isSelected) MiuixTheme.colorScheme.primary
+                                else Color(0x00000000)
+                            ),
+                        contentAlignment = Alignment.Center
                     ) {
-                        RadioButton(
-                            selected = if (currentValue.isBlank()) value.isBlank()
-                            else currentValue == value,
-                            onClick = { onSelect(value) }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        androidx.compose.material3.Text(
-                            text = label,
-                            fontSize = 15.sp
-                        )
+                        if (isSelected) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(androidx.compose.foundation.shape.CircleShape)
+                                    .background(Color.White)
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .clip(androidx.compose.foundation.shape.CircleShape)
+                                    .background(MiuixTheme.colorScheme.outline)
+                            )
+                        }
                     }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = label,
+                        fontSize = 15.sp,
+                        color = textColor
+                    )
                 }
             }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.action_cancel))
-            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            TextButton(
+                text = stringResource(R.string.action_cancel),
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
-    )
+    }
 }
 
 // ─── 同步设置 ─────────────────────────────────────────────────

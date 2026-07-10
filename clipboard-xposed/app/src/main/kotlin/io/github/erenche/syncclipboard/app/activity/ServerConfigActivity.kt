@@ -4,15 +4,23 @@ import android.app.Activity
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -21,19 +29,21 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import io.github.erenche.syncclipboard.app.R
 import io.github.erenche.syncclipboard.app.compose.AppToolBarListContainer
-import io.github.erenche.syncclipboard.app.compose.NavigationBackIcon
+import io.github.erenche.syncclipboard.bridge.BridgeKeys
+import io.github.erenche.syncclipboard.bridge.SyncClipboardBridge
+import io.github.erenche.syncclipboard.common.PackageNames
 import io.github.erenche.syncclipboard.common.Prefs
+import io.github.erenche.syncclipboard.common.model.AppConfig
 import io.github.erenche.syncclipboard.common.model.ServerConfig
 import io.github.erenche.syncclipboard.common.model.ServerType
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Add
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -51,6 +61,7 @@ class ServerConfigActivity : BaseActivity() {
 fun ServerConfigScreen() {
     val context = LocalContext.current
     val activity = context as? Activity
+    val scope = rememberCoroutineScope()
 
     var appConfig by remember { mutableStateOf(Prefs.loadConfig(context)) }
     var showEditDialog by remember { mutableStateOf(false) }
@@ -58,13 +69,36 @@ fun ServerConfigScreen() {
     var editingIndex by remember { mutableIntStateOf(-1) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
+    // Push current config to xposed process on screen load
+    LaunchedEffect(Unit) {
+        try {
+            val configJson = Json.encodeToString(AppConfig.serializer(), appConfig)
+            SyncClipboardBridge.with(context)
+                .to(PackageNames.SYSTEM_UI)
+                .key(BridgeKeys.PUSH_CONFIG)
+                .payload(android.os.Bundle().apply { putString("config", configJson) })
+                .send()
+        } catch (_: Exception) {}
+    }
+
     fun refreshConfig() {
         appConfig = Prefs.loadConfig(context)
     }
 
-    fun saveConfig(config: io.github.erenche.syncclipboard.common.model.AppConfig) {
+    fun saveConfig(config: AppConfig) {
         Prefs.saveConfig(context, config)
         appConfig = config
+        // Push config to xposed process so SyncEngine can use it
+        scope.launch {
+            try {
+                val configJson = Json.encodeToString(AppConfig.serializer(), config)
+                SyncClipboardBridge.with(context)
+                    .to(PackageNames.SYSTEM_UI)
+                    .key(BridgeKeys.PUSH_CONFIG)
+                    .payload(android.os.Bundle().apply { putString("config", configJson) })
+                    .send()
+            } catch (_: Exception) {}
+        }
     }
 
     AppToolBarListContainer(
@@ -190,42 +224,48 @@ fun ServerConfigScreen() {
     // ── 删除确认对话框 ─────────────────────────────────────────
     if (showDeleteConfirm && editingIndex >= 0) {
         val server = editingServer
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text(stringResource(R.string.server_delete)) },
-            text = {
-                Text(
-                    stringResource(
-                        R.string.server_delete_confirm,
-                        server?.name ?: server?.url ?: ""
+        OverlayDialog(
+            show = true,
+            title = stringResource(R.string.server_delete),
+            summary = stringResource(
+                R.string.server_delete_confirm,
+                server?.name ?: server?.url ?: ""
+            ),
+            onDismissRequest = { showDeleteConfirm = false }
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                TextButton(
+                    text = stringResource(R.string.action_cancel),
+                    onClick = { showDeleteConfirm = false },
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(
+                    text = stringResource(R.string.action_delete),
+                    onClick = {
+                        val servers = appConfig.servers.toMutableList()
+                        servers.removeAt(editingIndex)
+                        var newConfig = appConfig.copy(servers = servers)
+                        if (editingIndex == appConfig.activeServerIndex) {
+                            newConfig = newConfig.copy(
+                                activeServerIndex = if (servers.isEmpty()) -1 else 0
+                            )
+                        } else if (editingIndex < appConfig.activeServerIndex) {
+                            newConfig = newConfig.copy(activeServerIndex = appConfig.activeServerIndex - 1)
+                        }
+                        saveConfig(newConfig)
+                        showEditDialog = false
+                        showDeleteConfirm = false
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.textButtonColors(
+                        color = MiuixTheme.colorScheme.error
                     )
                 )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val servers = appConfig.servers.toMutableList()
-                    servers.removeAt(editingIndex)
-                    var newConfig = appConfig.copy(servers = servers)
-                    if (editingIndex == appConfig.activeServerIndex) {
-                        newConfig = newConfig.copy(
-                            activeServerIndex = if (servers.isEmpty()) -1 else 0
-                        )
-                    } else if (editingIndex < appConfig.activeServerIndex) {
-                        newConfig = newConfig.copy(activeServerIndex = appConfig.activeServerIndex - 1)
-                    }
-                    saveConfig(newConfig)
-                    showEditDialog = false
-                    showDeleteConfirm = false
-                }) {
-                    Text(stringResource(R.string.action_delete))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text(stringResource(R.string.action_cancel))
-                }
             }
-        )
+        }
     }
 }
 
@@ -248,7 +288,7 @@ private fun buildServerSummary(server: ServerConfig, isActive: Boolean, context:
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 服务器编辑/添加对话框
+// 服务器编辑/添加对话框 — MIUI X 风格
 // ═══════════════════════════════════════════════════════════════
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -264,6 +304,7 @@ fun ServerEditDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     // 表单状态
     var serverType by remember {
@@ -283,312 +324,265 @@ fun ServerEditDialog(
 
     val isEditing = server != null
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+    OverlayDialog(
+        show = true,
+        title = stringResource(if (isEditing) R.string.server_edit else R.string.server_add),
+        onDismissRequest = onDismiss
     ) {
-        Card(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
+                .verticalScroll(rememberScrollState())
         ) {
-            Column(
-                modifier = Modifier
-                    .verticalScroll(rememberScrollState())
-                    .padding(20.dp)
-            ) {
-                // 标题
-                Text(
-                    text = stringResource(if (isEditing) R.string.server_edit else R.string.server_add),
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MiuixTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(16.dp))
+            // ── 服务器类型选择 ─────────────────────────────
+            Text(
+                text = stringResource(R.string.server_type_label),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = MiuixTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(8.dp))
 
-                // ── 服务器类型选择 ─────────────────────────────
-                Text(
-                    text = stringResource(R.string.server_type_label),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MiuixTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+            ServerType.entries.forEach { type ->
+                val isSelected = serverType == type
+                val selectColor = if (isSelected) MiuixTheme.colorScheme.primary
+                    else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.4f)
 
-                ServerType.entries.forEach { type ->
-                    Row(
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { serverType = type }
+                        .padding(vertical = 10.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // MIUIX-style selection indicator
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { serverType = type }
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isSelected) MiuixTheme.colorScheme.primary
+                                else Color.Transparent
+                            ),
+                        contentAlignment = Alignment.Center
                     ) {
-                        RadioButton(
-                            selected = serverType == type,
-                            onClick = { serverType = type }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                text = when (type) {
-                                    ServerType.syncclipboard -> stringResource(R.string.server_type_syncclipboard)
-                                    ServerType.webdav -> stringResource(R.string.server_type_webdav)
-                                    ServerType.s3 -> stringResource(R.string.server_type_s3)
-                                },
-                                fontSize = 15.sp,
-                                color = MiuixTheme.colorScheme.onSurface
+                        if (isSelected) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White)
                             )
-                            Text(
-                                text = when (type) {
-                                    ServerType.syncclipboard -> stringResource(R.string.server_type_syncclipboard_desc)
-                                    ServerType.webdav -> stringResource(R.string.server_type_webdav_desc)
-                                    ServerType.s3 -> stringResource(R.string.server_type_s3_desc)
-                                },
-                                fontSize = 12.sp,
-                                color = MiuixTheme.colorScheme.onSurface
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .clip(CircleShape)
+                                    .background(MiuixTheme.colorScheme.outline)
                             )
                         }
                     }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = when (type) {
+                                ServerType.syncclipboard -> stringResource(R.string.server_type_syncclipboard)
+                                ServerType.webdav -> stringResource(R.string.server_type_webdav)
+                                ServerType.s3 -> stringResource(R.string.server_type_s3)
+                            },
+                            fontSize = 15.sp,
+                            color = selectColor
+                        )
+                        Text(
+                            text = when (type) {
+                                ServerType.syncclipboard -> stringResource(R.string.server_type_syncclipboard_desc)
+                                ServerType.webdav -> stringResource(R.string.server_type_webdav_desc)
+                                ServerType.s3 -> stringResource(R.string.server_type_s3_desc)
+                            },
+                            fontSize = 12.sp,
+                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
                 }
+            }
 
-                Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = MiuixTheme.colorScheme.outline)
-                Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider(color = MiuixTheme.colorScheme.outline)
+            Spacer(modifier = Modifier.height(12.dp))
 
-                // ── 连接信息字段 ───────────────────────────────
+            // ── 连接信息字段 ───────────────────────────────
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text(stringResource(R.string.server_name)) },
+                placeholder = { Text(stringResource(R.string.server_name_hint)) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                colors = miuixTextFieldColors()
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+
+            OutlinedTextField(
+                value = url,
+                onValueChange = { url = it },
+                label = { Text(stringResource(R.string.server_url)) },
+                placeholder = { Text(stringResource(R.string.server_url_hint)) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                colors = miuixTextFieldColors()
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+
+            OutlinedTextField(
+                value = username,
+                onValueChange = { username = it },
+                label = {
+                    Text(
+                        when (serverType) {
+                            ServerType.s3 -> "Access Key ID"
+                            else -> stringResource(R.string.server_username)
+                        }
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                colors = miuixTextFieldColors()
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = {
+                    Text(
+                        when (serverType) {
+                            ServerType.s3 -> "Secret Access Key"
+                            else -> stringResource(R.string.server_password)
+                        }
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                visualTransformation = if (showPassword) VisualTransformation.None
+                else PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                colors = miuixTextFieldColors(),
+                trailingIcon = {
+                    TextButton(
+                        onClick = { showPassword = !showPassword },
+                        text = if (showPassword) "Hide" else "Show"
+                    )
+                }
+            )
+
+            // ── S3 专用字段 ─────────────────────────────────
+            if (serverType == ServerType.s3) {
+                Spacer(modifier = Modifier.height(10.dp))
+
                 OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(stringResource(R.string.server_name)) },
-                    placeholder = { Text(stringResource(R.string.server_name_hint)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                OutlinedTextField(
-                    value = url,
-                    onValueChange = { url = it },
-                    label = { Text(stringResource(R.string.server_url)) },
-                    placeholder = { Text(stringResource(R.string.server_url_hint)) },
+                    value = region,
+                    onValueChange = { region = it },
+                    label = { Text(stringResource(R.string.server_region)) },
+                    placeholder = { Text(stringResource(R.string.server_region_hint)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+                    colors = miuixTextFieldColors()
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 OutlinedTextField(
-                    value = username,
-                    onValueChange = { username = it },
-                    label = {
-                        Text(
-                            when (serverType) {
-                                ServerType.s3 -> "Access Key ID"
-                                else -> stringResource(R.string.server_username)
-                            }
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = {
-                        Text(
-                            when (serverType) {
-                                ServerType.s3 -> "Secret Access Key"
-                                else -> stringResource(R.string.server_password)
-                            }
-                        )
-                    },
+                    value = bucketName,
+                    onValueChange = { bucketName = it },
+                    label = { Text(stringResource(R.string.server_bucket)) },
+                    placeholder = { Text(stringResource(R.string.server_bucket_hint)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    visualTransformation = if (showPassword) VisualTransformation.None
-                    else PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    trailingIcon = {
-                        TextButton(onClick = { showPassword = !showPassword }) {
-                            Text(if (showPassword) "Hide" else "Show", fontSize = 12.sp)
-                        }
-                    }
+                    colors = miuixTextFieldColors()
                 )
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // ── S3 专用字段 ─────────────────────────────────
-                if (serverType == ServerType.s3) {
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    OutlinedTextField(
-                        value = region,
-                        onValueChange = { region = it },
-                        label = { Text(stringResource(R.string.server_region)) },
-                        placeholder = { Text(stringResource(R.string.server_region_hint)) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    OutlinedTextField(
-                        value = bucketName,
-                        onValueChange = { bucketName = it },
-                        label = { Text(stringResource(R.string.server_bucket)) },
-                        placeholder = { Text(stringResource(R.string.server_bucket_hint)) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    OutlinedTextField(
-                        value = objectPrefix,
-                        onValueChange = { objectPrefix = it },
-                        label = { Text(stringResource(R.string.server_prefix)) },
-                        placeholder = { Text(stringResource(R.string.server_prefix_hint)) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Switch(
-                            checked = forcePathStyle,
-                            onCheckedChange = { forcePathStyle = it }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(R.string.server_path_style),
-                            fontSize = 14.sp,
-                            color = MiuixTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // ── 按钮行 ─────────────────────────────────────
-                Row(
+                OutlinedTextField(
+                    value = objectPrefix,
+                    onValueChange = { objectPrefix = it },
+                    label = { Text(stringResource(R.string.server_prefix)) },
+                    placeholder = { Text(stringResource(R.string.server_prefix_hint)) },
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // 设为当前服务器 (仅编辑时)
-                    if (onSetActive != null) {
-                        OutlinedButton(
-                            onClick = onSetActive,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                stringResource(R.string.server_set_active),
-                                fontSize = 13.sp
-                            )
-                        }
-                    }
-
-                    // 测试连接
-                    OutlinedButton(
-                        onClick = {
-                            isTesting = true
-                            // TODO: 通过 bridge 进行实际连接测试
-                            // 当前使用简单验证
-                            val valid = when (serverType) {
-                                ServerType.s3 -> bucketName.isNotBlank() && username.isNotBlank() && password.isNotBlank()
-                                else -> url.isNotBlank() && username.isNotBlank() && password.isNotBlank()
-                            }
-                            Toast.makeText(
-                                context,
-                                if (valid) {
-                                    if (url.isBlank() && serverType != ServerType.s3)
-                                        context.getString(R.string.server_url_required)
-                                    else context.getString(R.string.server_test_success)
-                                } else {
-                                    if (url.isBlank() && serverType != ServerType.s3)
-                                        context.getString(R.string.server_url_required)
-                                    else if (username.isBlank())
-                                        context.getString(R.string.server_username_required)
-                                    else context.getString(R.string.server_password_required)
-                                },
-                                Toast.LENGTH_SHORT
-                            ).show()
-                            isTesting = false
-                        },
-                        enabled = !isTesting,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            if (isTesting) stringResource(R.string.server_testing)
-                            else stringResource(R.string.action_test_connection),
-                            fontSize = 13.sp
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
+                    singleLine = true,
+                    colors = miuixTextFieldColors()
+                )
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { forcePathStyle = !forcePathStyle }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 删除按钮 (仅编辑时)
-                    if (onDelete != null) {
-                        OutlinedButton(
-                            onClick = onDelete,
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error
-                            )
-                        ) {
-                            Text(stringResource(R.string.action_delete), fontSize = 13.sp)
-                        }
-                    }
+                    Switch(
+                        checked = forcePathStyle,
+                        onCheckedChange = { forcePathStyle = it }
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = stringResource(R.string.server_path_style),
+                        fontSize = 14.sp,
+                        color = MiuixTheme.colorScheme.onSurface
+                    )
+                }
+            }
 
-                    // 取消
-                    OutlinedButton(
-                        onClick = onDismiss,
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // ── 按钮行 ─────────────────────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // 设为当前服务器 (仅编辑时)
+                if (onSetActive != null) {
+                    TextButton(
+                        text = stringResource(R.string.server_set_active),
+                        onClick = onSetActive,
                         modifier = Modifier.weight(1f)
-                    ) {
-                        Text(stringResource(R.string.action_cancel), fontSize = 13.sp)
-                    }
+                    )
+                }
 
-                    // 保存
-                    Button(
-                        onClick = {
-                            // 验证
-                            when (serverType) {
-                                ServerType.s3 -> {
-                                    if (bucketName.isBlank()) {
-                                        Toast.makeText(context, context.getString(R.string.server_bucket_required), Toast.LENGTH_SHORT).show()
-                                        return@Button
-                                    }
-                                    if (username.isBlank()) {
-                                        Toast.makeText(context, context.getString(R.string.server_access_key_required), Toast.LENGTH_SHORT).show()
-                                        return@Button
-                                    }
-                                    if (password.isBlank()) {
-                                        Toast.makeText(context, context.getString(R.string.server_secret_key_required), Toast.LENGTH_SHORT).show()
-                                        return@Button
-                                    }
-                                }
-                                else -> {
-                                    if (url.isBlank()) {
-                                        Toast.makeText(context, context.getString(R.string.server_url_required), Toast.LENGTH_SHORT).show()
-                                        return@Button
-                                    }
-                                    if (username.isBlank()) {
-                                        Toast.makeText(context, context.getString(R.string.server_username_required), Toast.LENGTH_SHORT).show()
-                                        return@Button
-                                    }
-                                    if (password.isBlank()) {
-                                        Toast.makeText(context, context.getString(R.string.server_password_required), Toast.LENGTH_SHORT).show()
-                                        return@Button
-                                    }
+                // 测试连接 — 通过 bridge 实际测试
+                TextButton(
+                    text = if (isTesting) stringResource(R.string.server_testing)
+                    else stringResource(R.string.action_test_connection),
+                    onClick = {
+                        if (isTesting) return@TextButton
+                        // 先验证必填字段
+                        val validateError = when (serverType) {
+                            ServerType.s3 -> {
+                                when {
+                                    url.isBlank() -> null  // S3 URL is optional
+                                    username.isBlank() -> context.getString(R.string.server_access_key_required)
+                                    password.isBlank() -> context.getString(R.string.server_secret_key_required)
+                                    bucketName.isBlank() -> context.getString(R.string.server_bucket_required)
+                                    else -> null
                                 }
                             }
+                            else -> {
+                                when {
+                                    url.isBlank() -> context.getString(R.string.server_url_required)
+                                    username.isBlank() -> context.getString(R.string.server_username_required)
+                                    password.isBlank() -> context.getString(R.string.server_password_required)
+                                    else -> null
+                                }
+                            }
+                        }
+                        if (validateError != null) {
+                            Toast.makeText(context, validateError, Toast.LENGTH_SHORT).show()
+                            return@TextButton
+                        }
 
-                            onSave(
-                                ServerConfig(
+                        isTesting = true
+                        scope.launch {
+                            try {
+                                val testConfig = ServerConfig(
                                     type = serverType,
                                     name = name.ifBlank { null },
                                     url = url,
@@ -599,14 +593,133 @@ fun ServerEditDialog(
                                     objectPrefix = if (serverType == ServerType.s3 && objectPrefix.isNotBlank()) objectPrefix else null,
                                     forcePathStyle = serverType == ServerType.s3 && forcePathStyle
                                 )
-                            )
-                        },
-                        modifier = Modifier.weight(1.5f)
-                    ) {
-                        Text(stringResource(R.string.action_save), fontSize = 13.sp)
-                    }
+                                val serverJson = Json.encodeToString(ServerConfig.serializer(), testConfig)
+                                val result = SyncClipboardBridge.with(context)
+                                    .to(PackageNames.SYSTEM_UI)
+                                    .key(BridgeKeys.TEST_CONNECTION)
+                                    .payload(android.os.Bundle().apply { putString("server", serverJson) })
+                                    .await(timeout = 8000)
+
+                                val success = result.getBoolean("success", false)
+                                val error = result.getString("error")
+                                Toast.makeText(
+                                    context,
+                                    if (success) context.getString(R.string.server_test_success)
+                                    else context.getString(R.string.server_test_fail) +
+                                        (error?.let { ": $it" } ?: ""),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.server_test_fail) + ": ${e.message}",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } finally {
+                                isTesting = false
+                            }
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = !isTesting
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // 删除按钮 (仅编辑时)
+                if (onDelete != null) {
+                    TextButton(
+                        text = stringResource(R.string.action_delete),
+                        onClick = onDelete,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColors(
+                            color = MiuixTheme.colorScheme.error,
+                        )
+                    )
                 }
+
+                // 取消
+                TextButton(
+                    text = stringResource(R.string.action_cancel),
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+
+                // 保存
+                TextButton(
+                    text = stringResource(R.string.action_save),
+                    onClick = {
+                        // 验证
+                        when (serverType) {
+                            ServerType.s3 -> {
+                                if (bucketName.isBlank()) {
+                                    Toast.makeText(context, context.getString(R.string.server_bucket_required), Toast.LENGTH_SHORT).show()
+                                    return@TextButton
+                                }
+                                if (username.isBlank()) {
+                                    Toast.makeText(context, context.getString(R.string.server_access_key_required), Toast.LENGTH_SHORT).show()
+                                    return@TextButton
+                                }
+                                if (password.isBlank()) {
+                                    Toast.makeText(context, context.getString(R.string.server_secret_key_required), Toast.LENGTH_SHORT).show()
+                                    return@TextButton
+                                }
+                            }
+                            else -> {
+                                if (url.isBlank()) {
+                                    Toast.makeText(context, context.getString(R.string.server_url_required), Toast.LENGTH_SHORT).show()
+                                    return@TextButton
+                                }
+                                if (username.isBlank()) {
+                                    Toast.makeText(context, context.getString(R.string.server_username_required), Toast.LENGTH_SHORT).show()
+                                    return@TextButton
+                                }
+                                if (password.isBlank()) {
+                                    Toast.makeText(context, context.getString(R.string.server_password_required), Toast.LENGTH_SHORT).show()
+                                    return@TextButton
+                                }
+                            }
+                        }
+
+                        onSave(
+                            ServerConfig(
+                                type = serverType,
+                                name = name.ifBlank { null },
+                                url = url,
+                                username = username,
+                                password = password,
+                                region = if (serverType == ServerType.s3 && region.isNotBlank()) region else null,
+                                bucketName = if (serverType == ServerType.s3) bucketName else null,
+                                objectPrefix = if (serverType == ServerType.s3 && objectPrefix.isNotBlank()) objectPrefix else null,
+                                forcePathStyle = serverType == ServerType.s3 && forcePathStyle
+                            )
+                        )
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.textButtonColorsPrimary()
+                )
             }
         }
     }
 }
+
+/**
+ * MIUIX 风格的 OutlinedTextField 颜色配置
+ */
+@Composable
+private fun miuixTextFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = MiuixTheme.colorScheme.onSurface,
+    unfocusedTextColor = MiuixTheme.colorScheme.onSurface,
+    cursorColor = MiuixTheme.colorScheme.primary,
+    focusedBorderColor = MiuixTheme.colorScheme.primary,
+    unfocusedBorderColor = MiuixTheme.colorScheme.outline,
+    focusedLabelColor = MiuixTheme.colorScheme.primary,
+    unfocusedLabelColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+    focusedPlaceholderColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+    unfocusedPlaceholderColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+)
