@@ -39,7 +39,7 @@ class SyncClipboardHttpClient(
 
     companion object {
         private const val TAG = "SyncClipboardHttp"
-        private const val CLIPBOARD_ENDPOINT = "/clipboard"
+        private const val CLIPBOARD_ENDPOINT = "/SyncClipboard.json"
         private const val FILE_ENDPOINT = "/file/"
     }
 
