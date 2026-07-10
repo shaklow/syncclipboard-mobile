@@ -39,8 +39,11 @@ import io.github.erenche.syncclipboard.common.Prefs
 import io.github.erenche.syncclipboard.common.model.AppConfig
 import io.github.erenche.syncclipboard.common.model.ServerConfig
 import io.github.erenche.syncclipboard.common.model.ServerType
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Add
@@ -588,20 +591,11 @@ fun ServerEditDialog(
                                     objectPrefix = if (serverType == ServerType.s3 && objectPrefix.isNotBlank()) objectPrefix else null,
                                     forcePathStyle = serverType == ServerType.s3 && forcePathStyle
                                 )
-                                val serverJson = Json.encodeToString(ServerConfig.serializer(), testConfig)
-                                val result = SyncClipboardBridge.with(context)
-                                    .to(PackageNames.SYSTEM_UI)
-                                    .key(BridgeKeys.TEST_CONNECTION)
-                                    .payload(android.os.Bundle().apply { putString("server", serverJson) })
-                                    .await(timeout = 8000)
-
-                                val success = result.getBoolean("success", false)
-                                val error = result.getString("error")
+                                val success = performTestConnection(testConfig)
                                 Toast.makeText(
                                     context,
                                     if (success) context.getString(R.string.server_test_success)
-                                    else context.getString(R.string.server_test_fail) +
-                                        (error?.let { ": $it" } ?: ""),
+                                    else context.getString(R.string.server_test_fail),
                                     Toast.LENGTH_SHORT
                                 ).show()
                             } catch (e: Exception) {
@@ -694,6 +688,47 @@ fun ServerEditDialog(
                     },
                     modifier = Modifier.weight(1f)
                 )
+            }
+        }
+    }
+}
+
+/**
+ * 直接 HTTP 测试服务器连接 — 绕过 Bridge IPC 避免跨进程广播被系统屏蔽。
+ */
+private suspend fun performTestConnection(config: ServerConfig): Boolean = withContext(Dispatchers.IO) {
+    try {
+        val urlStr = buildTestUrl(config)
+        val url = java.net.URL(urlStr)
+        val conn = url.openConnection() as java.net.HttpURLConnection
+        conn.connectTimeout = 8000
+        conn.readTimeout = 8000
+        conn.requestMethod = "GET"
+        conn.instanceFollowRedirects = true
+
+        if (!config.username.isNullOrBlank() && !config.password.isNullOrBlank()) {
+            val credentials = "${config.username}:${config.password}"
+            val encoded = android.util.Base64.encodeToString(
+                credentials.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP
+            )
+            conn.setRequestProperty("Authorization", "Basic $encoded")
+        }
+
+        // 任意 HTTP 响应（包括 401/404）表示服务器可达
+        conn.responseCode > 0
+    } catch (e: Exception) {
+        false
+    }
+}
+
+/** 根据服务器类型构建测试 URL */
+private fun buildTestUrl(config: ServerConfig): String {
+    return when (config.type) {
+        ServerType.syncclipboard -> "${config.url.trimEnd('/')}/clipboard"
+        ServerType.webdav -> config.url.trimEnd('/')
+        ServerType.s3 -> {
+            config.url.ifBlank {
+                "https://s3.${config.region ?: "us-east-1"}.amazonaws.com"
             }
         }
     }
