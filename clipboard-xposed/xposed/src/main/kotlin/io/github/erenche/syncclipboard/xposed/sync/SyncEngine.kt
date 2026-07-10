@@ -61,6 +61,31 @@ class SyncEngine private constructor() {
     private var lastLocalHash: String? = null
     private var lastRemoteHash: String? = null
 
+    /**
+     * 前台剪贴板变化监听器 — 在 app 进程中替代 Xposed Hook
+     */
+    private val clipChangedListener = android.content.ClipboardManager.OnPrimaryClipChangedListener {
+        val ctx = appContext ?: return@OnPrimaryClipChangedListener
+        val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+            as? android.content.ClipboardManager ?: return@OnPrimaryClipChangedListener
+        val clip = cm.primaryClip ?: return@OnPrimaryClipChangedListener
+        if (clip.itemCount == 0) return@OnPrimaryClipChangedListener
+        val item = clip.getItemAt(0)
+        val text = item.text?.toString()
+            ?: item.htmlText?.toString()
+            ?: item.uri?.toString()
+            ?: return@OnPrimaryClipChangedListener
+
+        val content = ClipboardContent(
+            type = if (item.uri != null) ClipboardContentType.File else ClipboardContentType.Text,
+            text = text,
+            fileUri = item.uri?.toString(),
+            hasData = item.uri != null,
+            timestamp = System.currentTimeMillis()
+        )
+        onLocalClipboardChanged(content)
+    }
+
     // 同步状态
     @Volatile
     private var isRunning = false
@@ -127,7 +152,32 @@ class SyncEngine private constructor() {
         if (isRunning) return
         isRunning = true
 
-        // 启动远程轮询（用于 WebDAV/S3 或没有 SignalR 的 SyncClipboard 服务器）
+        val context = appContext ?: return
+
+        // 1. 注册 OnPrimaryClipChangedListener（前台剪贴板监听）
+        // 公共 API，在 app 进程中替代 Xposed Hook
+        try {
+            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                as? android.content.ClipboardManager
+            cm?.addPrimaryClipChangedListener(clipChangedListener)
+            android.util.Log.w("SyncClipboard", "[SyncEngine] OnPrimaryClipChangedListener registered")
+        } catch (e: Exception) {
+            android.util.Log.w("SyncClipboard", "[SyncEngine] Failed to register clip listener: ${e.message}")
+        }
+
+        // 2. 启动本地剪贴板轮询（后台兜底，类似 TS 版 ClipboardMonitor）
+        scope.launch {
+            while (isActive && isRunning) {
+                try {
+                    pollLocalClipboard()
+                } catch (e: Exception) {
+                    Logger.error(TAG, "Local clipboard poll error", e)
+                }
+                delay(config.syncInterval)
+            }
+        }
+
+        // 3. 启动远程轮询（用于 WebDAV/S3 或没有 SignalR 的 SyncClipboard 服务器）
         scope.launch {
             while (isActive && isRunning) {
                 try {
@@ -139,7 +189,7 @@ class SyncEngine private constructor() {
             }
         }
 
-        Logger.info(TAG, "SyncEngine started, polling interval: ${config.remotePollingInterval}ms")
+        Logger.info(TAG, "SyncEngine started, localInterval=${config.syncInterval}ms, remoteInterval=${config.remotePollingInterval}ms")
     }
 
     /**
@@ -148,6 +198,12 @@ class SyncEngine private constructor() {
     fun stop() {
         isRunning = false
         isConnected = false
+        // 注销剪贴板监听
+        try {
+            val cm = appContext?.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                as? android.content.ClipboardManager
+            cm?.removePrimaryClipChangedListener(clipChangedListener)
+        } catch (_: Exception) {}
         Logger.info(TAG, "SyncEngine stopped")
     }
 
@@ -235,6 +291,36 @@ class SyncEngine private constructor() {
     // ─── 私有方法 ────────────────────────────────────────────────
 
     /**
+     * 轮询本地剪贴板 — 后台兜底策略。
+     * 读取本地剪贴板内容，计算哈希，与上次比较。
+     * 在 app 进程中替代 Xposed Hook 实现后台监听。
+     */
+    private suspend fun pollLocalClipboard() {
+        val context = appContext ?: return
+        val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+            as? android.content.ClipboardManager ?: return
+        val clip = cm.primaryClip ?: return
+        if (clip.itemCount == 0) return
+        val item = clip.getItemAt(0)
+        val text = item.text?.toString()
+            ?: item.htmlText?.toString()
+            ?: item.uri?.toString()
+            ?: return
+
+        val hash = HashUtils.computeLocalHash(text)
+        if (hash == lastLocalHash) return
+
+        val content = ClipboardContent(
+            type = if (item.uri != null) ClipboardContentType.File else ClipboardContentType.Text,
+            text = text,
+            fileUri = item.uri?.toString(),
+            hasData = item.uri != null,
+            timestamp = System.currentTimeMillis()
+        )
+        onLocalClipboardChanged(content)
+    }
+
+    /**
      * 拉取远程剪贴板内容。
      */
     private suspend fun fetchRemoteClipboard() {
@@ -272,6 +358,12 @@ class SyncEngine private constructor() {
         try {
             client.putContent(content)
             lastSyncTime = System.currentTimeMillis()
+            // 设置 lastRemoteHash，防止轮询循环立即下载刚上传的内容
+            val profileHash = HashUtils.computeProfileHash(
+                content.type.name.lowercase(),
+                content.text
+            )
+            lastRemoteHash = profileHash
             Logger.info(TAG, "Content uploaded successfully")
         } catch (e: Exception) {
             Logger.error(TAG, "Upload failed", e)
@@ -293,6 +385,9 @@ class SyncEngine private constructor() {
                 client.downloadFile(name, destPath)
                 Logger.info(TAG, "File downloaded: $name")
             }
+
+            // 在写入剪贴板前设置 lastLocalHash，防止 ClipboardHooker 二次上传
+            lastLocalHash = HashUtils.computeLocalHash(profile.text)
 
             // 写入本地剪贴板
             writeToClipboard(profile.text)
