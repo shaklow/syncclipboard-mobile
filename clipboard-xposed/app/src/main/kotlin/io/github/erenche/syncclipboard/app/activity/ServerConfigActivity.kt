@@ -40,6 +40,9 @@ import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Add
+import top.yukonga.miuix.kmp.icon.extended.CloudFill
+import top.yukonga.miuix.kmp.icon.extended.Link
+import top.yukonga.miuix.kmp.icon.extended.Store
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -161,6 +164,25 @@ fun ServerConfigScreen() {
                             ArrowPreference(
                                 title = server.name ?: server.url,
                                 summary = buildServerSummary(server, isActive, context),
+                                startAction = {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .background(
+                                                color = MiuixTheme.colorScheme.primary.copy(alpha = if (isActive) 0.12f else 0.06f),
+                                                shape = androidx.compose.foundation.shape.CircleShape
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = serverTypeIcon(server.type),
+                                            contentDescription = null,
+                                            tint = if (isActive) MiuixTheme.colorScheme.primary
+                                                else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                },
                                 onClick = {
                                     editingServer = server
                                     editingIndex = index
@@ -170,7 +192,7 @@ fun ServerConfigScreen() {
                             if (index < servers.lastIndex) {
                                 HorizontalDivider(
                                     modifier = Modifier.padding(horizontal = 16.dp),
-                                    color = MiuixTheme.colorScheme.outline
+                                    color = MiuixTheme.colorScheme.dividerLine
                                 )
                             }
                         }
@@ -266,6 +288,16 @@ fun ServerConfigScreen() {
 }
 
 /**
+ * 服务器类型对应图标
+ */
+private fun serverTypeIcon(type: ServerType): androidx.compose.ui.graphics.vector.ImageVector =
+    when (type) {
+        ServerType.syncclipboard -> MiuixIcons.Link
+        ServerType.webdav -> MiuixIcons.CloudFill
+        ServerType.s3 -> MiuixIcons.Store
+    }
+
+/**
  * 构建服务器摘要文本
  */
 private fun buildServerSummary(server: ServerConfig, isActive: Boolean, context: android.content.Context): String {
@@ -327,13 +359,7 @@ fun ServerEditDialog(
             modifier = Modifier.verticalScroll(rememberScrollState())
         ) {
             // ── 服务器类型选择 ─────────────────────────────
-            Text(
-                text = stringResource(R.string.server_type_label),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-            )
-            Spacer(modifier = Modifier.height(6.dp))
+            DialogSectionLabel(text = stringResource(R.string.server_type_label))
 
             Card(
                 modifier = Modifier.fillMaxWidth()
@@ -370,22 +396,24 @@ fun ServerEditDialog(
                                     ServerType.s3 -> stringResource(R.string.server_type_s3_desc)
                                 },
                                 fontSize = 12.sp,
-                                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                             )
                         }
                     }
                     if (idx < ServerType.entries.size - 1) {
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 16.dp),
-                            color = MiuixTheme.colorScheme.outline
+                            color = MiuixTheme.colorScheme.dividerLine
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             // ── 连接信息字段 ───────────────────────────────
+            DialogSectionLabel(text = stringResource(R.string.server_section_connection))
+
             TextField(
                 value = name,
                 onValueChange = { name = it },
@@ -431,16 +459,20 @@ fun ServerEditDialog(
                 else PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 trailingIcon = {
-                    TextButton(
-                        onClick = { showPassword = !showPassword },
-                        text = if (showPassword) "Hide" else "Show"
+                    Text(
+                        text = if (showPassword) "Hide" else "Show",
+                        fontSize = 14.sp,
+                        color = MiuixTheme.colorScheme.primary,
+                        modifier = Modifier.clickable { showPassword = !showPassword }
+                            .padding(horizontal = 4.dp)
                     )
                 }
             )
 
             // ── S3 专用字段 ─────────────────────────────────
             if (serverType == ServerType.s3) {
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(20.dp))
+                DialogSectionLabel(text = stringResource(R.string.server_section_s3))
 
                 TextField(
                     value = region,
@@ -492,92 +524,91 @@ fun ServerEditDialog(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // ── 按钮行 ─────────────────────────────────────
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // 设为当前服务器 (仅编辑时)
-                if (onSetActive != null) {
-                    TextButton(
-                        text = stringResource(R.string.server_set_active),
-                        onClick = onSetActive,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+            // ── 操作区 ─────────────────────────────────────
+            DialogSectionLabel(text = stringResource(R.string.server_section_actions))
 
-                // 测试连接 — 通过 bridge 实际测试
+            // 设为当前服务器 (仅编辑时)
+            if (onSetActive != null) {
                 TextButton(
-                    text = if (isTesting) stringResource(R.string.server_testing)
-                    else stringResource(R.string.action_test_connection),
-                    onClick = {
-                        if (isTesting) return@TextButton
-                        // 先验证必填字段
-                        val validateError = when (serverType) {
-                            ServerType.s3 -> {
-                                when {
-                                    url.isBlank() -> null  // S3 URL is optional
-                                    username.isBlank() -> context.getString(R.string.server_access_key_required)
-                                    password.isBlank() -> context.getString(R.string.server_secret_key_required)
-                                    bucketName.isBlank() -> context.getString(R.string.server_bucket_required)
-                                    else -> null
-                                }
-                            }
-                            else -> {
-                                when {
-                                    url.isBlank() -> context.getString(R.string.server_url_required)
-                                    username.isBlank() -> context.getString(R.string.server_username_required)
-                                    password.isBlank() -> context.getString(R.string.server_password_required)
-                                    else -> null
-                                }
-                            }
-                        }
-                        if (validateError != null) {
-                            Toast.makeText(context, validateError, Toast.LENGTH_SHORT).show()
-                            return@TextButton
-                        }
-
-                        isTesting = true
-                        scope.launch {
-                            try {
-                                val testConfig = ServerConfig(
-                                    type = serverType,
-                                    name = name.ifBlank { null },
-                                    url = url,
-                                    username = username,
-                                    password = password,
-                                    region = if (serverType == ServerType.s3 && region.isNotBlank()) region else null,
-                                    bucketName = if (serverType == ServerType.s3) bucketName else null,
-                                    objectPrefix = if (serverType == ServerType.s3 && objectPrefix.isNotBlank()) objectPrefix else null,
-                                    forcePathStyle = serverType == ServerType.s3 && forcePathStyle
-                                )
-                                val success = performTestConnection(testConfig)
-                                Toast.makeText(
-                                    context,
-                                    if (success) context.getString(R.string.server_test_success)
-                                    else context.getString(R.string.server_test_fail),
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            } catch (e: Exception) {
-                                Toast.makeText(
-                                    context,
-                                    context.getString(R.string.server_test_fail) + ": ${e.message}",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            } finally {
-                                isTesting = false
-                            }
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
-                    enabled = !isTesting
+                    text = stringResource(R.string.server_set_active),
+                    onClick = onSetActive,
+                    modifier = Modifier.fillMaxWidth()
                 )
+                Spacer(modifier = Modifier.height(8.dp))
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            // 测试连接 — 通过 bridge 实际测试
+            TextButton(
+                text = if (isTesting) stringResource(R.string.server_testing)
+                else stringResource(R.string.action_test_connection),
+                onClick = {
+                    if (isTesting) return@TextButton
+                    // 先验证必填字段
+                    val validateError = when (serverType) {
+                        ServerType.s3 -> {
+                            when {
+                                url.isBlank() -> null  // S3 URL is optional
+                                username.isBlank() -> context.getString(R.string.server_access_key_required)
+                                password.isBlank() -> context.getString(R.string.server_secret_key_required)
+                                bucketName.isBlank() -> context.getString(R.string.server_bucket_required)
+                                else -> null
+                            }
+                        }
+                        else -> {
+                            when {
+                                url.isBlank() -> context.getString(R.string.server_url_required)
+                                username.isBlank() -> context.getString(R.string.server_username_required)
+                                password.isBlank() -> context.getString(R.string.server_password_required)
+                                else -> null
+                            }
+                        }
+                    }
+                    if (validateError != null) {
+                        Toast.makeText(context, validateError, Toast.LENGTH_SHORT).show()
+                        return@TextButton
+                    }
 
+                    isTesting = true
+                    scope.launch {
+                        try {
+                            val testConfig = ServerConfig(
+                                type = serverType,
+                                name = name.ifBlank { null },
+                                url = url,
+                                username = username,
+                                password = password,
+                                region = if (serverType == ServerType.s3 && region.isNotBlank()) region else null,
+                                bucketName = if (serverType == ServerType.s3) bucketName else null,
+                                objectPrefix = if (serverType == ServerType.s3 && objectPrefix.isNotBlank()) objectPrefix else null,
+                                forcePathStyle = serverType == ServerType.s3 && forcePathStyle
+                            )
+                            val success = performTestConnection(testConfig)
+                            Toast.makeText(
+                                context,
+                                if (success) context.getString(R.string.server_test_success)
+                                else context.getString(R.string.server_test_fail),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        } catch (e: Exception) {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.server_test_fail) + ": ${e.message}",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        } finally {
+                            isTesting = false
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isTesting
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 底部操作行：删除/取消 在左侧，保存作为主按钮在右侧
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -587,7 +618,13 @@ fun ServerEditDialog(
                     TextButton(
                         text = stringResource(R.string.action_delete),
                         onClick = onDelete,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        colors = TextButtonColors(
+                            color = MiuixTheme.colorScheme.errorContainer,
+                            disabledColor = MiuixTheme.colorScheme.errorContainer,
+                            textColor = MiuixTheme.colorScheme.error,
+                            disabledTextColor = MiuixTheme.colorScheme.error
+                        )
                     )
                 }
 
@@ -598,7 +635,7 @@ fun ServerEditDialog(
                     modifier = Modifier.weight(1f)
                 )
 
-                // 保存
+                // 保存 — 主按钮
                 TextButton(
                     text = stringResource(R.string.action_save),
                     onClick = {
@@ -648,11 +685,26 @@ fun ServerEditDialog(
                             )
                         )
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.textButtonColorsPrimary()
                 )
             }
         }
     }
+}
+
+/**
+ * 对话框内的小节标题 — 比 SmallTitle 更紧凑，适配对话框内边距。
+ */
+@Composable
+private fun DialogSectionLabel(text: String) {
+    Text(
+        text = text,
+        modifier = Modifier.padding(bottom = 8.dp),
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Medium,
+        color = MiuixTheme.colorScheme.onBackgroundVariant
+    )
 }
 
 /**

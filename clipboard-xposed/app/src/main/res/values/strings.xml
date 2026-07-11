@@ -78,6 +78,9 @@
     <string name="server_type_syncclipboard_desc">Official standalone server or client built-in server</string>
     <string name="server_type_webdav_desc">Cloud storage supporting WebDAV protocol</string>
     <string name="server_type_s3_desc">AWS S3 / MinIO / Cloudflare R2, etc.</string>
+    <string name="server_section_connection">Connection</string>
+    <string name="server_section_s3">S3 Settings</string>
+    <string name="server_section_actions">Actions</string>
     <string name="server_name_hint">Optional display name</string>
     <string name="server_url_hint">https://example.com</string>
     <string name="server_region_hint">us-east-1</string>
@@ -86,6 +89,8 @@
 
     <!-- Theme -->
     <string name="setting_theme_mode">Theme Mode</string>
+    <string name="setting_theme_color">Theme Color</string>
+    <string name="setting_theme_color_summary">Choose accent color for the app</string>
     <string name="setting_theme_monet">Dynamic Color</string>
     <string name="setting_theme_monet_summary">Use system wallpaper colors (Android 12+)</string>
     <string name="option_theme_system">Follow System</string>
@@ -176,4 +181,10 @@
     <string name="main_upload_now_desc">Push current clipboard to server</string>
     <string name="main_how_it_works_title">How it works</string>
     <string name="main_how_it_works_text">This LSPosed module hooks into ClipboardManager to detect clipboard changes instantly without polling. Changes are synced to your configured server (SyncClipboard, WebDAV, or S3).</string>
+
+    <!-- Language codes array -->
+    <string-array name="language_codes">
+        <item>zh</item>
+        <item>en</item>
+    </string-array>
 </resources>

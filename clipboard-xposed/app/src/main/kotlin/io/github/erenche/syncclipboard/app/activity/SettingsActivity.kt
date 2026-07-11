@@ -3,17 +3,26 @@ package io.github.erenche.syncclipboard.app.activity
 import android.app.Activity
 import android.os.Bundle
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.erenche.syncclipboard.app.R
 import io.github.erenche.syncclipboard.app.compose.AppToolBarListContainer
 import io.github.erenche.syncclipboard.app.compose.preference.rememberBooleanPreference
-import io.github.erenche.syncclipboard.app.compose.preference.rememberStringPreference
+import io.github.erenche.syncclipboard.app.util.AppLangUtils
 import io.github.erenche.syncclipboard.app.util.AppThemeUtils
+import io.github.erenche.syncclipboard.app.util.ThemeColor
+import io.github.erenche.syncclipboard.app.util.resolveLanguageName
 import io.github.erenche.syncclipboard.bridge.BridgeKeys
 import io.github.erenche.syncclipboard.bridge.SyncClipboardBridge
 import io.github.erenche.syncclipboard.common.Prefs
@@ -21,9 +30,17 @@ import io.github.erenche.syncclipboard.common.extensions.defaultSharedPreference
 import io.github.erenche.syncclipboard.common.model.AppConfig
 import kotlinx.serialization.json.Json
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.SpinnerEntry
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Ok
+import top.yukonga.miuix.kmp.icon.extended.Translate
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
+import top.yukonga.miuix.kmp.preference.OverlaySpinnerPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
-import java.util.Locale
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 class SettingsActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -89,6 +106,11 @@ fun ThemeSettingsCard(context: android.content.Context, activity: Activity?) {
     )
     val monetEnabled = remember { AppThemeUtils.isEnableMonet(context) }
     var currentMode by remember { mutableIntStateOf(AppThemeUtils.getMode(context)) }
+    var currentColorId by remember { mutableStateOf(AppThemeUtils.getThemeColor(context)) }
+    var showColorPicker by remember { mutableStateOf(false) }
+    val monetAvailable = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+    // Monet 开启时颜色选择不可用
+    val colorEnabled = !monetEnabled || !monetAvailable
 
     Card(
         modifier = Modifier
@@ -112,7 +134,49 @@ fun ThemeSettingsCard(context: android.content.Context, activity: Activity?) {
             }
         )
 
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+        // ── 主题颜色选择行 ──
+        val currentThemeColor = ThemeColor.fromId(currentColorId)
+        val isDark = io.github.erenche.syncclipboard.app.compose.theme.CurrentThemeConfigs.isDark
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = colorEnabled) { showColorPicker = true }
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.setting_theme_color),
+                    fontSize = 16.sp,
+                    color = if (colorEnabled) MiuixTheme.colorScheme.onSurface
+                        else MiuixTheme.colorScheme.disabledOnSurface
+                )
+                Text(
+                    text = stringResource(R.string.setting_theme_color_summary),
+                    fontSize = 13.sp,
+                    color = if (colorEnabled) MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        else MiuixTheme.colorScheme.disabledOnSurface
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .background(
+                        color = if (colorEnabled)
+                            (if (isDark) currentThemeColor.darkPrimary else currentThemeColor.lightPrimary)
+                        else MiuixTheme.colorScheme.disabledOnSurface,
+                        shape = androidx.compose.foundation.shape.CircleShape
+                    )
+                    .border(
+                        width = 2.dp,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                        shape = androidx.compose.foundation.shape.CircleShape
+                    )
+            )
+        }
+
+        if (monetAvailable) {
             var monetChecked by remember { mutableStateOf(monetEnabled) }
             SwitchPreference(
                 title = stringResource(R.string.setting_theme_monet),
@@ -126,29 +190,116 @@ fun ThemeSettingsCard(context: android.content.Context, activity: Activity?) {
             )
         }
     }
+
+    // ── 颜色选择对话框 ──
+    if (showColorPicker) {
+        ThemeColorPickerDialog(
+            currentColorId = currentColorId,
+            onColorSelected = { themeColor ->
+                currentColorId = themeColor.id
+                AppThemeUtils.setThemeColor(context, themeColor.id)
+                activity?.recreate()
+            },
+            onDismiss = { showColorPicker = false }
+        )
+    }
+}
+
+/**
+ * 主题颜色选择对话框 — 以网格形式展示预设颜色。
+ */
+@Composable
+private fun ThemeColorPickerDialog(
+    currentColorId: String,
+    onColorSelected: (ThemeColor) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val isDark = io.github.erenche.syncclipboard.app.compose.theme.CurrentThemeConfigs.isDark
+    OverlayDialog(
+        show = true,
+        title = stringResource(R.string.setting_theme_color),
+        onDismissRequest = onDismiss
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // 4 列网格
+            val rows = ThemeColor.entries.chunked(4)
+            rows.forEach { rowColors ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    rowColors.forEach { themeColor ->
+                        val isSelected = themeColor.id == currentColorId
+                        val color = if (isDark) themeColor.darkPrimary else themeColor.lightPrimary
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.clickable {
+                                onColorSelected(themeColor)
+                                onDismiss()
+                            }
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .background(color = color, shape = androidx.compose.foundation.shape.CircleShape)
+                                    .border(
+                                        width = if (isSelected) 3.dp else 0.dp,
+                                        color = if (isSelected) MiuixTheme.colorScheme.onSurface
+                                            else Color.Transparent,
+                                        shape = androidx.compose.foundation.shape.CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = MiuixIcons.Ok,
+                                        contentDescription = null,
+                                        tint = if (color.luminance() > 0.5f) Color.Black else Color.White,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = themeColor.name.lowercase(),
+                                fontSize = 11.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 // ─── 语言切换 ─────────────────────────────────────────────────
 @Composable
 fun LanguageCard(context: android.content.Context, activity: Activity?) {
-    val prefs = context.defaultSharedPreferences
-    var language by rememberStringPreference(prefs, "language", "")
-
-    val systemLang = remember {
-        when (Locale.getDefault().language) {
-            "zh" -> "中文"
-            else -> "English"
+    val languageCodes = remember {
+        buildList {
+            addAll(context.resources.getStringArray(R.array.language_codes).toList())
+            add(0, AppLangUtils.DEFAULT_LANGUAGE)
         }
     }
 
-    val langOptions = listOf(
-        "" to "${stringResource(R.string.setting_language_auto)}（$systemLang）",
-        "zh" to stringResource(R.string.setting_language_zh),
-        "en" to stringResource(R.string.setting_language_en)
-    )
+    val currentLanguage = remember { AppLangUtils.getCustomizeLang(context) }
 
-    val selectedIndex = remember(language) {
-        langOptions.indexOfFirst { it.first == language }.coerceAtLeast(0)
+    val spinnerItems = remember(languageCodes) {
+        languageCodes.map { code ->
+            val primaryName = context.resolveLanguageName(code)
+            val fallbackName = context.resolveLanguageName(code, AppLangUtils.DEFAULT_LOCALE)
+            SpinnerEntry(
+                title = primaryName,
+                summary = if (primaryName == fallbackName) null else fallbackName
+            )
+        }
+    }
+
+    val selectedIndex = remember(currentLanguage, languageCodes) {
+        languageCodes.indexOf(currentLanguage).coerceAtLeast(0)
     }
 
     Card(
@@ -156,14 +307,21 @@ fun LanguageCard(context: android.content.Context, activity: Activity?) {
             .padding(start = 16.dp, top = 16.dp, end = 16.dp)
             .fillMaxWidth()
     ) {
-        OverlayDropdownPreference(
+        OverlaySpinnerPreference(
+            startAction = {
+                Icon(
+                    imageVector = MiuixIcons.Translate,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp)
+                )
+            },
             title = stringResource(R.string.setting_language),
-            items = langOptions.map { it.second },
+            items = spinnerItems,
             selectedIndex = selectedIndex,
             onSelectedIndexChange = { index ->
-                val newLang = langOptions[index].first
-                if (language != newLang) {
-                    language = newLang
+                val newLang = languageCodes[index]
+                if (currentLanguage != newLang) {
+                    AppLangUtils.saveCustomizeLanguage(context, newLang)
                     // 语言改变，重启整个 App 让所有 Activity 应用新语言
                     activity?.let { act ->
                         val intent = act.packageManager.getLaunchIntentForPackage(act.packageName)

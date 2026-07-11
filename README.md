@@ -119,3 +119,8 @@ npm run plugin:build
 ## 打赏
 
 如果 SyncClipboard 对你有所帮助，并希望打赏支持，请[参阅此处](https://github.com/Jeric-X/SyncClipboard/blob/master/docs/donate.md)
+我正在把这个 项目重构为lsposed模块，现在已经基本完成，现在我需要你帮我优化ui
+1.我觉得修改服务器配置的界面和添加服务器的界面还是不太美观，进行优化。我已经拉取了 miuix 完整库
+2.修改更改语言弹出的界面，像 lyricon 项目那样
+3.添加主题功能并完善
+4.在容器内构建ssh erenche@192.168.122.77
