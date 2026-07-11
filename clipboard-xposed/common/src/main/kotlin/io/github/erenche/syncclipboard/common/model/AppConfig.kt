@@ -13,6 +13,8 @@ data class AppConfig(
     val activeServerIndex: Int = -1,
     /** 同步间隔（毫秒） */
     val syncInterval: Long = 5000,
+    /** 是否启用自动同步（总开关）。关闭后不轮询远程、不上传本地，子开关也会被置为 false */
+    val enableAutoSync: Boolean = true,
     /** 冲突解决策略 */
     val conflictResolution: ConflictResolution = ConflictResolution.Newest,
     /** 是否同步大文件 */

@@ -1,9 +1,12 @@
 package io.github.erenche.syncclipboard.app.activity
 
 import android.app.Activity
+import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.setContent
@@ -16,14 +19,19 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import android.graphics.BitmapFactory
 import android.provider.MediaStore
 import io.github.erenche.syncclipboard.app.R
@@ -71,23 +79,55 @@ fun HistoryScreen() {
     var items by remember { mutableStateOf<List<HistoryItem>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
 
-    LaunchedEffect(Unit) {
-        scope.launch {
-            try {
-                val bundle = SyncClipboardBridge.with(context)
-                    .to("com.android.systemui")
-                    .key(BridgeKeys.GET_HISTORY)
-                    .await()
-                val json = bundle.getString("items")
-                if (!json.isNullOrBlank()) {
-                    items = Json { ignoreUnknownKeys = true }
-                        .decodeFromString(ListSerializer(HistoryItem.serializer()), json)
-                }
-            } catch (_: Exception) {
-            } finally {
-                loading = false
+    // 加载历史数据的逻辑，提取为函数以便复用
+    suspend fun loadHistory() {
+        try {
+            val bundle = SyncClipboardBridge.with(context)
+                .to("com.android.systemui")
+                .key(BridgeKeys.GET_HISTORY)
+                .await()
+            val json = bundle.getString("items")
+            if (!json.isNullOrBlank()) {
+                items = Json { ignoreUnknownKeys = true }
+                    .decodeFromString(ListSerializer(HistoryItem.serializer()), json)
+            } else {
+                items = emptyList()
+            }
+        } catch (_: Exception) {
+        } finally {
+            loading = false
+        }
+    }
+
+    // 首次加载
+    LaunchedEffect(Unit) { loadHistory() }
+
+    // 页面恢复时重新加载，确保删除/新增后实时刷新
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                scope.launch { loadHistory() }
             }
         }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // 监听内容变化广播，实时刷新历史列表（新增内容）
+    DisposableEffect(Unit) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                scope.launch { loadHistory() }
+            }
+        }
+        ContextCompat.registerReceiver(
+            context,
+            receiver,
+            IntentFilter(BridgeKeys.EVENT_CLIPBOARD_CHANGED),
+            ContextCompat.RECEIVER_EXPORTED
+        )
+        onDispose { context.unregisterReceiver(receiver) }
     }
 
     AppToolBarListContainer(
@@ -161,7 +201,11 @@ fun HistoryScreen() {
         } else {
             items.forEach { historyItem ->
                 item("history_${historyItem.id}") {
-                    HistoryItemCard(item = historyItem, context = context)
+                    HistoryItemCard(
+                        item = historyItem,
+                        context = context,
+                        onDeleted = { id -> items = items.filterNot { it.id == id } }
+                    )
                 }
             }
         }
@@ -169,7 +213,7 @@ fun HistoryScreen() {
 }
 
 @Composable
-fun HistoryItemCard(item: HistoryItem, context: Context) {
+fun HistoryItemCard(item: HistoryItem, context: Context, onDeleted: (String) -> Unit = {}) {
     val dateFormat = remember { SimpleDateFormat("MM/dd HH:mm", Locale.getDefault()) }
     val scope = rememberCoroutineScope()
 
@@ -209,11 +253,28 @@ fun HistoryItemCard(item: HistoryItem, context: Context) {
             .fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            // 根据类型显示不同前缀
-            val displayText = when (item.type) {
-                ClipboardContentType.Image -> "[${stringResource(R.string.type_image)}] ${item.dataName ?: item.text}"
-                ClipboardContentType.File -> "[${stringResource(R.string.type_file)}] ${item.dataName ?: item.text}"
+            // 根据类型显示不同前缀，文件/图片标签带颜色
+            val imageLabel = stringResource(R.string.type_image)
+            val fileLabel = stringResource(R.string.type_file)
+            val labelColor = when (item.type) {
+                ClipboardContentType.Image -> Color(0xFF2196F3)
+                ClipboardContentType.File -> Color(0xFFFF9800)
+                else -> MiuixTheme.colorScheme.onSurface
+            }
+            val contentText = when (item.type) {
+                ClipboardContentType.Image -> item.dataName ?: item.text
+                ClipboardContentType.File -> item.dataName ?: item.text
                 else -> item.text
+            }
+            val displayText = if (item.type == ClipboardContentType.Image || item.type == ClipboardContentType.File) {
+                buildAnnotatedString {
+                    withStyle(SpanStyle(color = labelColor, fontWeight = FontWeight.Bold)) {
+                        append("[${if (item.type == ClipboardContentType.Image) imageLabel else fileLabel}] ")
+                    }
+                    append(contentText)
+                }
+            } else {
+                buildAnnotatedString { append(contentText) }
             }
             Text(
                 text = displayText,
@@ -329,6 +390,9 @@ fun HistoryItemCard(item: HistoryItem, context: Context) {
                                         .key(BridgeKeys.DELETE_HISTORY_ITEM)
                                         .payload(payload)
                                         .send()
+                                    // 乐观更新：立即从本地列表移除
+                                    onDeleted(item.id)
+                                    HistoryActivity.previewCache.remove(item.id)
                                 }
                             }
                     )

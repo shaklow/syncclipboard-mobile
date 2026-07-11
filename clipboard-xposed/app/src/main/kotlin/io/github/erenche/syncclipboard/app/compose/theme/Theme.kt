@@ -11,6 +11,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowInsetsControllerCompat
 import io.github.erenche.syncclipboard.app.util.AppThemeUtils
 import io.github.erenche.syncclipboard.app.util.ThemeColor
+import io.github.erenche.syncclipboard.app.util.ThemeState
 import top.yukonga.miuix.kmp.theme.Colors
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.darkColorScheme
@@ -27,7 +28,8 @@ fun AppTheme(content: @Composable () -> Unit) {
     val context = LocalContext.current
     val view = LocalView.current
     val activity = view.context as? Activity
-    val dark = resolveDarkMode(context)
+    // 从可观察的 ThemeState 读取，切换时实时触发 recomposition
+    val dark = resolveDarkMode()
     val colors = resolveColors(context, dark)
 
     CurrentThemeConfigs.isDark = dark
@@ -49,8 +51,8 @@ fun AppTheme(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun resolveDarkMode(context: android.content.Context): Boolean =
-    when (AppThemeUtils.getMode(context)) {
+private fun resolveDarkMode(): Boolean =
+    when (ThemeState.mode) {
         AppThemeUtils.MODE_LIGHT -> false
         AppThemeUtils.MODE_DARK -> true
         AppThemeUtils.MODE_SYSTEM -> isSystemInDarkTheme()
@@ -60,12 +62,12 @@ private fun resolveDarkMode(context: android.content.Context): Boolean =
 @Composable
 private fun resolveColors(context: android.content.Context, dark: Boolean): Colors {
     // 动态颜色优先
-    if (AppThemeUtils.isEnableMonet(context)) {
+    if (ThemeState.monetEnabled) {
         return platformDynamicColors(dark)
     }
 
     val base = if (dark) darkColorScheme() else lightColorScheme()
-    val themeColor = ThemeColor.fromId(AppThemeUtils.getThemeColor(context))
+    val themeColor = ThemeColor.fromId(ThemeState.themeColorId)
     // 默认颜色直接使用基础方案
     if (themeColor == ThemeColor.DEFAULT) return base
 

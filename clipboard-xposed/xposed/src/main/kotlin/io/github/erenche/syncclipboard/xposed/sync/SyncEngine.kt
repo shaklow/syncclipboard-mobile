@@ -1,6 +1,7 @@
 package io.github.erenche.syncclipboard.xposed.sync
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import io.github.erenche.syncclipboard.bridge.BridgeKeys
 import io.github.erenche.syncclipboard.bridge.SyncClipboardBridge
@@ -119,7 +120,12 @@ class SyncEngine private constructor() {
         scope.launch {
             while (isActive && isRunning) {
                 try {
-                    fetchRemoteClipboard()
+                    if (config.enableAutoSync) {
+                        fetchRemoteClipboard()
+                    } else {
+                        // 总开关关闭时不轮询，状态置为未连接
+                        if (isConnected) isConnected = false
+                    }
                 } catch (e: Exception) {
                     Logger.error(TAG, "Remote fetch error", e)
                 }
@@ -263,7 +269,8 @@ class SyncEngine private constructor() {
             try {
                 Logger.debug(TAG, "Local clipboard changed: ${content.text.take(50)}...")
                 historyService?.addLocalContent(content)
-                if (config.enableBackgroundUpload) {
+                notifyContentChanged()
+                if (config.enableAutoSync && config.enableBackgroundUpload) {
                     uploadContent(content)
                 }
             } catch (e: Exception) {
@@ -278,13 +285,15 @@ class SyncEngine private constructor() {
         // 同步日志开关到 Logger
         Logger.enabled = newConfig.enableLogging
         Logger.logLevel = newConfig.logLevel
-        Logger.info(TAG, "Config changed, client rebuilt, logging=${newConfig.enableLogging}")
+        // 总开关关闭时立即置为未连接
+        if (!newConfig.enableAutoSync) isConnected = false
+        Logger.info(TAG, "Config changed, client rebuilt, logging=${newConfig.enableLogging}, autoSync=${newConfig.enableAutoSync}")
     }
 
     fun forceSync() {
         scope.launch {
             try {
-                fetchRemoteClipboard()
+                fetchRemoteClipboard(force = true)
             } catch (e: Exception) {
                 Logger.error(TAG, "Force sync failed", e)
             }
@@ -299,7 +308,12 @@ class SyncEngine private constructor() {
                     as? android.content.ClipboardManager ?: return@launch
                 val clipData = cm.primaryClip ?: return@launch
                 val content = extractFromClip(context, clipData) ?: return@launch
-                onLocalClipboardChanged(content, force = true)
+                // 手动上传绕过 autoSync/bgUpload 开关，直接上传
+                val hash = content.profileHash ?: HashUtils.computeLocalHash(content.text)
+                lastLocalHash = hash
+                historyService?.addLocalContent(content)
+                notifyContentChanged()
+                uploadContent(content)
             } catch (e: Exception) {
                 Logger.error(TAG, "Force upload failed", e)
             }
@@ -308,7 +322,7 @@ class SyncEngine private constructor() {
 
     // ─── 私有方法 ────────────────────────────────────────────────
 
-    private suspend fun fetchRemoteClipboard() {
+    private suspend fun fetchRemoteClipboard(force: Boolean = false) {
         val client = apiClient ?: run {
             Logger.warn(TAG, "fetchRemoteClipboard: apiClient is null")
             return
@@ -326,7 +340,11 @@ class SyncEngine private constructor() {
                 return
             }
 
-            if (hash == lastRemoteHash) return
+            if (!force && hash == lastRemoteHash) {
+                // 内容未变化也算连接成功，更新连接状态
+                isConnected = true
+                return
+            }
             lastRemoteHash = hash
 
             isConnected = true
@@ -334,7 +352,7 @@ class SyncEngine private constructor() {
 
             Logger.info(TAG, "Remote clipboard changed: ${profile.text.take(50)}...")
 
-            if (config.enableBackgroundDownload) {
+            if (force || config.enableBackgroundDownload) {
                 downloadAndApplyContent(profile)
             }
         } catch (e: Exception) {
@@ -425,9 +443,11 @@ class SyncEngine private constructor() {
             // 写入剪贴板前设置 lastLocalHash，防止 listener 二次上传
             lastLocalHash = HashUtils.computeLocalHash(profile.text)
 
-            // 图片/文件类型不写入剪贴板（避免输入法只读取到文件名），
-            // 用户可在主界面查看/下载。仅文本类型写入剪贴板。
-            if (profile.type == ClipboardContentType.Text && downloadedFileUri == null) {
+            // 仅纯文本（type=Text 且无文件数据且无文件名）才写入剪贴板。
+            // 图片/文件类型不写入（避免输入法只读取到文件名），
+            // 有 dataName 但 hasData=false 时也不写入（可能是文件上传中间状态）。
+            if (profile.type == ClipboardContentType.Text && !profile.hasData &&
+                profile.dataName.isNullOrBlank()) {
                 writeToClipboard(profile.text)
             }
 
@@ -452,6 +472,7 @@ class SyncEngine private constructor() {
                 timestamp = System.currentTimeMillis()
             )
             historyService?.addRemoteContent(historyContent, downloadedFilePath)
+            notifyContentChanged()
 
             lastSyncTime = System.currentTimeMillis()
             Logger.info(TAG, "Remote content applied to local clipboard")
@@ -552,6 +573,18 @@ class SyncEngine private constructor() {
         } catch (e: Exception) {
             Logger.error(TAG, "Failed to write URI to clipboard, falling back to text", e)
             writeToClipboard(label)
+        }
+    }
+
+    /** 通知 app 进程内容已变化（本地或远程），触发 UI 刷新 */
+    private fun notifyContentChanged() {
+        val context = appContext ?: return
+        try {
+            val intent = Intent(BridgeKeys.EVENT_CLIPBOARD_CHANGED)
+                .setPackage("io.github.erenche.syncclipboard")
+            context.sendBroadcast(intent)
+        } catch (e: Exception) {
+            Logger.warn(TAG, "Failed to notify content changed: ${e.message}")
         }
     }
 

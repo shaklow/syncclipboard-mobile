@@ -3,6 +3,11 @@ package io.github.erenche.syncclipboard.app.activity
 import android.app.Activity
 import android.os.Bundle
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +27,7 @@ import io.github.erenche.syncclipboard.app.compose.preference.rememberBooleanPre
 import io.github.erenche.syncclipboard.app.util.AppLangUtils
 import io.github.erenche.syncclipboard.app.util.AppThemeUtils
 import io.github.erenche.syncclipboard.app.util.ThemeColor
+import io.github.erenche.syncclipboard.app.util.ThemeState
 import io.github.erenche.syncclipboard.app.util.resolveLanguageName
 import io.github.erenche.syncclipboard.bridge.BridgeKeys
 import io.github.erenche.syncclipboard.bridge.SyncClipboardBridge
@@ -29,6 +35,7 @@ import io.github.erenche.syncclipboard.common.Prefs
 import io.github.erenche.syncclipboard.common.extensions.defaultSharedPreferences
 import io.github.erenche.syncclipboard.common.model.AppConfig
 import kotlinx.serialization.json.Json
+import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.SpinnerEntry
@@ -47,6 +54,24 @@ class SettingsActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         setContent { SettingsScreen() }
     }
+}
+
+/**
+ * 重启整个 App，让所有 Activity 重新应用主题/语言设置。
+ *
+ * 主题切换时仅 [recreate] 当前 Activity 会导致返回栈中的旧 Activity 仍用旧主题，
+ * 因此需要清空任务栈并重新启动。
+ */
+private fun restartApp(activity: Activity?) {
+    if (activity == null) return
+    val intent = activity.packageManager.getLaunchIntentForPackage(activity.packageName) ?: return
+    intent.addFlags(
+        android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or
+        android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK or
+        android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+    )
+    activity.startActivity(intent)
+    activity.finishAffinity()
 }
 
 @Composable
@@ -69,17 +94,12 @@ fun SettingsScreen() {
             LanguageCard(context, activity)
         }
 
-        // 3. 同步设置
+        // 3. 同步设置（含后台子开关）
         item("sync") {
-            SyncSettingsCard()
+            SyncSettingsCard(context)
         }
 
-        // 4. 后台设置
-        item("background") {
-            BackgroundSettingsCard()
-        }
-
-        // 5. 历史记录设置
+        // 4. 历史记录设置
         item("history") {
             HistorySettingsCard()
         }
@@ -93,6 +113,11 @@ fun SettingsScreen() {
         item("auto_save") {
             AutoSaveSettingsCard(context)
         }
+
+        // 8. 缓存管理
+        item("cache") {
+            CacheSettingsCard(context)
+        }
     }
 }
 
@@ -104,11 +129,12 @@ fun ThemeSettingsCard(context: android.content.Context, activity: Activity?) {
         R.string.option_theme_light to AppThemeUtils.MODE_LIGHT,
         R.string.option_theme_dark to AppThemeUtils.MODE_DARK
     )
-    val monetEnabled = remember { AppThemeUtils.isEnableMonet(context) }
-    var currentMode by remember { mutableIntStateOf(AppThemeUtils.getMode(context)) }
-    var currentColorId by remember { mutableStateOf(AppThemeUtils.getThemeColor(context)) }
     var showColorPicker by remember { mutableStateOf(false) }
     val monetAvailable = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+    // 直接读取可观察的 ThemeState，切换时实时触发 recomposition
+    val currentMode = ThemeState.mode
+    val monetEnabled = ThemeState.monetEnabled
+    val currentColorId = ThemeState.themeColorId
     // Monet 开启时颜色选择不可用
     val colorEnabled = !monetEnabled || !monetAvailable
 
@@ -127,9 +153,7 @@ fun ThemeSettingsCard(context: android.content.Context, activity: Activity?) {
             onSelectedIndexChange = { index ->
                 val newMode = themeModeOptions[index].second
                 if (newMode != currentMode) {
-                    currentMode = newMode
-                    AppThemeUtils.setMode(context, newMode)
-                    activity?.recreate()
+                    ThemeState.updateMode(context, newMode)
                 }
             }
         )
@@ -177,15 +201,12 @@ fun ThemeSettingsCard(context: android.content.Context, activity: Activity?) {
         }
 
         if (monetAvailable) {
-            var monetChecked by remember { mutableStateOf(monetEnabled) }
             SwitchPreference(
                 title = stringResource(R.string.setting_theme_monet),
                 summary = stringResource(R.string.setting_theme_monet_summary),
-                checked = monetChecked,
+                checked = monetEnabled,
                 onCheckedChange = {
-                    monetChecked = it
-                    AppThemeUtils.setEnableMonet(context, it)
-                    activity?.recreate()
+                    ThemeState.updateMonet(context, it)
                 }
             )
         }
@@ -196,9 +217,7 @@ fun ThemeSettingsCard(context: android.content.Context, activity: Activity?) {
         ThemeColorPickerDialog(
             currentColorId = currentColorId,
             onColorSelected = { themeColor ->
-                currentColorId = themeColor.id
-                AppThemeUtils.setThemeColor(context, themeColor.id)
-                activity?.recreate()
+                ThemeState.updateThemeColor(context, themeColor.id)
             },
             onDismiss = { showColorPicker = false }
         )
@@ -339,11 +358,58 @@ fun LanguageCard(context: android.content.Context, activity: Activity?) {
     }
 }
 
-// ─── 同步设置 ─────────────────────────────────────────────────
+// ─── 同步设置（含后台子开关）─────────────────────────────────
 @Composable
-fun SyncSettingsCard() {
-    val prefs = androidx.compose.ui.platform.LocalContext.current.defaultSharedPreferences
-    var autoSync by rememberBooleanPreference(prefs, "auto_sync_enabled", true)
+fun SyncSettingsCard(context: android.content.Context) {
+    var autoSync by remember { mutableStateOf(Prefs.loadConfig(context).enableAutoSync) }
+    var bgUpload by remember { mutableStateOf(Prefs.loadConfig(context).enableBackgroundUpload) }
+    var bgDownload by remember { mutableStateOf(Prefs.loadConfig(context).enableBackgroundDownload) }
+
+    fun pushConfig(newConfig: AppConfig) {
+        try {
+            Prefs.saveConfig(context, newConfig)
+            val configJson = Json.encodeToString(AppConfig.serializer(), newConfig)
+            val payload = android.os.Bundle().apply { putString("config", configJson) }
+            SyncClipboardBridge.with(context)
+                .to("com.android.systemui")
+                .key(BridgeKeys.PUSH_CONFIG)
+                .payload(payload)
+                .send()
+        } catch (_: Exception) {}
+    }
+
+    // 总开关：关闭→子开关一并关闭；打开→若两个子开关都关则默认都开
+    fun toggleAutoSync(enabled: Boolean) {
+        autoSync = enabled
+        val config = Prefs.loadConfig(context)
+        if (enabled) {
+            val restoreUpload = bgUpload || bgDownload
+            val newUpload = if (restoreUpload) bgUpload else true
+            val newDownload = if (restoreUpload) bgDownload else true
+            bgUpload = newUpload
+            bgDownload = newDownload
+            pushConfig(config.copy(enableAutoSync = true, enableBackgroundUpload = newUpload, enableBackgroundDownload = newDownload))
+        } else {
+            bgUpload = false
+            bgDownload = false
+            pushConfig(config.copy(enableAutoSync = false, enableBackgroundUpload = false, enableBackgroundDownload = false))
+        }
+    }
+
+    // 子开关：当两个子开关都被关闭时，总开关自动关闭（双向联动）
+    fun toggleBgUpload(enabled: Boolean) {
+        bgUpload = enabled
+        val config = Prefs.loadConfig(context)
+        val newAutoSync = if (!enabled && !bgDownload) { autoSync = false; false } else true
+        pushConfig(config.copy(enableBackgroundUpload = enabled, enableAutoSync = newAutoSync))
+    }
+
+    fun toggleBgDownload(enabled: Boolean) {
+        bgDownload = enabled
+        val config = Prefs.loadConfig(context)
+        val newAutoSync = if (!enabled && !bgUpload) { autoSync = false; false } else true
+        pushConfig(config.copy(enableBackgroundDownload = enabled, enableAutoSync = newAutoSync))
+    }
 
     Card(
         modifier = Modifier
@@ -354,35 +420,28 @@ fun SyncSettingsCard() {
             checked = autoSync,
             title = stringResource(R.string.setting_auto_sync),
             summary = stringResource(R.string.setting_auto_sync_summary),
-            onCheckedChange = { autoSync = it }
+            onCheckedChange = { toggleAutoSync(it) }
         )
-    }
-}
-
-// ─── 后台设置 ─────────────────────────────────────────────────
-@Composable
-fun BackgroundSettingsCard() {
-    val prefs = androidx.compose.ui.platform.LocalContext.current.defaultSharedPreferences
-    var bgUpload by rememberBooleanPreference(prefs, "background_upload_enabled", true)
-    var bgDownload by rememberBooleanPreference(prefs, "background_download_enabled", true)
-
-    Card(
-        modifier = Modifier
-            .padding(start = 16.dp, top = 16.dp, end = 16.dp)
-            .fillMaxWidth()
-    ) {
-        SwitchPreference(
-            checked = bgUpload,
-            title = stringResource(R.string.setting_background_upload),
-            summary = stringResource(R.string.setting_background_upload_summary),
-            onCheckedChange = { bgUpload = it }
-        )
-        SwitchPreference(
-            checked = bgDownload,
-            title = stringResource(R.string.setting_background_download),
-            summary = stringResource(R.string.setting_background_download_summary),
-            onCheckedChange = { bgDownload = it }
-        )
+        AnimatedVisibility(
+            visible = autoSync,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+        ) {
+            Column {
+                SwitchPreference(
+                    checked = bgUpload,
+                    title = stringResource(R.string.setting_background_upload),
+                    summary = stringResource(R.string.setting_background_upload_summary),
+                    onCheckedChange = { toggleBgUpload(it) }
+                )
+                SwitchPreference(
+                    checked = bgDownload,
+                    title = stringResource(R.string.setting_background_download),
+                    summary = stringResource(R.string.setting_background_download_summary),
+                    onCheckedChange = { toggleBgDownload(it) }
+                )
+            }
+        }
     }
 }
 
@@ -476,4 +535,80 @@ fun AutoSaveSettingsCard(context: android.content.Context) {
             onCheckedChange = onToggle
         )
     }
+}
+
+// ─── 缓存管理 ─────────────────────────────────────────────────
+@Composable
+fun CacheSettingsCard(context: android.content.Context) {
+    var cacheSize by remember { mutableStateOf(getCacheSize(context)) }
+
+    Card(
+        modifier = Modifier
+            .padding(start = 16.dp, top = 16.dp, end = 16.dp)
+            .fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.setting_cache),
+                    fontSize = 16.sp,
+                    color = MiuixTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = stringResource(R.string.setting_cache_summary, formatFileSize(cacheSize)),
+                    fontSize = 13.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantActions
+                )
+            }
+            Button(
+                onClick = {
+                    clearCache(context)
+                    HistoryActivity.previewCache.clear()
+                    cacheSize = getCacheSize(context)
+                },
+                enabled = cacheSize > 0
+            ) {
+                Text(text = stringResource(R.string.setting_cache_clear))
+            }
+        }
+    }
+}
+
+/** 计算 app cacheDir 大小（字节） */
+private fun getCacheSize(context: android.content.Context): Long {
+    return try {
+        val cacheDir = context.cacheDir
+        if (cacheDir.exists()) cacheDir.walkTopDown().filter { it.isFile }.sumOf { it.length() } else 0L
+    } catch (_: Exception) {
+        0L
+    }
+}
+
+/** 清除 app cacheDir 下所有文件 */
+private fun clearCache(context: android.content.Context) {
+    try {
+        val cacheDir = context.cacheDir
+        if (cacheDir.exists()) {
+            cacheDir.walkBottomUp().forEach { if (it.isFile) it.delete() }
+        }
+    } catch (_: Exception) {
+    }
+}
+
+/** 格式化文件大小 */
+private fun formatFileSize(bytes: Long): String {
+    if (bytes <= 0) return "0 B"
+    val units = arrayOf("B", "KB", "MB", "GB")
+    var size = bytes.toDouble()
+    var unitIndex = 0
+    while (size >= 1024 && unitIndex < units.lastIndex) {
+        size /= 1024
+        unitIndex++
+    }
+    return String.format("%.1f %s", size, units[unitIndex])
 }

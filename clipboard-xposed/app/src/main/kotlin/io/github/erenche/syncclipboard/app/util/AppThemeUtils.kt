@@ -1,6 +1,9 @@
 package io.github.erenche.syncclipboard.app.util
 
 import android.content.Context
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import io.github.erenche.syncclipboard.common.extensions.defaultSharedPreferences
 import io.github.erenche.syncclipboard.common.extensions.editCommit
@@ -39,6 +42,48 @@ object AppThemeUtils {
 
     fun setThemeColor(context: Context, color: String) {
         context.defaultSharedPreferences.editCommit { putString(KEY_THEME_COLOR, color) }
+    }
+}
+
+/**
+ * 主题可观察状态单例。
+ *
+ * 持有主题模式、主题颜色、Monet 开关的 Compose state，
+ * 使主题变更能实时触发 recomposition，无需重启 Activity。
+ *
+ * 在每个 Activity 创建时调用 [sync] 从 SharedPreferences 加载最新值。
+ */
+object ThemeState {
+    var mode by mutableStateOf(AppThemeUtils.MODE_SYSTEM)
+        private set
+    var themeColorId by mutableStateOf(AppThemeUtils.COLOR_DEFAULT)
+        private set
+    var monetEnabled by mutableStateOf(false)
+        private set
+
+    /** 从 SharedPreferences 同步最新值（不触发额外 recomposition）。 */
+    fun sync(context: Context) {
+        mode = AppThemeUtils.getMode(context)
+        themeColorId = AppThemeUtils.getThemeColor(context)
+        monetEnabled = AppThemeUtils.isEnableMonet(context)
+    }
+
+    /** 更新主题模式，同时写入 SharedPreferences 与 state。 */
+    fun updateMode(context: Context, newMode: Int) {
+        AppThemeUtils.setMode(context, newMode)
+        mode = newMode
+    }
+
+    /** 更新主题颜色，同时写入 SharedPreferences 与 state。 */
+    fun updateThemeColor(context: Context, colorId: String) {
+        AppThemeUtils.setThemeColor(context, colorId)
+        themeColorId = colorId
+    }
+
+    /** 更新 Monet 开关，同时写入 SharedPreferences 与 state。 */
+    fun updateMonet(context: Context, enable: Boolean) {
+        AppThemeUtils.setEnableMonet(context, enable)
+        monetEnabled = enable
     }
 }
 

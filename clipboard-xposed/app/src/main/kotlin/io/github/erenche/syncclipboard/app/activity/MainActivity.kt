@@ -1,6 +1,9 @@
 package io.github.erenche.syncclipboard.app.activity
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
@@ -20,6 +23,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import io.github.erenche.syncclipboard.app.R
@@ -34,6 +38,10 @@ import io.github.erenche.syncclipboard.common.model.ClipboardContentType
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import top.yukonga.miuix.kmp.basic.*
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Info
+import top.yukonga.miuix.kmp.icon.extended.Ok
+import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import java.io.File
@@ -99,19 +107,45 @@ fun MainScreen(viewModel: MainViewModel) {
         viewModel.refreshRemoteContent()
     }
 
+    // 监听内容变化广播，自动刷新服务器最新内容
+    DisposableEffect(Unit) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                viewModel.refreshRemoteContent()
+            }
+        }
+        ContextCompat.registerReceiver(
+            context,
+            receiver,
+            IntentFilter(BridgeKeys.EVENT_CLIPBOARD_CHANGED),
+            ContextCompat.RECEIVER_EXPORTED
+        )
+        onDispose { context.unregisterReceiver(receiver) }
+    }
+
+    val isLoadingRemote by viewModel.isLoadingRemote
+
     AppToolBarListContainer(
         title = stringResource(R.string.app_name),
+        isRefreshing = isLoadingRemote,
+        onRefresh = {
+            viewModel.refreshStatus()
+            viewModel.refreshRemoteContent()
+        },
         actions = {
-            Text(
-                text = stringResource(R.string.action_refresh),
-                fontSize = 15.sp,
-                color = MiuixTheme.colorScheme.primary,
-                modifier = Modifier.padding(end = 16.dp)
-                    .clickable {
-                        viewModel.refreshStatus()
-                        viewModel.refreshRemoteContent()
-                    }
-            )
+            IconButton(
+                onClick = {
+                    viewModel.refreshStatus()
+                    viewModel.refreshRemoteContent()
+                },
+                modifier = Modifier.padding(end = 8.dp)
+            ) {
+                Icon(
+                    imageVector = MiuixIcons.Refresh,
+                    contentDescription = stringResource(R.string.action_refresh),
+                    tint = MiuixTheme.colorScheme.onSurface
+                )
+            }
         }
     ) {
         item("status") { StatusCard(viewModel) }
@@ -155,27 +189,40 @@ fun StatusCard(viewModel: MainViewModel) {
     val isActive by viewModel.isModuleActive
     val syncStatus by viewModel.syncStatus
     val bgColor = if (isActive) Color(0xFF4CAF50) else Color(0xFFF44336)
+    val statusIcon = if (isActive) MiuixIcons.Ok else MiuixIcons.Info
 
     Card(
         modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
         colors = CardColors(bgColor, Color.White)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = stringResource(
-                    if (isActive) R.string.module_status_activated
-                    else R.string.module_status_not_activated
-                ),
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = statusIcon,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(28.dp)
             )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = stringResource(R.string.main_sync_status, syncStatus),
-                color = Color.White.copy(alpha = 0.8f),
-                fontSize = 14.sp
-            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Text(
+                    text = stringResource(
+                        if (isActive) R.string.module_status_activated
+                        else R.string.module_status_not_activated
+                    ),
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.main_sync_status, syncStatus),
+                    color = Color.White.copy(alpha = 0.8f),
+                    fontSize = 14.sp
+                )
+            }
         }
     }
 }

@@ -120,6 +120,10 @@
     <string name="setting_sync_settings">同步设置</string>
     <string name="setting_background_settings">后台设置</string>
     <string name="setting_history_settings">历史设置</string>
+    <string name="setting_cache">缓存</string>
+    <string name="setting_cache_summary">已占用：%1$s</string>
+    <string name="setting_cache_cleared">缓存已清除</string>
+    <string name="setting_cache_clear">清除</string>
 
     <!-- Items -->
     <string name="item_server_settings">服务器配置</string>

@@ -120,6 +120,10 @@
     <string name="setting_sync_settings">Sync Settings</string>
     <string name="setting_background_settings">Background Settings</string>
     <string name="setting_history_settings">History Settings</string>
+    <string name="setting_cache">Cache</string>
+    <string name="setting_cache_summary">Cache used: %1$s</string>
+    <string name="setting_cache_cleared">Cache cleared</string>
+    <string name="setting_cache_clear">Clear</string>
 
     <!-- Items -->
     <string name="item_server_settings">Server Configuration</string>

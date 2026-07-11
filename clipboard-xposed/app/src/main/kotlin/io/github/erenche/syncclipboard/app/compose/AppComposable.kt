@@ -10,8 +10,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import io.github.erenche.syncclipboard.app.activity.BaseActivity
 import io.github.erenche.syncclipboard.app.compose.theme.AppTheme
+import top.yukonga.miuix.kmp.basic.PullToRefresh
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
+import top.yukonga.miuix.kmp.basic.rememberPullToRefreshState
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -25,6 +27,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 @Composable
 fun NavigationBackIcon(onBack: () -> Unit) {
@@ -45,6 +48,8 @@ fun AppToolBarListContainer(
     canBack: Boolean = false,
     onBack: () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
+    isRefreshing: Boolean = false,
+    onRefresh: (() -> Unit)? = null,
     content: LazyListScope.() -> Unit
 ) {
     AppTheme {
@@ -60,12 +65,27 @@ fun AppToolBarListContainer(
                 )
             }
         ) { paddingValues ->
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = paddingValues.calculateTopPadding()),
-                content = content
-            )
+            val lazyList: @Composable () -> Unit = {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .overScrollVertical()
+                        .padding(top = paddingValues.calculateTopPadding()),
+                    content = content
+                )
+            }
+            if (onRefresh != null) {
+                val pullToRefreshState = rememberPullToRefreshState()
+                PullToRefresh(
+                    isRefreshing = isRefreshing,
+                    onRefresh = onRefresh,
+                    pullToRefreshState = pullToRefreshState,
+                ) {
+                    lazyList()
+                }
+            } else {
+                lazyList()
+            }
         }
     }
 }
