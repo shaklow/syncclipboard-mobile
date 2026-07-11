@@ -29,13 +29,13 @@ import kotlinx.coroutines.launch
 /**
  * SyncEngine — 同步引擎核心。
  *
- * 端口自 TypeScript ClipboardSyncService.ts。
- * 在 LSPosed 模块中运行，负责：
- * - 监听本地剪贴板变化（来自 ClipboardHooker）
- * - 定期拉取远程剪贴板变化（HTTP 轮询或 SignalR）
- * - 哈希去重、自动上传/下载
- * - 历史记录跟踪
- * - IPC 通信（通过 Bridge）
+ * 在 system_server 进程中运行，由 GeneralHooker 初始化。
+ * 负责监听剪贴板变化（来自 ClipboardServiceHooker）、上传/下载、历史记录、IPC 路由。
+ *
+ * 去重策略：
+ * - onLocalClipboardChanged 的哈希检查在调用线程同步执行，防止竞态
+ * - system_server 中不注册 OnPrimaryClipChangedListener / 不轮询本地剪贴板
+ *   仅依赖 ClipboardServiceHooker 提供的事件
  */
 class SyncEngine private constructor() {
 
@@ -57,41 +57,14 @@ class SyncEngine private constructor() {
     private var appContext: Context? = null
     private var historyService: HistoryService? = null
 
-    /** 当前进程名 — 用于日志区分 app 进程和 systemui 进程的实例 */
     private var processName: String = "unknown"
 
-    // 哈希去重 — @Volatile 保证跨线程可见性
+    /** 本地哈希去重 — 同步检查防止竞态 */
     @Volatile
     private var lastLocalHash: String? = null
     @Volatile
     private var lastRemoteHash: String? = null
 
-    /**
-     * 前台剪贴板变化监听器 — 在 app 进程中替代 Xposed Hook
-     */
-    private val clipChangedListener = android.content.ClipboardManager.OnPrimaryClipChangedListener {
-        val ctx = appContext ?: return@OnPrimaryClipChangedListener
-        val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
-            as? android.content.ClipboardManager ?: return@OnPrimaryClipChangedListener
-        val clip = cm.primaryClip ?: return@OnPrimaryClipChangedListener
-        if (clip.itemCount == 0) return@OnPrimaryClipChangedListener
-        val item = clip.getItemAt(0)
-        val text = item.text?.toString()
-            ?: item.htmlText?.toString()
-            ?: item.uri?.toString()
-            ?: return@OnPrimaryClipChangedListener
-
-        val content = ClipboardContent(
-            type = if (item.uri != null) ClipboardContentType.File else ClipboardContentType.Text,
-            text = text,
-            fileUri = item.uri?.toString(),
-            hasData = item.uri != null,
-            timestamp = System.currentTimeMillis()
-        )
-        onLocalClipboardChanged(content)
-    }
-
-    // 同步状态
     @Volatile
     private var isRunning = false
 
@@ -103,41 +76,25 @@ class SyncEngine private constructor() {
     var lastSyncTime: Long = 0
         private set
 
-    /**
-     * 初始化同步引擎。
-     * 必须在 Application.onCreate() 之后调用。
-     */
     fun initialize(context: Context) {
-        android.util.Log.w("SyncClipboard", "[SyncEngine] initialize() called, process=${getProcessName(context)}, appContext=$appContext")
-
         if (appContext != null) {
-            android.util.Log.w("SyncClipboard", "[SyncEngine] Already initialized, skipping")
+            Logger.info(TAG, "Already initialized, skipping")
             return
         }
         appContext = context.applicationContext
         processName = getProcessName(context)
-        android.util.Log.w("SyncClipboard", "[SyncEngine] appContext set, process=$processName")
+        Logger.info(TAG, "initialize() process=$processName")
 
-        // 初始化历史记录服务
         historyService = HistoryService(context)
-        android.util.Log.w("SyncClipboard", "[SyncEngine] HistoryService created")
-
-        // 加载配置
         config = Prefs.loadConfig(context)
-        android.util.Log.w("SyncClipboard", "[SyncEngine] Config loaded, servers=${config.servers.size}, activeIdx=${config.activeServerIndex}")
-
-        // 构建 API 客户端
+        // 应用日志开关
+        Logger.enabled = config.enableLogging
+        Logger.logLevel = config.logLevel
         rebuildApiClient()
-        android.util.Log.w("SyncClipboard", "[SyncEngine] API client rebuilt, client=${apiClient != null}")
-
-        // 设置 IPC 路由
         setupBridgeRouting(context)
-
-        // 启动同步循环
         start()
-        android.util.Log.w("SyncClipboard", "[SyncEngine] start() called, isRunning=$isRunning")
 
-        Logger.info(TAG, "SyncEngine initialized")
+        Logger.info(TAG, "SyncEngine initialized, servers=${config.servers.size}, activeIdx=${config.activeServerIndex}")
     }
 
     private fun getProcessName(context: Context): String {
@@ -150,39 +107,15 @@ class SyncEngine private constructor() {
         }
     }
 
-    /**
-     * 启动同步循环。
-     */
     fun start() {
         if (isRunning) return
         isRunning = true
 
-        val context = appContext ?: return
+        // 唯一剪贴板变化源：OnPrimaryClipChangedListener（系统级，捕获全局变化）
+        // 不使用 ClipboardHooker / 本地轮询，避免多路径竞态导致重复上传
+        registerClipListener()
 
-        // 1. 注册 OnPrimaryClipChangedListener（前台剪贴板监听）
-        // 公共 API，在 app 进程中替代 Xposed Hook
-        try {
-            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
-                as? android.content.ClipboardManager
-            cm?.addPrimaryClipChangedListener(clipChangedListener)
-            android.util.Log.w("SyncClipboard", "[SyncEngine] OnPrimaryClipChangedListener registered")
-        } catch (e: Exception) {
-            android.util.Log.w("SyncClipboard", "[SyncEngine] Failed to register clip listener: ${e.message}")
-        }
-
-        // 2. 启动本地剪贴板轮询（后台兜底，类似 TS 版 ClipboardMonitor）
-        scope.launch {
-            while (isActive && isRunning) {
-                try {
-                    pollLocalClipboard()
-                } catch (e: Exception) {
-                    Logger.error(TAG, "Local clipboard poll error", e)
-                }
-                delay(config.syncInterval)
-            }
-        }
-
-        // 3. 启动远程轮询（用于 WebDAV/S3 或没有 SignalR 的 SyncClipboard 服务器）
+        // 远程轮询 — 定期从服务器拉取新内容
         scope.launch {
             while (isActive && isRunning) {
                 try {
@@ -194,18 +127,35 @@ class SyncEngine private constructor() {
             }
         }
 
-        Logger.info(TAG, "SyncEngine started, localInterval=${config.syncInterval}ms, remoteInterval=${config.remotePollingInterval}ms")
+        Logger.info(TAG, "SyncEngine started, process=$processName")
     }
 
-    /**
-     * 停止同步循环。
-     */
+    private fun registerClipListener() {
+        try {
+            val context = appContext ?: return
+            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE)
+                as? android.content.ClipboardManager ?: return
+            cm.addPrimaryClipChangedListener(clipChangedListener)
+            Logger.info(TAG, "OnPrimaryClipChangedListener registered")
+        } catch (e: Exception) {
+            Logger.warn(TAG, "Failed to register clip listener: ${e.message}")
+        }
+    }
+
+    private val clipChangedListener = android.content.ClipboardManager.OnPrimaryClipChangedListener {
+        val ctx = appContext ?: return@OnPrimaryClipChangedListener
+        val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE)
+            as? android.content.ClipboardManager ?: return@OnPrimaryClipChangedListener
+        val clip = cm.primaryClip ?: return@OnPrimaryClipChangedListener
+        val content = extractFromClip(ctx, clip) ?: return@OnPrimaryClipChangedListener
+        onLocalClipboardChanged(content)
+    }
+
     fun stop() {
         isRunning = false
         isConnected = false
-        // 注销剪贴板监听
         try {
-            val cm = appContext?.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+            val cm = appContext?.getSystemService(Context.CLIPBOARD_SERVICE)
                 as? android.content.ClipboardManager
             cm?.removePrimaryClipChangedListener(clipChangedListener)
         } catch (_: Exception) {}
@@ -213,25 +163,106 @@ class SyncEngine private constructor() {
     }
 
     /**
-     * 当检测到本地剪贴板变化时由 ClipboardHooker/Listener/Polling 调用。
-     * 哈希去重在调用线程同步执行，防止竞态条件导致重复上传。
+     * 从 ClipData 提取统一内容 — 优先处理图片/文件（URI），再处理文本。
+     *
+     * 关键：必须优先检查 item.uri，因为图片剪贴板中 item.text 可能返回文件名而非 null，
+     * 导致图片被误当作文本处理。
      */
-    fun onLocalClipboardChanged(content: ClipboardContent) {
-        // 同步计算并检查哈希，防止多个调用者（Listener + Polling + Hook）竞态
+    private fun extractFromClip(
+        context: Context,
+        clip: android.content.ClipData
+    ): ClipboardContent? {
+        if (clip.itemCount == 0) return null
+        val item = clip.getItemAt(0)
+
+        // 优先处理 URI（图片/文件）
+        val uri = item.uri
+        if (uri != null) {
+            val isImage = isImageUri(context, clip.description, uri)
+            val type = if (isImage) ClipboardContentType.Image else ClipboardContentType.File
+            val fileName = uri.lastPathSegment ?: "file_${System.currentTimeMillis()}"
+            val fileSize = queryFileSize(context, uri)
+
+            Logger.debug(TAG, "Extracted URI content: type=$type, name=$fileName, size=$fileSize")
+
+            return ClipboardContent(
+                type = type,
+                text = "",
+                fileUri = uri.toString(),
+                fileName = fileName,
+                fileSize = fileSize,
+                hasData = true,
+                timestamp = System.currentTimeMillis()
+            )
+        }
+
+        // 文本类型
+        val text = item.text?.toString()
+            ?: item.htmlText?.toString()
+            ?: return null
+
+        return ClipboardContent(
+            type = ClipboardContentType.Text,
+            text = text,
+            hasData = false,
+            timestamp = System.currentTimeMillis()
+        )
+    }
+
+    /** 判断 URI 是否为图片 */
+    private fun isImageUri(
+        context: Context,
+        desc: android.content.ClipDescription,
+        uri: android.net.Uri
+    ): Boolean {
+        // 1. 通过 ClipDescription 的 MIME 类型判断
+        if (desc.hasMimeType("image/*")) return true
+        // 2. 通过 ContentResolver 查询实际 MIME 类型
+        try {
+            val mime = context.contentResolver.getType(uri)
+            if (mime != null && mime.startsWith("image/")) return true
+        } catch (_: Exception) {}
+        // 3. 通过文件扩展名判断
+        val path = uri.lastPathSegment ?: return false
+        val lower = path.lowercase()
+        return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
+               lower.endsWith(".gif") || lower.endsWith(".webp") || lower.endsWith(".bmp")
+    }
+
+    /** 查询 URI 指向文件的大小（字节） */
+    private fun queryFileSize(context: Context, uri: android.net.Uri): Long? {
+        return try {
+            context.contentResolver.query(
+                uri,
+                arrayOf(android.provider.OpenableColumns.SIZE),
+                null, null, null
+            )?.use { cursor ->
+                if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null
+            }
+        } catch (_: Exception) { null }
+    }
+
+    /**
+     * 当检测到本地剪贴板变化时由 ClipboardServiceHooker / ClipboardHooker / Listener 调用。
+     *
+     * 哈希去重在调用线程同步执行，防止多个调用者竞态导致重复上传。
+     *
+     * @param force 是否强制处理（跳过去重），用于手动上传
+     */
+    fun onLocalClipboardChanged(content: ClipboardContent, force: Boolean = false) {
+        // 仅在已初始化的进程（SystemUI）中处理，App 进程的未初始化实例直接跳过
+        if (appContext == null) return
+
         val hash = content.profileHash
             ?: HashUtils.computeLocalHash(content.text)
 
-        if (hash == lastLocalHash) return
+        if (!force && hash == lastLocalHash) return
         lastLocalHash = hash
 
         scope.launch {
             try {
                 Logger.debug(TAG, "Local clipboard changed: ${content.text.take(50)}...")
-
-                // 添加到历史记录
-                historyService?.addOrUpdate(content)
-
-                // 自动上传
+                historyService?.addLocalContent(content)
                 if (config.enableBackgroundUpload) {
                     uploadContent(content)
                 }
@@ -241,18 +272,15 @@ class SyncEngine private constructor() {
         }
     }
 
-    /**
-     * 配置变更时重新加载。
-     */
     fun onConfigChanged(newConfig: AppConfig) {
         config = newConfig
         rebuildApiClient()
-        Logger.info(TAG, "Config changed, client rebuilt")
+        // 同步日志开关到 Logger
+        Logger.enabled = newConfig.enableLogging
+        Logger.logLevel = newConfig.logLevel
+        Logger.info(TAG, "Config changed, client rebuilt, logging=${newConfig.enableLogging}")
     }
 
-    /**
-     * 手动触发同步。
-     */
     fun forceSync() {
         scope.launch {
             try {
@@ -263,30 +291,15 @@ class SyncEngine private constructor() {
         }
     }
 
-    /**
-     * 手动触发上传 — 读取当前剪贴板内容并上传。
-     */
     fun forceUpload() {
         scope.launch {
             try {
                 val context = appContext ?: return@launch
-                val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE)
                     as? android.content.ClipboardManager ?: return@launch
                 val clipData = cm.primaryClip ?: return@launch
-                if (clipData.itemCount == 0) return@launch
-                val item = clipData.getItemAt(0)
-                val text = item.text?.toString()
-                    ?: item.htmlText?.toString()
-                    ?: item.uri?.toString()
-                    ?: return@launch
-                val content = ClipboardContent(
-                    type = if (item.uri != null) ClipboardContentType.File else ClipboardContentType.Text,
-                    text = text,
-                    fileUri = item.uri?.toString(),
-                    hasData = item.uri != null,
-                    timestamp = System.currentTimeMillis()
-                )
-                onLocalClipboardChanged(content)
+                val content = extractFromClip(context, clipData) ?: return@launch
+                onLocalClipboardChanged(content, force = true)
             } catch (e: Exception) {
                 Logger.error(TAG, "Force upload failed", e)
             }
@@ -295,63 +308,32 @@ class SyncEngine private constructor() {
 
     // ─── 私有方法 ────────────────────────────────────────────────
 
-    /**
-     * 轮询本地剪贴板 — 后台兜底策略。
-     * 读取本地剪贴板内容，计算哈希，与上次比较。
-     * 在 app 进程中替代 Xposed Hook 实现后台监听。
-     */
-    private suspend fun pollLocalClipboard() {
-        val context = appContext ?: return
-        val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
-            as? android.content.ClipboardManager ?: return
-        val clip = cm.primaryClip ?: return
-        if (clip.itemCount == 0) return
-        val item = clip.getItemAt(0)
-        val text = item.text?.toString()
-            ?: item.htmlText?.toString()
-            ?: item.uri?.toString()
-            ?: return
-
-        val hash = HashUtils.computeLocalHash(text)
-        if (hash == lastLocalHash) return
-
-        val content = ClipboardContent(
-            type = if (item.uri != null) ClipboardContentType.File else ClipboardContentType.Text,
-            text = text,
-            fileUri = item.uri?.toString(),
-            hasData = item.uri != null,
-            timestamp = System.currentTimeMillis()
-        )
-        onLocalClipboardChanged(content)
-    }
-
-    /**
-     * 拉取远程剪贴板内容。
-     * 只要服务器可达（返回非 null ProfileDto），就视为已连接。
-     */
     private suspend fun fetchRemoteClipboard() {
-        val client = apiClient ?: return
+        val client = apiClient ?: run {
+            Logger.warn(TAG, "fetchRemoteClipboard: apiClient is null")
+            return
+        }
 
         try {
             val profile = client.getClipboard()
             if (profile == null) {
-                // 服务器不可达或返回错误 — isConnected 保持原值
+                Logger.warn(TAG, "fetchRemoteClipboard: getClipboard returned null")
+                return
+            }
+            Logger.info(TAG, "fetchRemoteClipboard: type=${profile.type}, hash=${profile.hash}, text=${profile.text.take(50)}, hasData=${profile.hasData}")
+            val hash = profile.hash ?: run {
+                Logger.warn(TAG, "fetchRemoteClipboard: profile.hash is null, skipping")
                 return
             }
 
-            // 服务器可达 — 标记已连接
+            if (hash == lastRemoteHash) return
+            lastRemoteHash = hash
+
             isConnected = true
             lastSyncTime = System.currentTimeMillis()
 
-            // 没有内容变更（hash 为空或与上次相同）
-            val hash = profile.hash ?: return
-            if (hash == lastRemoteHash) return
-
-            lastRemoteHash = hash
-
             Logger.info(TAG, "Remote clipboard changed: ${profile.text.take(50)}...")
 
-            // 自动下载
             if (config.enableBackgroundDownload) {
                 downloadAndApplyContent(profile)
             }
@@ -361,53 +343,115 @@ class SyncEngine private constructor() {
         }
     }
 
-    /**
-     * 上传剪贴板内容到服务器。
-     * 在发起 HTTP 请求前设置 lastRemoteHash，防止并发轮询检测到相同的 profile 并触发下载。
-     */
     private suspend fun uploadContent(content: ClipboardContent) {
-        val client = apiClient ?: return
-
-        // 预先计算 profile hash 并设置 lastRemoteHash
-        // 必须在 HTTP 调用前完成，否则轮询协程可能在 PUT 期间检测到变化并触发重复下载
-        val profileHash = HashUtils.computeProfileHash(
-            content.type.name.lowercase(),
-            content.text
-        )
-        lastRemoteHash = profileHash
+        val client = apiClient ?: run {
+            Logger.warn(TAG, "No API client configured, skipping upload")
+            return
+        }
 
         try {
-            client.putContent(content)
+            // 如果 fileUri 是 content:// URI，先复制到临时文件（putFile 需要文件路径）
+            val fileUri = content.fileUri
+            val uploadContent = if (content.hasData && fileUri != null &&
+                fileUri.startsWith("content://")) {
+                val context = appContext ?: return
+                val tempFile = copyUriToTempFile(context, fileUri, content.fileName)
+                if (tempFile != null) {
+                    content.copy(fileUri = tempFile.absolutePath)
+                } else {
+                    Logger.warn(TAG, "Failed to copy URI to temp file, uploading as text")
+                    content.copy(hasData = false)
+                }
+            } else {
+                content
+            }
+
+            client.putContent(uploadContent)
             lastSyncTime = System.currentTimeMillis()
-            isConnected = true  // 上传成功，服务器可达
-            android.util.Log.w("SyncClipboard", "[SyncEngine/$processName] Content uploaded successfully")
+            // 设置 lastRemoteHash，防止轮询循环立即下载刚上传的内容
+            val profileHash = HashUtils.computeProfileHash(
+                content.type.name.lowercase(),
+                content.text
+            )
+            lastRemoteHash = profileHash
+            Logger.info(TAG, "Content uploaded successfully")
         } catch (e: Exception) {
-            // 上传失败：重置哈希以便后续重试
             Logger.error(TAG, "Upload failed", e)
         }
     }
 
-    /**
-     * 下载远程内容并写入本地剪贴板。
-     */
+    /** 将 content:// URI 复制到临时文件，返回临时 File */
+    private fun copyUriToTempFile(
+        context: Context,
+        uriString: String,
+        fileName: String?
+    ): java.io.File? {
+        return try {
+            val uri = android.net.Uri.parse(uriString)
+            val name = fileName ?: "temp_${System.currentTimeMillis()}"
+            val tempFile = java.io.File(context.cacheDir, "upload_$name")
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                tempFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            } ?: return null
+            Logger.debug(TAG, "Copied URI to temp file: $uriString -> ${tempFile.absolutePath}")
+            tempFile
+        } catch (e: Exception) {
+            Logger.error(TAG, "Failed to copy URI to temp file: $uriString", e)
+            null
+        }
+    }
+
     private suspend fun downloadAndApplyContent(profile: ProfileDto) {
         val client = apiClient ?: return
         val context = appContext ?: return
 
         try {
-            // 如果有数据文件，先下载
+            var downloadedFileUri: android.net.Uri? = null
+            var downloadedFilePath: String? = null
             if (profile.hasData && profile.dataName != null) {
                 val name = profile.dataName!!
                 val destPath = "${context.filesDir}/downloads/$name"
                 client.downloadFile(name, destPath)
-                Logger.info(TAG, "File downloaded: $name")
+                // 设置文件可读，使其他应用能通过 file:// URI 访问
+                val destFile = java.io.File(destPath)
+                destFile.setReadable(true, false)
+                downloadedFileUri = android.net.Uri.fromFile(destFile)
+                downloadedFilePath = destPath
+                Logger.info(TAG, "File downloaded: $name -> $destPath")
             }
 
-            // 在写入剪贴板前设置 lastLocalHash，防止 ClipboardHooker 二次上传
+            // 写入剪贴板前设置 lastLocalHash，防止 listener 二次上传
             lastLocalHash = HashUtils.computeLocalHash(profile.text)
 
-            // 写入本地剪贴板
-            writeToClipboard(profile.text)
+            // 图片/文件类型不写入剪贴板（避免输入法只读取到文件名），
+            // 用户可在主界面查看/下载。仅文本类型写入剪贴板。
+            if (profile.type == ClipboardContentType.Text && downloadedFileUri == null) {
+                writeToClipboard(profile.text)
+            }
+
+            // 自动保存：若开启且为图片/文件类型，则保存到相册或下载目录
+            if (config.enableAutoSave && downloadedFilePath != null &&
+                (profile.type == ClipboardContentType.Image || profile.type == ClipboardContentType.File)) {
+                try {
+                    autoSaveToFile(context, downloadedFilePath!!, profile.type, profile.dataName)
+                } catch (e: Exception) {
+                    Logger.warn(TAG, "Auto save failed: ${e.message}")
+                }
+            }
+
+            // 记录到历史（syncStatus = Synced，参考原项目 addRemoteContent）
+            val historyContent = ClipboardContent(
+                type = profile.type,
+                text = profile.text,
+                fileUri = downloadedFilePath,
+                fileName = profile.dataName,
+                fileSize = profile.size,
+                hasData = profile.hasData,
+                timestamp = System.currentTimeMillis()
+            )
+            historyService?.addRemoteContent(historyContent, downloadedFilePath)
 
             lastSyncTime = System.currentTimeMillis()
             Logger.info(TAG, "Remote content applied to local clipboard")
@@ -416,10 +460,65 @@ class SyncEngine private constructor() {
         }
     }
 
-    /**
-     * 写入内容到本地剪贴板。
-     * 在 system_server 进程中可以直接调用 ClipboardService 内部方法。
-     */
+    /** 根据文件名猜测 MIME 类型 */
+    private fun guessMimeFromName(name: String?): String {
+        if (name == null) return "application/octet-stream"
+        val lower = name.lowercase()
+        return when {
+            lower.endsWith(".png") -> "image/png"
+            lower.endsWith(".jpg") || lower.endsWith(".jpeg") -> "image/jpeg"
+            lower.endsWith(".gif") -> "image/gif"
+            lower.endsWith(".webp") -> "image/webp"
+            lower.endsWith(".bmp") -> "image/bmp"
+            else -> "application/octet-stream"
+        }
+    }
+
+    /** 自动保存文件到相册或下载目录 */
+    private fun autoSaveToFile(
+        context: Context,
+        filePath: String,
+        type: ClipboardContentType,
+        fileName: String?
+    ) {
+        val srcFile = java.io.File(filePath)
+        if (!srcFile.exists()) return
+        val resolver = context.contentResolver
+        val name = fileName ?: srcFile.name
+        val mime = guessMimeFromName(fileName)
+
+        if (type == ClipboardContentType.Image) {
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, name)
+                put(android.provider.MediaStore.Images.Media.MIME_TYPE, mime)
+            }
+            val uri = resolver.insert(
+                android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values
+            )
+            uri?.let {
+                resolver.openOutputStream(it)?.use { out ->
+                    srcFile.inputStream().use { input -> input.copyTo(out) }
+                }
+                Logger.info(TAG, "Auto saved image to gallery: $name")
+            }
+        } else {
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name)
+                put(android.provider.MediaStore.Downloads.MIME_TYPE, mime)
+            }
+            val uri = resolver.insert(
+                android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values
+            )
+            uri?.let {
+                resolver.openOutputStream(it)?.use { out ->
+                    srcFile.inputStream().use { input -> input.copyTo(out) }
+                }
+                Logger.info(TAG, "Auto saved file to downloads: $name")
+            }
+        }
+    }
+
+    /** 写入文本到剪贴板 */
     private fun writeToClipboard(text: String) {
         try {
             val context = appContext ?: return
@@ -435,9 +534,27 @@ class SyncEngine private constructor() {
         }
     }
 
-    /**
-     * 重建 API 客户端（配置变化时调用）。
-     */
+    /** 写入 URI（图片/文件）到剪贴板 */
+    private fun writeToClipboardUri(uri: android.net.Uri, label: String, mime: String) {
+        try {
+            val context = appContext ?: return
+            val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE)
+                as? android.content.ClipboardManager ?: return
+
+            val clipData = android.content.ClipData.newUri(
+                context.contentResolver,
+                "SyncClipboard",
+                uri
+            )
+            clipboardManager.setPrimaryClip(clipData)
+
+            Logger.info(TAG, "Written URI to clipboard: $uri, mime=$mime, label=$label")
+        } catch (e: Exception) {
+            Logger.error(TAG, "Failed to write URI to clipboard, falling back to text", e)
+            writeToClipboard(label)
+        }
+    }
+
     private fun rebuildApiClient() {
         val server = config.servers.getOrNull(config.activeServerIndex)
         apiClient = if (server != null) {
@@ -452,31 +569,17 @@ class SyncEngine private constructor() {
         }
     }
 
-    /**
-     * 设置 IPC 桥接路由 — 处理来自 app 进程的查询和指令。
-     */
     private fun setupBridgeRouting(context: Context) {
-        android.util.Log.w("SyncClipboard", "[SyncEngine] setupBridgeRouting starting...")
         SyncClipboardBridge.routing(context) {
-            android.util.Log.w("SyncClipboard", "[SyncEngine] Bridge routing block executing, registering handlers...")
-            // 配置查询
             onQuery(BridgeKeys.GET_CONFIG) {
-                val configJson = kotlinx.serialization.json.Json.encodeToString(
-                    AppConfig.serializer(), config
-                )
-                val bundle = android.os.Bundle().apply {
-                    putString("config", configJson)
-                }
-                reply(bundle)
+                val configJson = Json.encodeToString(AppConfig.serializer(), config)
+                reply(Bundle().apply { putString("config", configJson) })
             }
 
-            // 配置更新
             onCommand(BridgeKeys.PUSH_CONFIG) { data ->
                 val configJson = data.getString("config") ?: return@onCommand
                 try {
-                    val newConfig = kotlinx.serialization.json.Json.decodeFromString(
-                        AppConfig.serializer(), configJson
-                    )
+                    val newConfig = Json.decodeFromString(AppConfig.serializer(), configJson)
                     onConfigChanged(newConfig)
                     Prefs.saveConfig(context, newConfig)
                 } catch (e: Exception) {
@@ -484,81 +587,74 @@ class SyncEngine private constructor() {
                 }
             }
 
-            // 同步状态查询
             onQuery(BridgeKeys.GET_SYNC_STATUS) {
-                android.util.Log.w("SyncClipboard", "[SyncEngine] GET_SYNC_STATUS handler invoked, isRunning=$isRunning, isConnected=$isConnected")
-                val bundle = android.os.Bundle().apply {
+                reply(Bundle().apply {
                     putBoolean("connected", isConnected)
                     putBoolean("running", isRunning)
                     putLong("lastSyncTime", lastSyncTime)
-                }
-                reply(bundle)
-            }
-
-            // 触发立即同步
-            onCommand(BridgeKeys.TRIGGER_SYNC) {
-                android.util.Log.w("SyncClipboard", "[SyncEngine] TRIGGER_SYNC handler invoked")
-                forceSync()
-            }
-
-            // 历史记录查询
-            onQuery(BridgeKeys.GET_HISTORY) {
-                val items = historyService?.getPaged(50, 0) ?: emptyList()
-                val itemsJson = Json.encodeToString(
-                    ListSerializer(HistoryItem.serializer()), items
-                )
-                reply(Bundle().apply {
-                    putString("items", itemsJson)
                 })
             }
 
-            // 删除历史记录
+            onCommand(BridgeKeys.TRIGGER_SYNC) {
+                forceSync()
+            }
+
+            onCommand(BridgeKeys.UPLOAD_NOW) {
+                forceUpload()
+            }
+
+            onQuery(BridgeKeys.GET_HISTORY) {
+                val items = historyService?.getPaged(50, 0) ?: emptyList()
+                Logger.info(TAG, "GET_HISTORY: historyService=${if (historyService != null) "exists" else "null"}, items=${items.size}")
+                val itemsJson = Json.encodeToString(
+                    ListSerializer(HistoryItem.serializer()), items
+                )
+                reply(Bundle().apply { putString("items", itemsJson) })
+            }
+
             onCommand(BridgeKeys.DELETE_HISTORY_ITEM) { data ->
                 val id = data.getString("id") ?: return@onCommand
                 historyService?.delete(id)
                 Logger.info(TAG, "History item deleted: $id")
             }
 
-            // 测试服务器连接 — 接收临时 ServerConfig JSON，尝试连接并返回结果
+            onCommand(BridgeKeys.CLEAR_HISTORY) {
+                historyService?.clearAll()
+                Logger.info(TAG, "History cleared")
+            }
+
             onQuery(BridgeKeys.TEST_CONNECTION) {
                 val serverJson: String = data.getString("server") ?: run {
-                    reply(android.os.Bundle().apply {
+                    reply(Bundle().apply {
                         putBoolean("success", false)
                         putString("error", "No server configuration provided")
                     })
                     return@onQuery
                 }
-                if (serverJson.isBlank()) {
-                    reply(android.os.Bundle().apply {
-                        putBoolean("success", false)
-                        putString("error", "Server configuration is empty")
-                    })
-                    return@onQuery
-                }
                 try {
-                    val configJson = Json { ignoreUnknownKeys = true }
-                    val serverConfig = configJson.decodeFromString(
-                        io.github.erenche.syncclipboard.common.model.ServerConfig.serializer(),
-                        serverJson
-                    )
-                    val client = io.github.erenche.syncclipboard.xposed.api.ClientFactory.createClient(serverConfig)
+                    val serverConfig = Json { ignoreUnknownKeys = true }
+                        .decodeFromString(ServerConfig.serializer(), serverJson)
+                    val client = ClientFactory.createClient(serverConfig)
                     client.testConnection()
-                    reply(android.os.Bundle().apply { putBoolean("success", true) })
+                    reply(Bundle().apply { putBoolean("success", true) })
                 } catch (e: Exception) {
                     Logger.error(TAG, "Test connection failed", e)
-                    reply(android.os.Bundle().apply {
+                    reply(Bundle().apply {
                         putBoolean("success", false)
                         putString("error", e.message ?: "Connection failed")
                     })
                 }
             }
 
-            // 触发立即上传 — 读取当前剪贴板并上传
-            onCommand(BridgeKeys.UPLOAD_NOW) {
-                android.util.Log.w("SyncClipboard", "[SyncEngine] UPLOAD_NOW handler invoked")
-                forceUpload()
+            onQuery(BridgeKeys.GET_LOGS) {
+                val logs = Logger.getLogs()
+                Logger.info(TAG, "GET_LOGS: returning ${logs.length} chars")
+                reply(Bundle().apply { putString("logs", logs) })
+            }
+
+            onCommand(BridgeKeys.CLEAR_LOGS) {
+                Logger.clear()
             }
         }
-        android.util.Log.w("SyncClipboard", "[SyncEngine] setupBridgeRouting complete, handlers registered")
     }
 }

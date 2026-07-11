@@ -29,10 +29,14 @@ data class AppConfig(
     val autoDownloadMaxSize: Long = 5 * 1024 * 1024,
     /** 远程轮询间隔（毫秒），用于 WebDAV/S3 回退 */
     val remotePollingInterval: Long = 3000,
+    /** 是否启用详细日志（Debug/Info 级别），关闭时仅输出 Warn/Error */
+    val enableLogging: Boolean = true,
     /** 日志等级 */
     val logLevel: LogLevel = LogLevel.Info,
     /** 历史记录最大保留条数 */
-    val maxHistoryItems: Int = 1000
+    val maxHistoryItems: Int = 1000,
+    /** 自动同步时是否将图片/文件自动保存到相册/下载目录 */
+    val enableAutoSave: Boolean = false
 )
 
 /**

@@ -41,8 +41,26 @@
             android:label="@string/activity_history" />
 
         <activity
+            android:name=".activity.MoreActivity"
+            android:label="@string/item_more" />
+
+        <activity
+            android:name=".activity.LogActivity"
+            android:label="@string/item_log" />
+
+        <activity
             android:name=".activity.AboutActivity"
             android:label="@string/activity_about" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 

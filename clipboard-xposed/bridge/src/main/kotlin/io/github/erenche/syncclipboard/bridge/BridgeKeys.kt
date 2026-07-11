@@ -68,6 +68,9 @@ object BridgeKeys {
     /** 删除历史记录 */
     const val DELETE_HISTORY_ITEM = "delete_history_item"
 
+    /** 清空所有历史记录 */
+    const val CLEAR_HISTORY = "clear_history"
+
     // ─── 事件推送（xposed 进程 → app）──────────────────────────
 
     /** 剪贴板内容变化事件 */
@@ -78,4 +81,10 @@ object BridgeKeys {
 
     /** 传输进度事件 */
     const val EVENT_TRANSFER_PROGRESS = "event_transfer_progress"
+
+    // ─── 日志（app → xposed 进程）─────────────────────────────
+    /** 查询日志（返回最近日志文本） */
+    const val GET_LOGS = "get_logs"
+    /** 清空日志缓冲区 */
+    const val CLEAR_LOGS = "clear_logs"
 }

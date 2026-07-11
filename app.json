@@ -13,7 +13,8 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.jericx.syncclipboardmobile"
     },
     "android": {
       "versionCode": 158,
@@ -23,7 +24,9 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.jericx.syncclipboardmobile",
-      "permissions": ["android.permission.REQUEST_INSTALL_PACKAGES"]
+      "permissions": [
+        "android.permission.REQUEST_INSTALL_PACKAGES"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -49,7 +52,9 @@
         {
           "android": {
             "enabled": false,
-            "singleShareMimeTypes": ["*/*"]
+            "singleShareMimeTypes": [
+              "*/*"
+            ]
           }
         }
       ],

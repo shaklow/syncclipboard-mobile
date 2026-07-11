@@ -1,25 +1,38 @@
 package io.github.erenche.syncclipboard.xposed.hook
 
+import io.github.erenche.syncclipboard.common.PackageNames
 import io.github.erenche.syncclipboard.common.util.Logger
 import io.github.erenche.syncclipboard.xposed.sync.SyncEngine
 
 /**
  * GeneralHooker — 在所有作用域包中运行的通用 Hook。
  *
- * 负责初始化基础组件（如文件目录、日志等）。
- * 继承自 PackageHooker，自动获取 Application Context。
+ * SyncEngine 仅在 SystemUI 进程中初始化：
+ * - SystemUI（com.android.systemui）始终在前台运行（状态栏），
+ *   不会被系统冻结，OnPrimaryClipChangedListener 持续有效
+ * - 是标准 Application 生命周期，doOnAppCreated 可靠触发
+ * - bridge 广播能被 SystemUI 正常接收
+ *
+ * App 进程不初始化 SyncEngine，通过 bridge 向 SystemUI 查询状态。
  */
 object GeneralHooker : PackageHooker() {
     const val TAG = "GeneralHooker"
 
     override fun onHook() {
-        android.util.Log.w("SyncClipboard", "[GeneralHooker] onHook() called, packageName=$packageName, isMainProcess=${isMainProcess()}")
+        Logger.info(TAG, "onHook() called, packageName=$packageName, isMainProcess=${isMainProcess()}")
+
         doOnAppCreated { app ->
-            android.util.Log.w("SyncClipboard", "[GeneralHooker] doOnAppCreated callback fired: ${app.packageName}")
             Logger.info(TAG, "App created: ${app.packageName}")
 
-            // 初始化同步引擎（传入 Context）
-            SyncEngine.getInstance().initialize(app)
+            // 仅在 SystemUI 中初始化 SyncEngine
+            if (app.packageName == PackageNames.SYSTEM_UI) {
+                try {
+                    SyncEngine.getInstance().initialize(app)
+                    Logger.info(TAG, "SyncEngine initialized in SystemUI")
+                } catch (e: Exception) {
+                    Logger.error(TAG, "Failed to initialize SyncEngine", e)
+                }
+            }
         }
     }
 }

@@ -25,9 +25,14 @@
     <string name="action_cancel">取消</string>
     <string name="action_save">保存</string>
     <string name="action_delete">删除</string>
+    <string name="action_clear">清空</string>
     <string name="action_add">添加</string>
     <string name="action_edit">编辑</string>
     <string name="action_back">返回</string>
+    <string name="action_refresh">刷新</string>
+    <string name="action_view">查看</string>
+    <string name="action_share">分享</string>
+    <string name="action_download">保存</string>
     <string name="action_close">关闭</string>
     <string name="action_confirm">确定</string>
     <string name="action_copy">复制</string>
@@ -79,6 +84,14 @@
     <string name="server_bucket_hint">my-bucket</string>
     <string name="server_prefix_hint">syncclipboard/</string>
 
+    <!-- Theme -->
+    <string name="setting_theme_mode">主题模式</string>
+    <string name="setting_theme_monet">动态取色</string>
+    <string name="setting_theme_monet_summary">使用系统壁纸颜色（Android 12+）</string>
+    <string name="option_theme_system">跟随系统</string>
+    <string name="option_theme_light">浅色</string>
+    <string name="option_theme_dark">深色</string>
+
     <!-- Sync Settings -->
     <string name="setting_auto_sync">自动同步</string>
     <string name="setting_auto_sync_summary">在后台自动同步剪贴板</string>
@@ -91,6 +104,10 @@
     <string name="setting_auto_download_max_size">自动下载最大大小</string>
     <string name="setting_auto_download_max_size_summary">自动下载的最大文件大小（MB）</string>
     <string name="setting_log_level">日志等级</string>
+    <string name="setting_enable_logging">启用日志</string>
+    <string name="setting_enable_logging_summary">输出详细日志到 logcat（关闭后仍显示警告/错误）</string>
+    <string name="setting_auto_save">自动保存文件</string>
+    <string name="setting_auto_save_summary">自动将同步的图片保存到相册，文件保存到下载目录</string>
     <string name="setting_language">语言</string>
     <string name="setting_language_auto">跟随系统</string>
     <string name="setting_language_zh">中文</string>
@@ -106,8 +123,23 @@
     <string name="item_sync_settings_summary">配置同步行为</string>
     <string name="item_history">剪贴板历史</string>
     <string name="item_history_summary">查看已同步的剪贴板历史</string>
+    <string name="item_log">日志</string>
+    <string name="item_log_summary">查看同步引擎运行日志</string>
+    <string name="item_more">其他</string>
+    <string name="item_more_summary">设置、历史、日志、关于</string>
     <string name="item_about_app">关于</string>
     <string name="item_about_app_summary">版本和许可信息</string>
+
+    <!-- 内容类型 -->
+    <string name="type_text">文本</string>
+    <string name="type_image">图片</string>
+    <string name="type_file">文件</string>
+    <string name="type_group">分组</string>
+
+    <!-- 远程内容 -->
+    <string name="main_remote_content">服务器最新内容</string>
+    <string name="main_loading">加载中…</string>
+    <string name="main_no_content">暂无内容</string>
 
     <!-- Sync Status -->
     <string name="sync_status_connected">已连接</string>
@@ -126,6 +158,7 @@
     <string name="history_pin">置顶</string>
     <string name="history_search">搜索历史…</string>
     <string name="history_copied">已复制到剪贴板</string>
+    <string name="history_cleared">历史已清空</string>
 
     <!-- About -->
     <string name="about_version">版本 %s</string>

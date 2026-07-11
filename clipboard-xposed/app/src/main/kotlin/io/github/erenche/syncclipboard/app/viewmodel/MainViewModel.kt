@@ -6,15 +6,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.erenche.syncclipboard.app.SyncClipboardApp
+import io.github.erenche.syncclipboard.app.net.ServerApi
 import io.github.erenche.syncclipboard.bridge.BridgeKeys
 import io.github.erenche.syncclipboard.bridge.SyncClipboardBridge
-
-import io.github.erenche.syncclipboard.common.util.Logger
+import io.github.erenche.syncclipboard.common.Prefs
+import io.github.erenche.syncclipboard.common.model.ProfileDto
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
-/**
- * MainViewModel — 主界面状态管理。
- */
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app get() = getApplication<SyncClipboardApp>()
@@ -24,20 +28,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _syncStatus = mutableStateOf("Checking...")
     val syncStatus: State<String> = _syncStatus
 
+    private val _toast = MutableStateFlow<String?>(null)
+    val toast: StateFlow<String?> = _toast.asStateFlow()
+
+    private val _isBusy = mutableStateOf(false)
+    val isBusy: State<Boolean> = _isBusy
+
+    /** 服务器最新 profile */
+    private val _remoteProfile = mutableStateOf<ProfileDto?>(null)
+    val remoteProfile: State<ProfileDto?> = _remoteProfile
+
+    /** 下载到本地的图片文件路径 */
+    private val _downloadedFile = mutableStateOf<File?>(null)
+    val downloadedFile: State<File?> = _downloadedFile
+
+    /** 是否正在加载远程内容 */
+    private val _isLoadingRemote = mutableStateOf(false)
+    val isLoadingRemote: State<Boolean> = _isLoadingRemote
+
     init {
         refreshStatus()
     }
 
     fun refreshStatus() {
-        android.util.Log.w("SyncClipboard", "[MainVM] refreshStatus() called")
         viewModelScope.launch {
             try {
-                android.util.Log.w("SyncClipboard", "[MainVM] Sending GET_SYNC_STATUS via bridge...")
                 val bundle = SyncClipboardBridge.with(app)
-                                        .key(BridgeKeys.GET_SYNC_STATUS)
+                    .to("com.android.systemui")
+                    .key(BridgeKeys.GET_SYNC_STATUS)
                     .await()
-                android.util.Log.w("SyncClipboard", "[MainVM] GET_SYNC_STATUS reply: connected=${bundle.getBoolean("connected", false)}, running=${bundle.getBoolean("running", false)}, isEmpty=${bundle.isEmpty}")
-
                 val connected = bundle.getBoolean("connected", false)
                 val running = bundle.getBoolean("running", false)
                 _syncStatus.value = when {
@@ -45,33 +64,61 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     connected -> "Connected"
                     else -> "Disconnected"
                 }
-                android.util.Log.w("SyncClipboard", "[MainVM] syncStatus set to: ${_syncStatus.value}")
             } catch (e: Exception) {
-                android.util.Log.w("SyncClipboard", "[MainVM] Failed to get sync status: ${e.message}", e)
-                Logger.warn("MainVM", "Failed to get sync status: ${e.message}")
                 _syncStatus.value = "Unavailable"
             }
         }
     }
 
-    fun triggerSync() {
-        android.util.Log.w("SyncClipboard", "[MainVM] triggerSync() called")
+    /** 拉取服务器最新内容并下载文件 */
+    fun refreshRemoteContent() {
+        _isLoadingRemote.value = true
         viewModelScope.launch {
-            SyncClipboardBridge.with(app)
-                                .key(BridgeKeys.TRIGGER_SYNC)
-                .send()
-            android.util.Log.w("SyncClipboard", "[MainVM] TRIGGER_SYNC send() done, refreshing status...")
-            refreshStatus()
+            try {
+                val config = Prefs.loadConfig(app)
+                val server = config.servers.getOrNull(config.activeServerIndex)
+                if (server == null) {
+                    _toast.value = "未配置服务器"
+                    return@launch
+                }
+                val api = ServerApi(server)
+                val profile = withContext(Dispatchers.IO) { api.getClipboard() }
+                _remoteProfile.value = profile
+
+                if (profile != null && profile.hasData && !profile.dataName.isNullOrBlank()) {
+                    val destFile = File(app.cacheDir, "preview_${profile.dataName}")
+                    val downloaded = withContext(Dispatchers.IO) {
+                        api.downloadFile(profile.dataName!!, destFile)
+                    }
+                    _downloadedFile.value = downloaded
+                } else {
+                    _downloadedFile.value = null
+                }
+            } catch (e: Exception) {
+                _toast.value = "加载失败: ${e.message}"
+            } finally {
+                _isLoadingRemote.value = false
+            }
         }
     }
 
+    fun triggerSync() {
+        SyncClipboardBridge.with(app)
+            .to("com.android.systemui")
+            .key(BridgeKeys.TRIGGER_SYNC)
+            .send()
+        _toast.value = "已开始同步"
+    }
+
     fun uploadNow() {
-        android.util.Log.w("SyncClipboard", "[MainVM] uploadNow() called")
-        viewModelScope.launch {
-            SyncClipboardBridge.with(app)
-                                .key(BridgeKeys.UPLOAD_NOW)
-                .send()
-            android.util.Log.w("SyncClipboard", "[MainVM] UPLOAD_NOW send() done")
-        }
+        SyncClipboardBridge.with(app)
+            .to("com.android.systemui")
+            .key(BridgeKeys.UPLOAD_NOW)
+            .send()
+        _toast.value = "已开始上传"
+    }
+
+    fun onToastShown() {
+        _toast.value = null
     }
 }

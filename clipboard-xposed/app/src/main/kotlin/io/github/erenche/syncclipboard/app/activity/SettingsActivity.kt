@@ -3,31 +3,26 @@ package io.github.erenche.syncclipboard.app.activity
 import android.app.Activity
 import android.os.Bundle
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import io.github.erenche.syncclipboard.app.R
 import io.github.erenche.syncclipboard.app.compose.AppToolBarListContainer
 import io.github.erenche.syncclipboard.app.compose.preference.rememberBooleanPreference
 import io.github.erenche.syncclipboard.app.compose.preference.rememberStringPreference
+import io.github.erenche.syncclipboard.app.util.AppThemeUtils
+import io.github.erenche.syncclipboard.bridge.BridgeKeys
+import io.github.erenche.syncclipboard.bridge.SyncClipboardBridge
+import io.github.erenche.syncclipboard.common.Prefs
 import io.github.erenche.syncclipboard.common.extensions.defaultSharedPreferences
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import io.github.erenche.syncclipboard.common.model.AppConfig
+import kotlinx.serialization.json.Json
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 import java.util.Locale
 
 class SettingsActivity : BaseActivity() {
@@ -47,39 +42,98 @@ fun SettingsScreen() {
         canBack = true,
         onBack = { activity?.finish() }
     ) {
-        // 1. 语言切换 — 优先显示
+        // 1. 主题设置
+        item("theme") {
+            ThemeSettingsCard(context, activity)
+        }
+
+        // 2. 语言切换
         item("language") {
             LanguageCard(context, activity)
         }
 
-        // 2. 同步设置
+        // 3. 同步设置
         item("sync") {
             SyncSettingsCard()
         }
 
-        // 3. 后台设置
+        // 4. 后台设置
         item("background") {
             BackgroundSettingsCard()
         }
 
-        // 4. 历史记录设置
+        // 5. 历史记录设置
         item("history") {
             HistorySettingsCard()
+        }
+
+        // 6. 日志设置
+        item("logging") {
+            LoggingSettingsCard(context)
+        }
+
+        // 7. 自动保存设置
+        item("auto_save") {
+            AutoSaveSettingsCard(context)
         }
     }
 }
 
-/**
- * 语言切换卡片
- */
+// ─── 主题设置 ─────────────────────────────────────────────────
+@Composable
+fun ThemeSettingsCard(context: android.content.Context, activity: Activity?) {
+    val themeModeOptions = listOf(
+        R.string.option_theme_system to AppThemeUtils.MODE_SYSTEM,
+        R.string.option_theme_light to AppThemeUtils.MODE_LIGHT,
+        R.string.option_theme_dark to AppThemeUtils.MODE_DARK
+    )
+    val monetEnabled = remember { AppThemeUtils.isEnableMonet(context) }
+    var currentMode by remember { mutableIntStateOf(AppThemeUtils.getMode(context)) }
+
+    Card(
+        modifier = Modifier
+            .padding(start = 16.dp, top = 16.dp, end = 16.dp)
+            .fillMaxWidth()
+    ) {
+        val selectedIndex = themeModeOptions.indexOfFirst { it.second == currentMode }
+            .coerceAtLeast(0)
+
+        OverlayDropdownPreference(
+            title = stringResource(R.string.setting_theme_mode),
+            items = themeModeOptions.map { stringResource(it.first) },
+            selectedIndex = selectedIndex,
+            onSelectedIndexChange = { index ->
+                val newMode = themeModeOptions[index].second
+                if (newMode != currentMode) {
+                    currentMode = newMode
+                    AppThemeUtils.setMode(context, newMode)
+                    activity?.recreate()
+                }
+            }
+        )
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            var monetChecked by remember { mutableStateOf(monetEnabled) }
+            SwitchPreference(
+                title = stringResource(R.string.setting_theme_monet),
+                summary = stringResource(R.string.setting_theme_monet_summary),
+                checked = monetChecked,
+                onCheckedChange = {
+                    monetChecked = it
+                    AppThemeUtils.setEnableMonet(context, it)
+                    activity?.recreate()
+                }
+            )
+        }
+    }
+}
+
+// ─── 语言切换 ─────────────────────────────────────────────────
 @Composable
 fun LanguageCard(context: android.content.Context, activity: Activity?) {
     val prefs = context.defaultSharedPreferences
     var language by rememberStringPreference(prefs, "language", "")
 
-    var showDialog by remember { mutableStateOf(false) }
-
-    // 获取系统语言作为显示
     val systemLang = remember {
         when (Locale.getDefault().language) {
             "zh" -> "中文"
@@ -87,124 +141,43 @@ fun LanguageCard(context: android.content.Context, activity: Activity?) {
         }
     }
 
-    val currentLangLabel = when (language) {
-        "zh" -> stringResource(R.string.setting_language_zh)
-        "en" -> stringResource(R.string.setting_language_en)
-        else -> "${stringResource(R.string.setting_language_auto)}（$systemLang）"
-    }
-
-    Card(
-        modifier = Modifier
-            .padding(horizontal = 16.dp)
-            .fillMaxWidth()
-    ) {
-        ArrowPreference(
-            title = stringResource(R.string.setting_language),
-            summary = currentLangLabel,
-            onClick = { showDialog = true }
-        )
-    }
-
-    if (showDialog) {
-        LanguageDialog(
-            currentValue = language,
-            onSelect = { newLang ->
-                language = newLang
-                showDialog = false
-                // 如果语言改变了，重启 Activity 以应用
-                if (language != newLang) {
-                    activity?.recreate()
-                } else {
-                    activity?.recreate()
-                }
-            },
-            onDismiss = { showDialog = false }
-        )
-    }
-}
-
-@Composable
-fun LanguageDialog(
-    currentValue: String,
-    onSelect: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current
-    val systemLang = remember {
-        when (Locale.getDefault().language) {
-            "zh" -> "中文"
-            else -> "English"
-        }
-    }
-
-    val options = listOf(
+    val langOptions = listOf(
         "" to "${stringResource(R.string.setting_language_auto)}（$systemLang）",
         "zh" to stringResource(R.string.setting_language_zh),
         "en" to stringResource(R.string.setting_language_en)
     )
 
-    OverlayDialog(
-        show = true,
-        title = stringResource(R.string.setting_language),
-        onDismissRequest = onDismiss
-    ) {
-        Column {
-            options.forEach { (value, label) ->
-                val isSelected = if (currentValue.isBlank()) value.isBlank()
-                    else currentValue == value
-                val textColor = if (isSelected) MiuixTheme.colorScheme.primary
-                    else MiuixTheme.colorScheme.onSurface
+    val selectedIndex = remember(language) {
+        langOptions.indexOfFirst { it.first == language }.coerceAtLeast(0)
+    }
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSelect(value) }
-                        .padding(vertical = 10.dp, horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // MIUIX-style selection indicator
-                    Box(
-                        modifier = Modifier
-                            .size(20.dp)
-                            .clip(androidx.compose.foundation.shape.CircleShape)
-                            .background(
-                                if (isSelected) MiuixTheme.colorScheme.primary
-                                else Color(0x00000000)
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (isSelected) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(androidx.compose.foundation.shape.CircleShape)
-                                    .background(Color.White)
-                            )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(18.dp)
-                                    .clip(androidx.compose.foundation.shape.CircleShape)
-                                    .background(MiuixTheme.colorScheme.outline)
-                            )
-                        }
+    Card(
+        modifier = Modifier
+            .padding(start = 16.dp, top = 16.dp, end = 16.dp)
+            .fillMaxWidth()
+    ) {
+        OverlayDropdownPreference(
+            title = stringResource(R.string.setting_language),
+            items = langOptions.map { it.second },
+            selectedIndex = selectedIndex,
+            onSelectedIndexChange = { index ->
+                val newLang = langOptions[index].first
+                if (language != newLang) {
+                    language = newLang
+                    // 语言改变，重启整个 App 让所有 Activity 应用新语言
+                    activity?.let { act ->
+                        val intent = act.packageManager.getLaunchIntentForPackage(act.packageName)
+                        intent?.addFlags(
+                            android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                            android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK or
+                            android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                        )
+                        act.startActivity(intent)
+                        act.finishAffinity()
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = label,
-                        fontSize = 15.sp,
-                        color = textColor
-                    )
                 }
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
-            TextButton(
-                text = stringResource(R.string.action_cancel),
-                onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
+        )
     }
 }
 
@@ -271,6 +244,78 @@ fun HistorySettingsCard() {
             title = stringResource(R.string.setting_history_sync),
             summary = stringResource(R.string.setting_history_sync_summary),
             onCheckedChange = { historySync = it }
+        )
+    }
+}
+
+// ─── 日志设置 ─────────────────────────────────────────────────
+@Composable
+fun LoggingSettingsCard(context: android.content.Context) {
+    var enableLogging by remember {
+        mutableStateOf(Prefs.loadConfig(context).enableLogging)
+    }
+
+    val onToggle: (Boolean) -> Unit = { enabled ->
+        enableLogging = enabled
+        try {
+            val config = Prefs.loadConfig(context).copy(enableLogging = enabled)
+            Prefs.saveConfig(context, config)
+            val configJson = Json.encodeToString(AppConfig.serializer(), config)
+            val payload = android.os.Bundle().apply { putString("config", configJson) }
+            SyncClipboardBridge.with(context)
+                .to("com.android.systemui")
+                .key(BridgeKeys.PUSH_CONFIG)
+                .payload(payload)
+                .send()
+        } catch (_: Exception) {}
+    }
+
+    Card(
+        modifier = Modifier
+            .padding(start = 16.dp, top = 16.dp, end = 16.dp)
+            .fillMaxWidth()
+    ) {
+        SwitchPreference(
+            checked = enableLogging,
+            title = stringResource(R.string.setting_enable_logging),
+            summary = stringResource(R.string.setting_enable_logging_summary),
+            onCheckedChange = onToggle
+        )
+    }
+}
+
+// ─── 自动保存设置 ─────────────────────────────────────────────
+@Composable
+fun AutoSaveSettingsCard(context: android.content.Context) {
+    var enableAutoSave by remember {
+        mutableStateOf(Prefs.loadConfig(context).enableAutoSave)
+    }
+
+    val onToggle: (Boolean) -> Unit = { enabled ->
+        enableAutoSave = enabled
+        try {
+            val config = Prefs.loadConfig(context).copy(enableAutoSave = enabled)
+            Prefs.saveConfig(context, config)
+            val configJson = Json.encodeToString(AppConfig.serializer(), config)
+            val payload = android.os.Bundle().apply { putString("config", configJson) }
+            SyncClipboardBridge.with(context)
+                .to("com.android.systemui")
+                .key(BridgeKeys.PUSH_CONFIG)
+                .payload(payload)
+                .send()
+        } catch (_: Exception) {}
+    }
+
+    Card(
+        modifier = Modifier
+            .padding(start = 16.dp, top = 16.dp, end = 16.dp)
+            .fillMaxWidth()
+    ) {
+        SwitchPreference(
+            checked = enableAutoSave,
+            title = stringResource(R.string.setting_auto_save),
+            summary = stringResource(R.string.setting_auto_save_summary),
+            onCheckedChange = onToggle
         )
     }
 }

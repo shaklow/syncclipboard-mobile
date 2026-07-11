@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 
 /**
  * 剪贴板内容类型枚举
+ * 服务器返回 PascalCase（Text/Image/File），与 Kotlin 枚举名一致，无需 @SerialName。
  */
 @Serializable
 enum class ClipboardContentType {

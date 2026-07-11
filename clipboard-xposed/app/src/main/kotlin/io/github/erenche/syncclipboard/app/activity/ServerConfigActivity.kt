@@ -8,14 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Switch
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,7 +28,6 @@ import io.github.erenche.syncclipboard.app.R
 import io.github.erenche.syncclipboard.app.compose.AppToolBarListContainer
 import io.github.erenche.syncclipboard.bridge.BridgeKeys
 import io.github.erenche.syncclipboard.bridge.SyncClipboardBridge
-
 import io.github.erenche.syncclipboard.common.Prefs
 import io.github.erenche.syncclipboard.common.model.AppConfig
 import io.github.erenche.syncclipboard.common.model.ServerConfig
@@ -78,7 +71,6 @@ fun ServerConfigScreen() {
         try {
             val configJson = Json.encodeToString(AppConfig.serializer(), appConfig)
             val payload = android.os.Bundle().apply { putString("config", configJson) }
-            SyncClipboardBridge.with(context).key(BridgeKeys.PUSH_CONFIG).payload(payload).send()
             SyncClipboardBridge.with(context).to("com.android.systemui").key(BridgeKeys.PUSH_CONFIG).payload(payload).send()
         } catch (_: Exception) {}
     }
@@ -90,12 +82,11 @@ fun ServerConfigScreen() {
     fun saveConfig(config: AppConfig) {
         Prefs.saveConfig(context, config)
         appConfig = config
-        // Push config to both processes so SyncEngine can use it
+        // Push config to system_server so SyncEngine can use it
         scope.launch {
             try {
                 val configJson = Json.encodeToString(AppConfig.serializer(), config)
                 val payload = android.os.Bundle().apply { putString("config", configJson) }
-                SyncClipboardBridge.with(context).key(BridgeKeys.PUSH_CONFIG).payload(payload).send()
                 SyncClipboardBridge.with(context).to("com.android.systemui").key(BridgeKeys.PUSH_CONFIG).payload(payload).send()
             } catch (_: Exception) {}
         }
@@ -130,20 +121,29 @@ fun ServerConfigScreen() {
                         .fillMaxWidth()
                 ) {
                     Column(
-                        modifier = Modifier.padding(32.dp),
+                        modifier = Modifier.padding(40.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
                             text = stringResource(R.string.no_server_configured),
-                            fontSize = 16.sp,
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.Medium,
                             color = MiuixTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = stringResource(R.string.no_server_hint),
-                            fontSize = 14.sp,
+                            fontSize = 13.sp,
                             color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        TextButton(
+                            text = stringResource(R.string.server_add),
+                            onClick = {
+                                editingServer = null
+                                editingIndex = -1
+                                showEditDialog = true
+                            }
                         )
                     }
                 }
@@ -287,7 +287,6 @@ private fun buildServerSummary(server: ServerConfig, isActive: Boolean, context:
 // 服务器编辑/添加对话框 — MIUI X 风格
 // ═══════════════════════════════════════════════════════════════
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ServerEditDialog(
     show: Boolean,
@@ -306,7 +305,7 @@ fun ServerEditDialog(
 
     if (!show) return
 
-    // Form state — resets when dialog is removed from composition and recomposed
+    // Form state — String-based for miuix TextField
     var serverType by remember { mutableStateOf(server?.type ?: ServerType.syncclipboard) }
     var name by remember { mutableStateOf(server?.name ?: "") }
     var url by remember { mutableStateOf(server?.url ?: "") }
@@ -330,137 +329,107 @@ fun ServerEditDialog(
             // ── 服务器类型选择 ─────────────────────────────
             Text(
                 text = stringResource(R.string.server_type_label),
-                fontSize = 14.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
-                color = MiuixTheme.colorScheme.onSurface
+                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            ServerType.entries.forEach { type ->
-                val isSelected = serverType == type
-                val selectColor = if (isSelected) MiuixTheme.colorScheme.primary
-                    else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { serverType = type }
-                        .padding(vertical = 10.dp, horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // MIUIX-style selection indicator
-                    Box(
+            Card(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                ServerType.entries.forEachIndexed { idx, type ->
+                    val isSelected = serverType == type
+                    Row(
                         modifier = Modifier
-                            .size(20.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (isSelected) MiuixTheme.colorScheme.primary
-                                else Color.Transparent
-                            ),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .clickable { serverType = type }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (isSelected) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White)
+                        RadioButton(
+                            selected = isSelected,
+                            onClick = { serverType = type }
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = when (type) {
+                                    ServerType.syncclipboard -> stringResource(R.string.server_type_syncclipboard)
+                                    ServerType.webdav -> stringResource(R.string.server_type_webdav)
+                                    ServerType.s3 -> stringResource(R.string.server_type_s3)
+                                },
+                                fontSize = 15.sp,
+                                color = if (isSelected) MiuixTheme.colorScheme.primary
+                                    else MiuixTheme.colorScheme.onSurface
                             )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(18.dp)
-                                    .clip(CircleShape)
-                                    .background(MiuixTheme.colorScheme.outline)
+                            Text(
+                                text = when (type) {
+                                    ServerType.syncclipboard -> stringResource(R.string.server_type_syncclipboard_desc)
+                                    ServerType.webdav -> stringResource(R.string.server_type_webdav_desc)
+                                    ServerType.s3 -> stringResource(R.string.server_type_s3_desc)
+                                },
+                                fontSize = 12.sp,
+                                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = when (type) {
-                                ServerType.syncclipboard -> stringResource(R.string.server_type_syncclipboard)
-                                ServerType.webdav -> stringResource(R.string.server_type_webdav)
-                                ServerType.s3 -> stringResource(R.string.server_type_s3)
-                            },
-                            fontSize = 15.sp,
-                            color = selectColor
-                        )
-                        Text(
-                            text = when (type) {
-                                ServerType.syncclipboard -> stringResource(R.string.server_type_syncclipboard_desc)
-                                ServerType.webdav -> stringResource(R.string.server_type_webdav_desc)
-                                ServerType.s3 -> stringResource(R.string.server_type_s3_desc)
-                            },
-                            fontSize = 12.sp,
-                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    if (idx < ServerType.entries.size - 1) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            color = MiuixTheme.colorScheme.outline
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-            HorizontalDivider(color = MiuixTheme.colorScheme.outline)
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // ── 连接信息字段 ───────────────────────────────
-            OutlinedTextField(
+            TextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { Text(stringResource(R.string.server_name)) },
-                placeholder = { Text(stringResource(R.string.server_name_hint)) },
                 modifier = Modifier.fillMaxWidth(),
+                label = stringResource(R.string.server_name),
+                useLabelAsPlaceholder = true,
                 singleLine = true,
-                colors = miuixTextFieldColors()
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
             )
             Spacer(modifier = Modifier.height(10.dp))
 
-            OutlinedTextField(
+            TextField(
                 value = url,
                 onValueChange = { url = it },
-                label = { Text(stringResource(R.string.server_url)) },
-                placeholder = { Text(stringResource(R.string.server_url_hint)) },
                 modifier = Modifier.fillMaxWidth(),
+                label = stringResource(R.string.server_url),
+                useLabelAsPlaceholder = true,
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                colors = miuixTextFieldColors()
             )
             Spacer(modifier = Modifier.height(10.dp))
 
-            OutlinedTextField(
+            TextField(
                 value = username,
                 onValueChange = { username = it },
-                label = {
-                    Text(
-                        when (serverType) {
-                            ServerType.s3 -> "Access Key ID"
-                            else -> stringResource(R.string.server_username)
-                        }
-                    )
-                },
                 modifier = Modifier.fillMaxWidth(),
+                label = if (serverType == ServerType.s3) "Access Key ID"
+                    else stringResource(R.string.server_username),
+                useLabelAsPlaceholder = true,
                 singleLine = true,
-                colors = miuixTextFieldColors()
             )
             Spacer(modifier = Modifier.height(10.dp))
 
-            OutlinedTextField(
+            TextField(
                 value = password,
                 onValueChange = { password = it },
-                label = {
-                    Text(
-                        when (serverType) {
-                            ServerType.s3 -> "Secret Access Key"
-                            else -> stringResource(R.string.server_password)
-                        }
-                    )
-                },
                 modifier = Modifier.fillMaxWidth(),
+                label = if (serverType == ServerType.s3) "Secret Access Key"
+                    else stringResource(R.string.server_password),
+                useLabelAsPlaceholder = true,
                 singleLine = true,
                 visualTransformation = if (showPassword) VisualTransformation.None
                 else PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                colors = miuixTextFieldColors(),
                 trailingIcon = {
                     TextButton(
                         onClick = { showPassword = !showPassword },
@@ -473,36 +442,33 @@ fun ServerEditDialog(
             if (serverType == ServerType.s3) {
                 Spacer(modifier = Modifier.height(10.dp))
 
-                OutlinedTextField(
+                TextField(
                     value = region,
                     onValueChange = { region = it },
-                    label = { Text(stringResource(R.string.server_region)) },
-                    placeholder = { Text(stringResource(R.string.server_region_hint)) },
                     modifier = Modifier.fillMaxWidth(),
+                    label = stringResource(R.string.server_region),
+                    useLabelAsPlaceholder = true,
                     singleLine = true,
-                    colors = miuixTextFieldColors()
                 )
                 Spacer(modifier = Modifier.height(10.dp))
 
-                OutlinedTextField(
+                TextField(
                     value = bucketName,
                     onValueChange = { bucketName = it },
-                    label = { Text(stringResource(R.string.server_bucket)) },
-                    placeholder = { Text(stringResource(R.string.server_bucket_hint)) },
                     modifier = Modifier.fillMaxWidth(),
+                    label = stringResource(R.string.server_bucket),
+                    useLabelAsPlaceholder = true,
                     singleLine = true,
-                    colors = miuixTextFieldColors()
                 )
                 Spacer(modifier = Modifier.height(10.dp))
 
-                OutlinedTextField(
+                TextField(
                     value = objectPrefix,
                     onValueChange = { objectPrefix = it },
-                    label = { Text(stringResource(R.string.server_prefix)) },
-                    placeholder = { Text(stringResource(R.string.server_prefix_hint)) },
                     modifier = Modifier.fillMaxWidth(),
+                    label = stringResource(R.string.server_prefix),
+                    useLabelAsPlaceholder = true,
                     singleLine = true,
-                    colors = miuixTextFieldColors()
                 )
                 Spacer(modifier = Modifier.height(10.dp))
 
@@ -730,18 +696,3 @@ private fun buildTestUrl(config: ServerConfig): String {
     }
 }
 
-/**
- * MIUIX 风格的 OutlinedTextField 颜色配置
- */
-@Composable
-private fun miuixTextFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedTextColor = MiuixTheme.colorScheme.onSurface,
-    unfocusedTextColor = MiuixTheme.colorScheme.onSurface,
-    cursorColor = MiuixTheme.colorScheme.primary,
-    focusedBorderColor = MiuixTheme.colorScheme.primary,
-    unfocusedBorderColor = MiuixTheme.colorScheme.outline,
-    focusedLabelColor = MiuixTheme.colorScheme.primary,
-    unfocusedLabelColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-    focusedPlaceholderColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-    unfocusedPlaceholderColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-)
