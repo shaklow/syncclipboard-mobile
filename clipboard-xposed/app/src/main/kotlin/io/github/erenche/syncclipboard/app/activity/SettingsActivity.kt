@@ -2,7 +2,9 @@ package io.github.erenche.syncclipboard.app.activity
 
 import android.app.Activity
 import android.os.Bundle
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -21,6 +23,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
 import io.github.erenche.syncclipboard.app.R
 import io.github.erenche.syncclipboard.app.compose.AppToolBarListContainer
 import io.github.erenche.syncclipboard.app.compose.preference.rememberBooleanPreference
@@ -34,6 +38,7 @@ import io.github.erenche.syncclipboard.bridge.SyncClipboardBridge
 import io.github.erenche.syncclipboard.common.Prefs
 import io.github.erenche.syncclipboard.common.extensions.defaultSharedPreferences
 import io.github.erenche.syncclipboard.common.model.AppConfig
+import io.github.erenche.syncclipboard.common.util.Logger
 import kotlinx.serialization.json.Json
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
@@ -358,12 +363,46 @@ fun LanguageCard(context: android.content.Context, activity: Activity?) {
     }
 }
 
-// ─── 同步设置（含后台子开关）─────────────────────────────────
+// ─── 同步设置（含后台子开关与轮询设置）─────────────────────────────
 @Composable
 fun SyncSettingsCard(context: android.content.Context) {
     var autoSync by remember { mutableStateOf(Prefs.loadConfig(context).enableAutoSync) }
     var bgUpload by remember { mutableStateOf(Prefs.loadConfig(context).enableBackgroundUpload) }
     var bgDownload by remember { mutableStateOf(Prefs.loadConfig(context).enableBackgroundDownload) }
+    var stopOnBattery by remember { mutableStateOf(Prefs.loadConfig(context).stopPollingOnBatterySaver) }
+    var stopOnScreenOff by remember { mutableStateOf(Prefs.loadConfig(context).stopPollingOnScreenOff) }
+    var pollingIntervalSec by remember { mutableStateOf(Prefs.loadConfig(context).pollingIntervalSec.coerceAtLeast(1)) }
+    var smsUpload by remember { mutableStateOf(Prefs.loadConfig(context).enableSmsUpload) }
+
+    val intervalOptions = remember { listOf(1, 3, 5, 10, 15, 30, 60, 120, 300, 600) }
+    val intervalLabels = remember(intervalOptions) {
+        intervalOptions.map { sec ->
+            when {
+                sec < 60 -> "${sec}s"
+                sec % 60 == 0 -> "${sec / 60}min"
+                else -> "${sec / 60}min${sec % 60}s"
+            }
+        }
+    }
+
+    // 运行时权限申请 launcher（RECEIVE_SMS 是危险权限，需要运行时申请）
+    val smsPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            smsUpload = true
+            val newCfg = Prefs.loadConfig(context).copy(enableSmsUpload = true)
+            try {
+                Prefs.saveConfig(context, newCfg)
+                val payload = android.os.Bundle().apply {
+                    putString("config", Json.encodeToString(AppConfig.serializer(), newCfg))
+                }
+                SyncClipboardBridge.with(context).to("com.android.systemui")
+                    .key(BridgeKeys.PUSH_CONFIG).payload(payload).send()
+            } catch (_: Exception) {}
+        }
+        // 拒绝时保持开关关闭
+    }
 
     fun pushConfig(newConfig: AppConfig) {
         try {
@@ -411,6 +450,38 @@ fun SyncSettingsCard(context: android.content.Context) {
         pushConfig(config.copy(enableBackgroundDownload = enabled, enableAutoSync = newAutoSync))
     }
 
+    fun toggleStopOnBattery(enabled: Boolean) {
+        stopOnBattery = enabled
+        pushConfig(Prefs.loadConfig(context).copy(stopPollingOnBatterySaver = enabled))
+    }
+
+    fun toggleStopOnScreenOff(enabled: Boolean) {
+        stopOnScreenOff = enabled
+        pushConfig(Prefs.loadConfig(context).copy(stopPollingOnScreenOff = enabled))
+    }
+
+    fun updatePollingInterval(sec: Int) {
+        pollingIntervalSec = sec
+        pushConfig(Prefs.loadConfig(context).copy(pollingIntervalSec = sec))
+    }
+
+    fun toggleSmsUpload(enabled: Boolean) {
+        if (enabled) {
+            val hasPerm = ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.RECEIVE_SMS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (hasPerm) {
+                smsUpload = true
+                pushConfig(Prefs.loadConfig(context).copy(enableSmsUpload = true))
+            } else {
+                smsPermissionLauncher.launch(android.Manifest.permission.RECEIVE_SMS)
+            }
+        } else {
+            smsUpload = false
+            pushConfig(Prefs.loadConfig(context).copy(enableSmsUpload = false))
+        }
+    }
+
     Card(
         modifier = Modifier
             .padding(start = 16.dp, top = 16.dp, end = 16.dp)
@@ -440,6 +511,39 @@ fun SyncSettingsCard(context: android.content.Context) {
                     summary = stringResource(R.string.setting_background_download_summary),
                     onCheckedChange = { toggleBgDownload(it) }
                 )
+                SwitchPreference(
+                    checked = stopOnBattery,
+                    title = stringResource(R.string.setting_stop_polling_battery_saver),
+                    summary = stringResource(R.string.setting_stop_polling_battery_saver_summary),
+                    onCheckedChange = { toggleStopOnBattery(it) }
+                )
+                SwitchPreference(
+                    checked = stopOnScreenOff,
+                    title = stringResource(R.string.setting_stop_polling_screen_off),
+                    summary = stringResource(R.string.setting_stop_polling_screen_off_summary),
+                    onCheckedChange = { toggleStopOnScreenOff(it) }
+                )
+                val selectedIntervalIndex = remember(pollingIntervalSec, intervalOptions) {
+                    var idx = intervalOptions.indexOf(pollingIntervalSec)
+                    if (idx < 0) idx = 1 // 默认 3s
+                    idx
+                }
+                OverlayDropdownPreference(
+                    title = stringResource(R.string.setting_polling_interval),
+                    summary = stringResource(R.string.setting_polling_interval_summary, pollingIntervalSec),
+                    items = intervalLabels,
+                    selectedIndex = selectedIntervalIndex,
+                    onSelectedIndexChange = { index ->
+                        updatePollingInterval(intervalOptions[index])
+                    }
+                )
+                // 短信验证码自动上传
+                SwitchPreference(
+                    checked = smsUpload,
+                    title = stringResource(R.string.setting_sms_upload),
+                    summary = stringResource(R.string.setting_sms_upload_summary),
+                    onCheckedChange = { toggleSmsUpload(it) }
+                )
             }
         }
     }
@@ -448,8 +552,26 @@ fun SyncSettingsCard(context: android.content.Context) {
 // ─── 历史记录设置 ─────────────────────────────────────────────
 @Composable
 fun HistorySettingsCard() {
-    val prefs = androidx.compose.ui.platform.LocalContext.current.defaultSharedPreferences
-    var historySync by rememberBooleanPreference(prefs, "history_sync_enabled", false)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var historySync by remember {
+        mutableStateOf(Prefs.loadConfig(context).enableHistorySync)
+    }
+
+    val onToggle: (Boolean) -> Unit = { enabled ->
+        historySync = enabled
+        try {
+            // 更新 AppConfig 并持久化、推送到 xposed 进程
+            val config = Prefs.loadConfig(context).copy(enableHistorySync = enabled)
+            Prefs.saveConfig(context, config)
+            val configJson = Json.encodeToString(AppConfig.serializer(), config)
+            val payload = android.os.Bundle().apply { putString("config", configJson) }
+            SyncClipboardBridge.with(context)
+                .to("com.android.systemui")
+                .key(BridgeKeys.PUSH_CONFIG)
+                .payload(payload)
+                .send()
+        } catch (_: Exception) {}
+    }
 
     Card(
         modifier = Modifier
@@ -460,7 +582,7 @@ fun HistorySettingsCard() {
             checked = historySync,
             title = stringResource(R.string.setting_history_sync),
             summary = stringResource(R.string.setting_history_sync_summary),
-            onCheckedChange = { historySync = it }
+            onCheckedChange = onToggle
         )
     }
 }
@@ -477,6 +599,9 @@ fun LoggingSettingsCard(context: android.content.Context) {
         try {
             val config = Prefs.loadConfig(context).copy(enableLogging = enabled)
             Prefs.saveConfig(context, config)
+            // 立即同步到 app 进程的 Logger
+            Logger.enabled = enabled
+            Logger.logLevel = config.logLevel
             val configJson = Json.encodeToString(AppConfig.serializer(), config)
             val payload = android.os.Bundle().apply { putString("config", configJson) }
             SyncClipboardBridge.with(context)

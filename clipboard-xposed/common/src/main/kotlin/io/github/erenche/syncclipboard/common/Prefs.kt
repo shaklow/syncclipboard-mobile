@@ -18,6 +18,7 @@ object Prefs {
     private const val KEY_CONFIG = "app_config"
     private const val KEY_SERVERS = "servers"
     private const val KEY_ACTIVE_SERVER = "active_server_index"
+    private const val KEY_HISTORY_LAST_SYNC_TIME = "history_last_sync_time"
 
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = false }
 
@@ -85,5 +86,26 @@ object Prefs {
      */
     fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    }
+
+    /**
+     * 加载历史同步游标（增量同步用，0 表示需要全量同步）
+     */
+    fun loadHistoryLastSyncTime(context: Context): Long {
+        return getPrefs(context).getLong(KEY_HISTORY_LAST_SYNC_TIME, 0L)
+    }
+
+    /**
+     * 保存历史同步游标
+     */
+    fun saveHistoryLastSyncTime(context: Context, time: Long) {
+        getPrefs(context).edit().putLong(KEY_HISTORY_LAST_SYNC_TIME, time).apply()
+    }
+
+    /**
+     * 重置历史同步游标（切换服务器时调用，触发下次全量同步）
+     */
+    fun resetHistoryLastSyncTime(context: Context) {
+        getPrefs(context).edit().putLong(KEY_HISTORY_LAST_SYNC_TIME, 0L).apply()
     }
 }

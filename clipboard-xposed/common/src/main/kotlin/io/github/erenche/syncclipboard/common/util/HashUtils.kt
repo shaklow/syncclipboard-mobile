@@ -41,4 +41,24 @@ object HashUtils {
     fun computeLocalHash(text: String): String {
         return sha256(text)
     }
+
+    /**
+     * 从 profileHash 中剥离类型前缀，返回纯 SHA-256 部分。
+     * 服务器历史 API 的 profileId 格式为 "{Type}-{rawHash}"，其中 rawHash 不能带前缀。
+     *
+     * 例如：
+     *   "text-a66188ff..." -> "a66188ff..."
+     *   "TEXT-A66188FF..." -> "A66188FF..."
+     *   "a66188ff..."      -> "a66188ff..."（无前缀，原样返回）
+     */
+    fun stripTypePrefix(profileHash: String): String {
+        val lower = profileHash.lowercase()
+        val prefixes = listOf("text-", "image-", "file-", "group-", "unknown-")
+        for (p in prefixes) {
+            if (lower.startsWith(p)) {
+                return profileHash.substring(p.length)
+            }
+        }
+        return profileHash
+    }
 }

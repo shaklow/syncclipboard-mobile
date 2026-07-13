@@ -9,18 +9,19 @@ import java.util.concurrent.ConcurrentLinkedDeque
 /**
  * 应用日志工具 — 封装 android.util.Log，同时保留内存环形缓冲区。
  *
- * 日志开关：
- * - [enabled] = false 时仅输出 Error（保证异常可见）
- * - [enabled] = true 时按 [logLevel] 过滤
+ * 日志开关语义：
+ * - [enabled] = false：关闭"详细日志"，但 W/E 级别始终输出到 logcat 和缓冲区（保证异常和警告可见）
+ * - [enabled] = true：按 [logLevel] 过滤，所有级别输出到 logcat 和缓冲区
  *
- * 内存缓冲区始终记录（包含 Error），供 App 内日志查看页读取。
+ * 注意：info/debug 级别在 enabled=false 时不输出到 logcat，也不记入缓冲区。
+ * 需要始终可见的关键运行信息请使用 warn() 或 error()。
  */
 object Logger {
 
     private const val TAG = "SyncClipboard"
     private const val MAX_BUFFER = 1000
 
-    /** 日志总开关，false 时仅输出 Error */
+    /** 日志总开关，false 时仅输出 Warn/Error（保证异常可见） */
     @Volatile
     var enabled: Boolean = true
 
@@ -33,7 +34,8 @@ object Logger {
     private fun timestamp(): String = dateFormat.format(Date())
 
     private fun record(level: String, tag: String, message: String, throwable: Throwable? = null) {
-        if (!enabled) return
+        // enabled=false 时缓冲区只记录 W/E；enabled=true 时全部记录
+        if (!enabled && (level == "D" || level == "I")) return
         val ts = timestamp()
         val line = if (throwable != null) {
             "$ts $level/[$tag] $message\n${Log.getStackTraceString(throwable).trim()}"
@@ -60,23 +62,20 @@ object Logger {
 
     fun warn(tag: String, message: String, throwable: Throwable? = null) {
         record("W", tag, message, throwable)
-        if (enabled && logLevel.ordinal <= LogLevel.Warn.ordinal) {
-            if (throwable != null) {
-                Log.w(TAG, "[$tag] $message", throwable)
-            } else {
-                Log.w(TAG, "[$tag] $message")
-            }
+        // W/E 始终输出到 logcat（即使 enabled=false）
+        if (throwable != null) {
+            Log.w(TAG, "[$tag] $message", throwable)
+        } else {
+            Log.w(TAG, "[$tag] $message")
         }
     }
 
     fun error(tag: String, message: String, throwable: Throwable? = null) {
         record("E", tag, message, throwable)
-        if (enabled) {
-            if (throwable != null) {
-                Log.e(TAG, "[$tag] $message", throwable)
-            } else {
-                Log.e(TAG, "[$tag] $message")
-            }
+        if (throwable != null) {
+            Log.e(TAG, "[$tag] $message", throwable)
+        } else {
+            Log.e(TAG, "[$tag] $message")
         }
     }
 

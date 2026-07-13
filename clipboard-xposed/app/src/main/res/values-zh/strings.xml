@@ -30,6 +30,9 @@
     <string name="action_edit">编辑</string>
     <string name="action_back">返回</string>
     <string name="action_refresh">刷新</string>
+    <string name="action_restart_app">重启软件</string>
+    <string name="action_restart_systemui">重启系统界面</string>
+    <string name="restart_no_root">需要Root权限</string>
     <string name="action_view">查看</string>
     <string name="action_share">分享</string>
     <string name="action_download">保存</string>
@@ -104,6 +107,13 @@
     <string name="setting_background_upload_summary">空闲时自动上传剪贴板变更</string>
     <string name="setting_background_download">后台下载</string>
     <string name="setting_background_download_summary">自动下载远程剪贴板变更</string>
+    <string name="setting_polling_section">轮询设置</string>
+    <string name="setting_stop_polling_battery_saver">省电模式停止轮询</string>
+    <string name="setting_stop_polling_battery_saver_summary">省电模式下暂停远程轮询</string>
+    <string name="setting_stop_polling_screen_off">熄屏停止轮询</string>
+    <string name="setting_stop_polling_screen_off_summary">屏幕关闭时暂停远程轮询</string>
+    <string name="setting_polling_interval">轮询间隔</string>
+    <string name="setting_polling_interval_summary">每 %1$d 秒查询一次远程剪贴板</string>
     <string name="setting_history_sync">历史记录同步</string>
     <string name="setting_history_sync_summary">将剪贴板历史同步到服务器</string>
     <string name="setting_auto_download_max_size">自动下载最大大小</string>
@@ -113,6 +123,8 @@
     <string name="setting_enable_logging_summary">输出详细日志到 logcat（关闭后仍显示警告/错误）</string>
     <string name="setting_auto_save">自动保存文件</string>
     <string name="setting_auto_save_summary">自动将同步的图片保存到相册，文件保存到下载目录</string>
+    <string name="setting_sms_upload">自动上传验证码</string>
+    <string name="setting_sms_upload_summary">收到含验证码的短信时，自动提取并上传到剪贴板服务器</string>
     <string name="setting_language">语言</string>
     <string name="setting_language_auto">跟随系统</string>
     <string name="setting_language_zh">中文</string>
@@ -168,6 +180,14 @@
     <string name="history_search">搜索历史…</string>
     <string name="history_copied">已复制到剪贴板</string>
     <string name="history_cleared">历史已清空</string>
+    <string name="history_no_results">无匹配结果</string>
+    <string name="history_page_prev">上一页</string>
+    <string name="history_page_next">下一页</string>
+    <string name="history_page_indicator">第 %1$d / %2$d 页</string>
+    <string name="history_page_size">每页</string>
+    <string name="history_total_count">共 %d 条</string>
+    <string name="history_selected_count">已选 %d 项</string>
+    <string name="history_delete_selected">删除 (%d)</string>
 
     <!-- About -->
     <string name="about_version">版本 %s</string>

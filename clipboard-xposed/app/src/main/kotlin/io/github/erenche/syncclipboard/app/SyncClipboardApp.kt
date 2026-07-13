@@ -2,9 +2,9 @@ package io.github.erenche.syncclipboard.app
 
 import android.app.Application
 import android.content.SharedPreferences
-import android.util.Log
 import io.github.libxposed.service.XposedService
 import io.github.libxposed.service.XposedServiceHelper
+import io.github.erenche.syncclipboard.common.Prefs
 import io.github.erenche.syncclipboard.common.util.Logger
 import java.util.concurrent.CopyOnWriteArraySet
 
@@ -24,14 +24,18 @@ class SyncClipboardApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.i(TAG, "SyncClipboardApp created")
+        // 同步日志开关到 app 进程（Logger 是进程内单例）
+        val config = Prefs.loadConfig(this)
+        Logger.enabled = config.enableLogging
+        Logger.logLevel = config.logLevel
+        Logger.info(TAG, "SyncClipboardApp created")
 
         // SyncEngine 在 system_server 中运行（由 GeneralHooker 初始化）
         // App 进程不初始化 SyncEngine，通过 bridge 向 system_server 查询
 
         XposedServiceHelper.registerListener(object : XposedServiceHelper.OnServiceListener {
             override fun onServiceBind(service: XposedService) {
-                Log.i(TAG, "XposedService bind")
+                Logger.info(TAG, "XposedService bind")
                 xposedService = service
                 xposedServiceStateListeners.forEach {
                     it.onServiceStateChanged(service)
@@ -39,7 +43,7 @@ class SyncClipboardApp : Application() {
             }
 
             override fun onServiceDied(service: XposedService) {
-                Log.i(TAG, "XposedService died")
+                Logger.info(TAG, "XposedService died")
                 xposedService = null
                 xposedServiceStateListeners.forEach {
                     it.onServiceStateChanged(null)

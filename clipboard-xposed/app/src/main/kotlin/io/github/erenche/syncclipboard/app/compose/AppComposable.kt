@@ -1,6 +1,8 @@
 package io.github.erenche.syncclipboard.app.compose
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -41,7 +43,7 @@ fun NavigationBackIcon(onBack: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AppToolBarListContainer(
     title: String = "",
@@ -65,26 +67,33 @@ fun AppToolBarListContainer(
                 )
             }
         ) { paddingValues ->
-            val lazyList: @Composable () -> Unit = {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .overScrollVertical()
-                        .padding(top = paddingValues.calculateTopPadding()),
-                    content = content
-                )
-            }
+            val topPadding = paddingValues.calculateTopPadding()
             if (onRefresh != null) {
                 val pullToRefreshState = rememberPullToRefreshState()
                 PullToRefresh(
                     isRefreshing = isRefreshing,
                     onRefresh = onRefresh,
                     pullToRefreshState = pullToRefreshState,
+                    contentPadding = PaddingValues(top = topPadding),
                 ) {
-                    lazyList()
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .overScrollVertical(),
+                        contentPadding = PaddingValues(top = topPadding),
+                        overscrollEffect = null,
+                        content = content
+                    )
                 }
             } else {
-                lazyList()
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .overScrollVertical()
+                        .padding(top = topPadding),
+                    overscrollEffect = null,
+                    content = content
+                )
             }
         }
     }

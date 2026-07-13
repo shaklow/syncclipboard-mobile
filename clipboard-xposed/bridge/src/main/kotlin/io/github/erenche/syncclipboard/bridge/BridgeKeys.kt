@@ -59,6 +59,9 @@ object BridgeKeys {
     /** 查询历史记录列表 */
     const val GET_HISTORY = "get_history"
 
+    /** 强制同步历史记录（从服务器拉取完整历史） */
+    const val FORCE_SYNC_HISTORY = "force_sync_history"
+
     /** 查询单条历史记录 */
     const val GET_HISTORY_ITEM = "get_history_item"
 
@@ -79,6 +82,9 @@ object BridgeKeys {
     /** 同步状态变化事件 */
     const val EVENT_SYNC_STATE_CHANGED = "event_sync_state_changed"
 
+    /** 手动操作结果反馈事件（同步/上传） */
+    const val EVENT_ACTION_RESULT = "event_action_result"
+
     /** 传输进度事件 */
     const val EVENT_TRANSFER_PROGRESS = "event_transfer_progress"
 
@@ -87,4 +93,8 @@ object BridgeKeys {
     const val GET_LOGS = "get_logs"
     /** 清空日志缓冲区 */
     const val CLEAR_LOGS = "clear_logs"
+
+    // ─── 文本直传（app → xposed 进程）────────────────────────
+    /** 直接上传一段文本（如短信验证码）到服务器 */
+    const val UPLOAD_TEXT = "upload_text"
 }

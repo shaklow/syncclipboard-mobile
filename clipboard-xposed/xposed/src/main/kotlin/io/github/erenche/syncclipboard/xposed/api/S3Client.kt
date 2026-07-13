@@ -1,6 +1,10 @@
 package io.github.erenche.syncclipboard.xposed.api
 
 import io.github.erenche.syncclipboard.common.model.ClipboardContent
+import io.github.erenche.syncclipboard.common.model.ClipboardContentType
+import io.github.erenche.syncclipboard.common.model.HistoryRecordDto
+import io.github.erenche.syncclipboard.common.model.HistoryRecordUpdateDto
+import io.github.erenche.syncclipboard.common.model.HistoryStatisticsDto
 import io.github.erenche.syncclipboard.common.model.ProfileDto
 import io.github.erenche.syncclipboard.common.util.HashUtils
 import io.github.erenche.syncclipboard.common.util.Logger
@@ -143,4 +147,13 @@ class S3Client(
         client.get(endpoint)
         Logger.info(TAG, "Connection test successful")
     }
+
+    // S3 不支持原项目的 /api/history API
+    override suspend fun queryHistoryRecords(page: Int, modifiedAfter: String?, types: Int): List<HistoryRecordDto> = emptyList()
+    override suspend fun uploadHistoryRecord(record: HistoryRecordDto, filePath: String?): HistoryRecordDto? = null
+    override suspend fun updateHistoryRecord(type: ClipboardContentType, hash: String, update: HistoryRecordUpdateDto): HistoryRecordDto? = null
+    override suspend fun getHistoryRecord(profileId: String): HistoryRecordDto? = null
+    override suspend fun getHistoryStatistics(): HistoryStatisticsDto? = null
+    override suspend fun downloadHistoryData(hash: String, destinationPath: String): String? = null
+    override suspend fun getServerTime(): Long? = null
 }

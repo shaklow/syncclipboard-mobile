@@ -1,6 +1,10 @@
 package io.github.erenche.syncclipboard.app.viewmodel
 
 import android.app.Application
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
@@ -46,8 +50,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isLoadingRemote = mutableStateOf(false)
     val isLoadingRemote: State<Boolean> = _isLoadingRemote
 
+    private val resultReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            intent ?: return
+            when (intent.action) {
+                BridgeKeys.EVENT_ACTION_RESULT -> {
+                    val action = intent.getStringExtra("action") ?: return
+                    val success = intent.getBooleanExtra("success", false)
+                    val message = intent.getStringExtra("message").orEmpty()
+                    val label = when (action) {
+                        "sync" -> "同步"
+                        "upload" -> "上传"
+                        else -> action
+                    }
+                    _toast.value = "$label${if (success) "成功" else "失败"}: $message"
+                    refreshStatus()
+                }
+                BridgeKeys.EVENT_SYNC_STATE_CHANGED -> {
+                    refreshStatus()
+                }
+            }
+        }
+    }
+
     init {
+        val filter = IntentFilter().apply {
+            addAction(BridgeKeys.EVENT_ACTION_RESULT)
+            addAction(BridgeKeys.EVENT_SYNC_STATE_CHANGED)
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            app.registerReceiver(resultReceiver, filter, Context.RECEIVER_EXPORTED)
+        } else {
+            app.registerReceiver(resultReceiver, filter)
+        }
         refreshStatus()
+    }
+
+    override fun onCleared() {
+        try { app.unregisterReceiver(resultReceiver) } catch (_: Exception) {}
+        super.onCleared()
     }
 
     fun refreshStatus() {
@@ -57,12 +98,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     .to("com.android.systemui")
                     .key(BridgeKeys.GET_SYNC_STATUS)
                     .await()
-                val connected = bundle.getBoolean("connected", false)
                 val running = bundle.getBoolean("running", false)
+                val pollingActive = bundle.getBoolean("pollingActive", false)
                 _syncStatus.value = when {
                     !running -> "Stopped"
-                    connected -> "Connected"
-                    else -> "Disconnected"
+                    pollingActive -> "Running"
+                    else -> "Stopped"
                 }
             } catch (e: Exception) {
                 _syncStatus.value = "Unavailable"
@@ -107,7 +148,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .to("com.android.systemui")
             .key(BridgeKeys.TRIGGER_SYNC)
             .send()
-        _toast.value = "已开始同步"
+        _toast.value = "正在同步..."
     }
 
     fun uploadNow() {
@@ -115,7 +156,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .to("com.android.systemui")
             .key(BridgeKeys.UPLOAD_NOW)
             .send()
-        _toast.value = "已开始上传"
+        _toast.value = "正在上传..."
     }
 
     fun onToastShown() {

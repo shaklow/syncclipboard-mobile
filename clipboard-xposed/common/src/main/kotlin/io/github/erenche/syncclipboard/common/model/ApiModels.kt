@@ -57,3 +57,47 @@ data class ServerInfo(
     /** 是否在线 */
     val online: Boolean
 )
+
+/**
+ * 历史记录 DTO — 与 SyncClipboard 服务器 `/api/history` API 对应。
+ *
+ * 时间字段使用 ISO 8601 字符串（服务器约定）。
+ */
+@Serializable
+data class HistoryRecordDto(
+    val hash: String,
+    val type: ClipboardContentType,
+    val text: String? = null,
+    val createTime: String? = null,
+    val lastModified: String? = null,
+    val lastAccessed: String? = null,
+    val starred: Boolean? = null,
+    val pinned: Boolean? = null,
+    val size: Long? = null,
+    val hasData: Boolean? = null,
+    val version: Int? = null,
+    val isDeleted: Boolean? = null
+)
+
+/**
+ * 历史记录更新 DTO — 对应原项目 `PATCH /api/history/{type}/{id}` 请求体。
+ */
+@Serializable
+data class HistoryRecordUpdateDto(
+    val starred: Boolean? = null,
+    val pinned: Boolean? = null,
+    val isDelete: Boolean? = null,
+    val version: Int? = null,
+    val lastModified: String? = null,
+    val lastAccessed: String? = null
+)
+
+/**
+ * 历史记录统计 DTO — 对应原项目 `GET /api/history/statistics` 响应。
+ */
+@Serializable
+data class HistoryStatisticsDto(
+    val totalCount: Long = 0,
+    val totalSize: Long = 0,
+    val totalFileSizeMB: Double = 0.0
+)

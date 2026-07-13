@@ -414,113 +414,121 @@ fun ServerEditDialog(
             // ── 连接信息字段 ───────────────────────────────
             DialogSectionLabel(text = stringResource(R.string.server_section_connection))
 
-            TextField(
-                value = name,
-                onValueChange = { name = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.server_name),
-                useLabelAsPlaceholder = true,
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-            )
-            Spacer(modifier = Modifier.height(10.dp))
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    TextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.server_name),
+                        useLabelAsPlaceholder = true,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
 
-            TextField(
-                value = url,
-                onValueChange = { url = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.server_url),
-                useLabelAsPlaceholder = true,
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-            )
-            Spacer(modifier = Modifier.height(10.dp))
+                    TextField(
+                        value = url,
+                        onValueChange = { url = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.server_url),
+                        useLabelAsPlaceholder = true,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
 
-            TextField(
-                value = username,
-                onValueChange = { username = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = if (serverType == ServerType.s3) "Access Key ID"
-                    else stringResource(R.string.server_username),
-                useLabelAsPlaceholder = true,
-                singleLine = true,
-            )
-            Spacer(modifier = Modifier.height(10.dp))
+                    TextField(
+                        value = username,
+                        onValueChange = { username = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = if (serverType == ServerType.s3) "Access Key ID"
+                            else stringResource(R.string.server_username),
+                        useLabelAsPlaceholder = true,
+                        singleLine = true,
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
 
-            TextField(
-                value = password,
-                onValueChange = { password = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = if (serverType == ServerType.s3) "Secret Access Key"
-                    else stringResource(R.string.server_password),
-                useLabelAsPlaceholder = true,
-                singleLine = true,
-                visualTransformation = if (showPassword) VisualTransformation.None
-                else PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                trailingIcon = {
-                    Text(
-                        text = if (showPassword) "Hide" else "Show",
-                        fontSize = 14.sp,
-                        color = MiuixTheme.colorScheme.primary,
-                        modifier = Modifier.clickable { showPassword = !showPassword }
-                            .padding(horizontal = 4.dp)
+                    TextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = if (serverType == ServerType.s3) "Secret Access Key"
+                            else stringResource(R.string.server_password),
+                        useLabelAsPlaceholder = true,
+                        singleLine = true,
+                        visualTransformation = if (showPassword) VisualTransformation.None
+                        else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        trailingIcon = {
+                            Text(
+                                text = if (showPassword) "Hide" else "Show",
+                                fontSize = 14.sp,
+                                color = MiuixTheme.colorScheme.primary,
+                                modifier = Modifier.clickable { showPassword = !showPassword }
+                                    .padding(horizontal = 4.dp)
+                            )
+                        }
                     )
                 }
-            )
+            }
 
             // ── S3 专用字段 ─────────────────────────────────
             if (serverType == ServerType.s3) {
                 Spacer(modifier = Modifier.height(20.dp))
                 DialogSectionLabel(text = stringResource(R.string.server_section_s3))
 
-                TextField(
-                    value = region,
-                    onValueChange = { region = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = stringResource(R.string.server_region),
-                    useLabelAsPlaceholder = true,
-                    singleLine = true,
-                )
-                Spacer(modifier = Modifier.height(10.dp))
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        TextField(
+                            value = region,
+                            onValueChange = { region = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = stringResource(R.string.server_region),
+                            useLabelAsPlaceholder = true,
+                            singleLine = true,
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                TextField(
-                    value = bucketName,
-                    onValueChange = { bucketName = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = stringResource(R.string.server_bucket),
-                    useLabelAsPlaceholder = true,
-                    singleLine = true,
-                )
-                Spacer(modifier = Modifier.height(10.dp))
+                        TextField(
+                            value = bucketName,
+                            onValueChange = { bucketName = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = stringResource(R.string.server_bucket),
+                            useLabelAsPlaceholder = true,
+                            singleLine = true,
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                TextField(
-                    value = objectPrefix,
-                    onValueChange = { objectPrefix = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = stringResource(R.string.server_prefix),
-                    useLabelAsPlaceholder = true,
-                    singleLine = true,
-                )
-                Spacer(modifier = Modifier.height(10.dp))
+                        TextField(
+                            value = objectPrefix,
+                            onValueChange = { objectPrefix = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = stringResource(R.string.server_prefix),
+                            useLabelAsPlaceholder = true,
+                            singleLine = true,
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { forcePathStyle = !forcePathStyle }
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Switch(
-                        checked = forcePathStyle,
-                        onCheckedChange = { forcePathStyle = it }
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = stringResource(R.string.server_path_style),
-                        fontSize = 14.sp,
-                        color = MiuixTheme.colorScheme.onSurface
-                    )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { forcePathStyle = !forcePathStyle }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Switch(
+                                checked = forcePathStyle,
+                                onCheckedChange = { forcePathStyle = it }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = stringResource(R.string.server_path_style),
+                                fontSize = 14.sp,
+                                color = MiuixTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
                 }
             }
 

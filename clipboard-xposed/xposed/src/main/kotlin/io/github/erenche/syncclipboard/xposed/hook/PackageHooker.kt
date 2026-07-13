@@ -116,12 +116,11 @@ abstract class PackageHooker {
             if (appContext == null) {
                 appContext = instance
 
-                android.util.Log.w("SyncClipboard", "[PackageHooker] Application captured: ${instance.javaClass.name}, package=${instance.packageName}, listeners=${appOnCreateListeners.size}")
+                Logger.info(TAG, "Application captured: ${instance.javaClass.name}, package=${instance.packageName}, listeners=${appOnCreateListeners.size}")
                 Logger.info(TAG, "Application Context is ready: " + instance.javaClass.name)
 
                 appOnCreateListeners.forEach {
                     runCatching { it(instance) }.onFailure { e ->
-                        android.util.Log.w("SyncClipboard", "[PackageHooker] Callback error: ${e.message}", e)
                         Logger.error(TAG, "Callback error", e)
                     }
                 }

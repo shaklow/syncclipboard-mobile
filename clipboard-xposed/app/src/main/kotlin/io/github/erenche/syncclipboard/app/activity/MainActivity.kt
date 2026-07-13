@@ -1,5 +1,6 @@
 package io.github.erenche.syncclipboard.app.activity
 
+import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -43,6 +44,10 @@ import top.yukonga.miuix.kmp.icon.extended.Info
 import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.window.WindowListPopup
+import top.yukonga.miuix.kmp.basic.ListPopupColumn
+import top.yukonga.miuix.kmp.basic.ListPopupDefaults
+import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import java.io.File
 import java.text.SimpleDateFormat
@@ -87,6 +92,33 @@ class MainActivity : BaseActivity(), SyncClipboardApp.XposedServiceStateListener
     }
 }
 
+/** 重启 App */
+private fun restartApp(activity: Activity) {
+    val intent = activity.packageManager.getLaunchIntentForPackage(activity.packageName)
+    intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+    activity.startActivity(intent)
+    Runtime.getRuntime().exit(0)
+}
+
+/** 重启 SystemUI（需要 Root 权限） */
+private fun restartSystemUI(context: Context) {
+    try {
+        // 使用 pkill 终止 SystemUI，系统会自动重启它
+        // 注意：必须消费 stdout/stderr 防止进程挂起
+        val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "pkill -f com.android.systemui"))
+        val stdout = process.inputStream.bufferedReader().readText()
+        val stderr = process.errorStream.bufferedReader().readText()
+        val exitCode = process.waitFor()
+        // pkill 找到并杀死进程返回 0；即使 SystemUI 被杀导致 su 会话中断也视为成功
+        if (exitCode != 0 && stderr.isBlank() && stdout.isBlank()) {
+            android.widget.Toast.makeText(context, context.getString(R.string.restart_no_root), android.widget.Toast.LENGTH_SHORT).show()
+        }
+        // 成功时不提示（SystemUI 会被系统自动重启）
+    } catch (e: Exception) {
+        android.widget.Toast.makeText(context, context.getString(R.string.restart_no_root), android.widget.Toast.LENGTH_SHORT).show()
+    }
+}
+
 @Composable
 fun MainScreen(viewModel: MainViewModel) {
     val context = LocalContext.current
@@ -124,6 +156,11 @@ fun MainScreen(viewModel: MainViewModel) {
     }
 
     val isLoadingRemote by viewModel.isLoadingRemote
+    var showRestartPopup by remember { mutableStateOf(false) }
+    val restartItems = listOf(
+        stringResource(R.string.action_restart_app),
+        stringResource(R.string.action_restart_systemui)
+    )
 
     AppToolBarListContainer(
         title = stringResource(R.string.app_name),
@@ -134,10 +171,7 @@ fun MainScreen(viewModel: MainViewModel) {
         },
         actions = {
             IconButton(
-                onClick = {
-                    viewModel.refreshStatus()
-                    viewModel.refreshRemoteContent()
-                },
+                onClick = { showRestartPopup = true },
                 modifier = Modifier.padding(end = 8.dp)
             ) {
                 Icon(
@@ -146,6 +180,31 @@ fun MainScreen(viewModel: MainViewModel) {
                     tint = MiuixTheme.colorScheme.onSurface
                 )
             }
+            WindowListPopup(
+                show = showRestartPopup,
+                popupPositionProvider = ListPopupDefaults.ContextMenuPositionProvider,
+                alignment = PopupPositionProvider.Align.TopEnd,
+                onDismissRequest = { showRestartPopup = false },
+                content = {
+                    ListPopupColumn {
+                        restartItems.forEachIndexed { index, label ->
+                            DropdownImpl(
+                                text = label,
+                                optionSize = restartItems.size,
+                                isSelected = false,
+                                index = index,
+                                onSelectedIndexChange = { selectedIdx ->
+                                    showRestartPopup = false
+                                    when (selectedIdx) {
+                                        0 -> restartApp(context as Activity)
+                                        1 -> restartSystemUI(context)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            )
         }
     ) {
         item("status") { StatusCard(viewModel) }

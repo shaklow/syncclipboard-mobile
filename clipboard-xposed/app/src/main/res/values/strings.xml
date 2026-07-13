@@ -30,6 +30,9 @@
     <string name="action_edit">Edit</string>
     <string name="action_back">Back</string>
     <string name="action_refresh">Refresh</string>
+    <string name="action_restart_app">Restart App</string>
+    <string name="action_restart_systemui">Restart SystemUI</string>
+    <string name="restart_no_root">Root permission required</string>
     <string name="action_view">View</string>
     <string name="action_share">Share</string>
     <string name="action_download">Save</string>
@@ -104,6 +107,13 @@
     <string name="setting_background_upload_summary">Auto-upload clipboard changes when idle</string>
     <string name="setting_background_download">Background Download</string>
     <string name="setting_background_download_summary">Auto-download remote clipboard changes</string>
+    <string name="setting_polling_section">Polling</string>
+    <string name="setting_stop_polling_battery_saver">Stop Polling in Battery Saver</string>
+    <string name="setting_stop_polling_battery_saver_summary">Pause remote polling when battery saver is on</string>
+    <string name="setting_stop_polling_screen_off">Stop Polling When Screen Off</string>
+    <string name="setting_stop_polling_screen_off_summary">Pause remote polling when the screen is off</string>
+    <string name="setting_polling_interval">Polling Interval</string>
+    <string name="setting_polling_interval_summary">Fetch remote clipboard every %1$d seconds</string>
     <string name="setting_history_sync">History Sync</string>
     <string name="setting_history_sync_summary">Sync clipboard history with server</string>
     <string name="setting_auto_download_max_size">Auto-download Max Size</string>
@@ -113,6 +123,8 @@
     <string name="setting_enable_logging_summary">Output detailed logs to logcat (Warn/Error always shown when off)</string>
     <string name="setting_auto_save">Auto Save Files</string>
     <string name="setting_auto_save_summary">Automatically save synced images to gallery and files to downloads</string>
+    <string name="setting_sms_upload">Upload SMS Codes</string>
+    <string name="setting_sms_upload_summary">Auto-upload SMS verification codes to the clipboard server</string>
     <string name="setting_language">Language</string>
     <string name="setting_language_auto">Follow system</string>
     <string name="setting_language_zh">中文</string>
@@ -168,6 +180,16 @@
     <string name="history_search">Search history…</string>
     <string name="history_copied">Copied to clipboard</string>
     <string name="history_cleared">History cleared</string>
+    <string name="history_no_results">No matching results</string>
+    <string name="history_page_prev">Prev</string>
+    <string name="history_page_next">Next</string>
+    <string name="history_page_indicator">Page %1$d / %2$d</string>
+    <string name="history_page_size">Per page</string>
+    <string name="history_page_size_50">50</string>
+    <string name="history_page_size_100">100</string>
+    <string name="history_total_count">Total %d items</string>
+    <string name="history_selected_count">%d selected</string>
+    <string name="history_delete_selected">Delete (%d)</string>
 
     <!-- About -->
     <string name="about_version">Version %s</string>
